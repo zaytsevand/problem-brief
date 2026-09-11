@@ -360,6 +360,15 @@
           ],
           "description": "kind=archify: which archify renderer produced the page."
         },
+        "embed": {
+          "type": "string",
+          "enum": [
+            "inline",
+            "file"
+          ],
+          "default": "inline",
+          "description": "kind=archify: how the drawing is carried. 'inline' (the default) puts the whole drawing inside the page, so the page stands alone and needs nothing published alongside it. 'file' references it as a companion file, which keeps the page small but only works where the publishing tool can carry companion files — pass the companion paths the renderer prints. Prefer inline unless the page is getting large."
+        },
         "height": {
           "type": "integer",
           "minimum": 200,

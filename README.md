@@ -118,7 +118,11 @@ Three kinds:
   in a few lines.
 - **archify** — the rendered archify page, embedded live in its own frame. Keeps
   its zoom, guided views and detail-on-hover. The frame takes the drawing's own
-  proportions so nothing is cropped.
+  proportions so nothing is cropped. The whole drawing travels **inside** the
+  page by default, so the page stands alone and nothing has to be published
+  beside it; `"embed": "file"` references it as a companion instead, for briefs
+  large enough that page size matters. A drawing that cannot be carried becomes
+  a visible note naming its source, never an empty frame.
 - **svg** — a self-contained file, inlined, centred and scaled.
 
 Keep the archify source file. The next refresh edits the drawing rather than
