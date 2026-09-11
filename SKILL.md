@@ -251,13 +251,27 @@ lives and it will iterate on the layout with you when its validator objects.
   "archifyType": "lifecycle" }
 ```
 
-The rendered page goes in its own frame in archify's **presentation mode**,
-which centres the drawing and scales it to the room the frame has. The picture
-stays live: zoom, the path and map and lens controls, hovering a step for its
-detail, the guided views. Below it sits a link that opens the picture on its own
-for anyone who wants the full surface. Archify's stylesheet cannot reach the
-brief's, and the brief hands the frame the reader's light or dark theme and
-re-hands it when the reader switches.
+The drawing goes in its own frame in archify's **presentation mode**, which
+centres it and scales it to the room the frame has. It stays live: zoom, the
+path, map and lens controls, hovering a step for its detail, the guided views.
+Archify's stylesheet cannot reach the brief's, and the brief hands the frame the
+reader's light or dark theme and re-hands it when the reader switches.
+
+**The whole drawing goes inside the page.** A brief is published as one file,
+and not every publishing tool can carry a companion file alongside it. A frame
+pointing at a companion that never arrives is a blank box, and a reader cannot
+tell a blank box from a broken page. Carrying the drawing inside costs about a
+tenth more bytes than the drawing itself, works everywhere, and depends on
+nothing — so it is the default and you need do nothing to get it.
+
+Set `"embed": "file"` to reference the drawing as a companion instead. That
+keeps the page small, which starts to matter somewhere past half a dozen
+drawings, and it only works where the publishing tool can carry companions. The
+renderer prints exactly what to publish when you ask for it.
+
+**A drawing that cannot be carried becomes a visible note**, naming its source,
+rather than an empty frame. That is deliberate: the reader is told the picture
+is missing instead of being left to wonder whether the page is broken.
 
 **Do not reach for a flat picture instead.** It throws away everything archify
 draws it for, and it is not the fix for a picture that looks wrong in the page.
@@ -271,10 +285,6 @@ when you have looked at the page and the automatic figure is wrong.
 **Keep the coordinate box tight.** The frame inherits the drawing's proportions,
 so a `viewBox` taller than the drawing needs becomes empty space in the brief.
 Shrink `meta.viewBox` until archify complains, then go back one step.
-
-Publish the rendered diagram as a **supporting file** alongside the page —
-`files: { "diagrams/q3.html": "…/diagrams/q3.html" }`. The renderer prints the
-list of files to pass when it finishes. Miss one and the frame is blank.
 
 **Keep the `spec` path.** That is how the next refresh edits the picture instead
 of redrawing it, which is what loses the fallbacks and the stores.
@@ -337,7 +347,7 @@ option first and labelled `(Recommended)`. Only the page is dropped.
 | Renumbering entries on a refresh | Ids are permanent; closed entries stay, marked closed |
 | Deleting an entry once it is done | Set `status: "complete"` with a `resolution`; it moves to Closed |
 | Marking something `complete` when only the ruling was made | That is `decided`; `complete` means it was carried out |
-| Embedding an archify page but not publishing it | Pass it in `files`; the renderer prints the list |
+| Using `"embed": "file"` without publishing the companion | Drop the setting — the drawing then travels inside the page |
 | Flattening an archify picture to a still image | Embed the live page; flattening throws away what it is for |
 | Setting a frame height by hand | Let the renderer read the drawing's proportions, or it gets cropped |
 

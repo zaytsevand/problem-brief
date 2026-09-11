@@ -18,6 +18,14 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { validateBrief, formatReport } from "./validate-brief.mjs";
 
+/* One drawing bigger than this is not worth carrying inside the page. */
+const INLINE_MAX_BYTES = 4 * 1024 * 1024;
+/* Past this the whole page is heavy, well before the 16 MB ceiling. */
+const PAGE_WARN_BYTES = 6 * 1024 * 1024;
+
+const notes = { inlined: 0, companions: new Set(), problems: [] };
+const mb = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
+
 /* ── text ──────────────────────────────────────────────────────────────────
    A deliberately small subset of markdown: paragraphs, dash lists, bold,
    inline code and links. Anything more belongs in a diagram or a solution.   */
@@ -75,12 +83,55 @@ function diagram(d, baseDir) {
   const spec = d.spec
     ? `<p class="dgm-src">Picture source: <code>${esc(d.spec)}</code> — edit that and re-render, never redraw.</p>`
     : "";
+
+  /* A brief is published as one file, and not every publishing tool can carry a
+     companion alongside it. A frame pointing at a companion that never arrives
+     is a blank box — the one outcome worth ruling out — so by default the whole
+     drawing goes inside the page. It costs about a tenth more bytes than the
+     drawing itself and depends on nothing. */
+  if (d.embed === "file") {
+    notes.companions.add(d.file);
+    return `<figure class="dgm dgm-fit">` +
+      `<iframe class="dgm-frame" data-archify="${esc(d.file)}" src="${esc(d.file)}?present=1" ` +
+      `style="${sizing}" loading="lazy" title="${esc(d.caption)}"></iframe>` +
+      `<p class="dgm-open"><a href="${esc(d.file)}" target="_blank" rel="noopener">` +
+      `Open this picture on its own →</a></p>` +
+      `${cap}${spec}</figure>`;
+  }
+
+  let raw;
+  try {
+    raw = readFileSync(resolve(baseDir, d.file), "utf8");
+  } catch {
+    notes.problems.push(`${d.file} could not be read — its drawing is a note on the page instead of a picture`);
+    return missingDiagram(d, "the rendered drawing could not be read");
+  }
+  if (raw.length > INLINE_MAX_BYTES) {
+    notes.problems.push(`${d.file} is ${mb(raw.length)}, too large to carry inside the page — its drawing is a note instead. ` +
+      `Simplify it, or set "embed": "file" if your publishing tool can carry companion files.`);
+    return missingDiagram(d, `the drawing is ${mb(raw.length)}, too large to carry inside the page`);
+  }
+
+  notes.inlined += raw.length;
+  /* A framed document has no query string, which is how archify is normally
+     told to show the drawing alone. Tell it from the inside instead. */
+  const framed = raw + `\n<script>document.documentElement.setAttribute('data-present','true');</script>`;
   return `<figure class="dgm dgm-fit">` +
-    `<iframe class="dgm-frame" data-archify="${esc(d.file)}" src="${esc(d.file)}?present=1" ` +
+    `<iframe class="dgm-frame" data-archify-inline="1" srcdoc="${esc(framed)}" ` +
     `style="${sizing}" loading="lazy" title="${esc(d.caption)}"></iframe>` +
-    `<p class="dgm-open"><a href="${esc(d.file)}" target="_blank" rel="noopener">` +
-    `Open this picture on its own →</a></p>` +
     `${cap}${spec}</figure>`;
+}
+
+/* A drawing that cannot be carried becomes a visible, honest note. Never an
+   empty frame: a reader cannot tell one from a broken page, and the drawing was
+   there to explain something. */
+function missingDiagram(d, why) {
+  const where = d.spec || d.file;
+  return `<figure class="dgm dgm-absent">` +
+    `<div class="absent"><strong>This picture could not be included.</strong> ` +
+    `<span>${esc(why)}.</span>` +
+    (where ? ` <span>It is drawn from <code>${esc(where)}</code>.</span>` : "") +
+    `</div><figcaption>${inline(d.caption)}</figcaption></figure>`;
 }
 
 /* The drawing's proportions come from the archify source where we have it, and
@@ -403,6 +454,10 @@ ul.ev li:first-child{border-top:0;padding-top:0;}
 .dgm figcaption{font-size:.88rem;color:var(--ink-2);margin-top:.6em;
   font-family:ui-sans-serif,system-ui,sans-serif;}
 .dgm-src{font-size:.78rem;color:var(--ink-3);margin:.35em 0 0;}
+.dgm-absent .absent{border:1px dashed var(--line-2);border-radius:var(--radius);
+  padding:14px 16px;background:var(--bg);color:var(--ink-2);font-size:.92rem;
+  font-family:ui-sans-serif,system-ui,sans-serif;}
+.dgm-absent .absent strong{color:var(--ink);}
 
 /* solutions */
 .sol{border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin:0 0 12px;}
@@ -479,11 +534,29 @@ const THEME_SCRIPT = `
     if (t === 'dark' || t === 'light') return t;
     return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
+  function paint(f, t){
+    // An inlined frame shares this page's origin, so its document can be reached
+    // directly — no reload, and no query string to carry the theme in.
+    try {
+      var doc = f.contentDocument;
+      if (doc && doc.documentElement) {
+        doc.documentElement.setAttribute('data-theme', t);
+        doc.documentElement.setAttribute('data-present', 'true');
+      }
+    } catch (_) {}
+  }
   function sync(){
     var t = effective();
     document.querySelectorAll('iframe[data-archify]').forEach(function(f){
       var want = f.getAttribute('data-archify') + '?present=1&theme=' + t;
       if (f.getAttribute('src') !== want) f.setAttribute('src', want);
+    });
+    document.querySelectorAll('iframe[data-archify-inline]').forEach(function(f){
+      paint(f, t);
+      if (!f.dataset.themeBound) {
+        f.dataset.themeBound = '1';
+        f.addEventListener('load', function(){ paint(f, effective()); });
+      }
     });
   }
   sync();
@@ -601,10 +674,18 @@ const html = page(brief, baseDir);
 const dest = outPath ?? inPath.replace(/\.json$/, "") + ".html";
 mkdirSync(dirname(resolve(dest)), { recursive: true });
 writeFileSync(dest, html, "utf8");
-const archify = brief.decisions.flatMap((e) => (e.unwound?.diagrams ?? []))
-  .filter((d) => d.kind === "archify").map((d) => d.file);
-console.log(`wrote ${dest}  (${brief.decisions.length} entries, ${(html.length / 1024).toFixed(0)} KB)`);
-if (archify.length) {
-  console.log("publish these alongside the page, as files entries:");
-  for (const f of archify) console.log(`  ${f}`);
+const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
+console.log(`wrote ${dest}  (${brief.decisions.length} entries, ${kb(html.length)})`);
+if (notes.inlined) {
+  console.log(`  ${kb(notes.inlined)} of that is drawings carried inside the page — nothing needs publishing alongside it.`);
+}
+if (notes.companions.size) {
+  console.log("  these drawings are companion files and must be published alongside the page:");
+  for (const f of notes.companions) console.log(`    ${f}`);
+  console.log('  if your publishing tool cannot carry companions, drop "embed": "file" and they go inside the page instead.');
+}
+for (const problem of notes.problems) console.warn(`  ! ${problem}`);
+if (html.length > PAGE_WARN_BYTES) {
+  console.warn(`  ! the page is ${mb(html.length)}. It still works — the ceiling is 16 MB — but consider simplifying a ` +
+    'drawing, or setting "embed": "file" on the largest ones if your publishing tool can carry companions.');
 }
