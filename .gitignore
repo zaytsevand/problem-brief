@@ -1,0 +1,7 @@
+# Rendered output — build it with bin/render-brief.mjs
+examples/*.html
+!examples/diagrams/*.html
+*.brief.html
+out/
+node_modules/
+.DS_Store

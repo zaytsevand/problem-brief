@@ -1,0 +1,528 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local/problem-brief.schema.json",
+  "title": "Problem brief",
+  "description": "Data for one problem brief page. The renderer fixes the layout; this file holds only the content.",
+  "type": "object",
+  "required": [
+    "title",
+    "subject",
+    "decisions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 80,
+      "description": "Short name for the page, two to five words. Becomes the artefact title."
+    },
+    "subject": {
+      "type": "string",
+      "minLength": 10,
+      "description": "One plain sentence naming what this brief is about and who must act on it."
+    },
+    "generated": {
+      "type": "string",
+      "format": "date",
+      "description": "Date the facts on this page were last re-derived from the tree. Not the date the page was first written."
+    },
+    "source": {
+      "type": "string",
+      "description": "What produced these findings, in plain English. e.g. 'the implementation review on the importer branch, 2026-09-11'."
+    },
+    "context": {
+      "type": "string",
+      "description": "One paragraph the reader needs before entry one. Optional. Never a summary of the entries."
+    },
+    "decisions": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The brief proper. One entry per root cause, not per finding.",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    },
+    "mechanical": {
+      "type": "array",
+      "description": "Unambiguous fixes already applied. Listed so the reader knows they were handled, never asked about.",
+      "items": {
+        "$ref": "#/$defs/mechanicalItem"
+      }
+    },
+    "outstanding": {
+      "type": "array",
+      "description": "Agreed work not yet done. Kept apart from the decisions.",
+      "items": {
+        "$ref": "#/$defs/outstandingItem"
+      }
+    },
+    "diagramTheme": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "light",
+        "dark"
+      ],
+      "default": "auto",
+      "description": "Theme passed to embedded archify pages. 'auto' follows the reader's theme."
+    }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "problem",
+        "brief",
+        "evidence",
+        "solutions"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^Q-[0-9]+$",
+          "description": "Stable citation handle. Q-1, Q-2, … Never renumber an existing entry."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 90,
+          "description": "The problem as a headline, in plain English. No identifiers standing alone."
+        },
+        "problem": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 400,
+          "description": "Part a. One or two sentences naming what is wrong. No preamble, no background."
+        },
+        "brief": {
+          "type": "string",
+          "minLength": 40,
+          "description": "Part b. Two to eight sentences on why that matters, in the reader's terms."
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "description": "Part c. Verified evidence grounded in real things: code lines, documents, prior findings.",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        "unwound": {
+          "$ref": "#/$defs/unwound",
+          "description": "Part d. How it works today and why that is wrong — or the target state where there is no defect."
+        },
+        "solutions": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Part e. The first is the recommendation and must carry recommended: true.",
+          "items": {
+            "$ref": "#/$defs/solution"
+          }
+        },
+        "rolledUp": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The individual findings this entry absorbed, each named in plain English with its identifier trailing."
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Claims not yet proven, stated outright, each saying what would settle it."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "decided",
+            "complete",
+            "superseded"
+          ],
+          "default": "open",
+          "description": "open — needs your ruling. decided — you chose a way forward, it has not been carried out yet. complete — the chosen way forward has been carried out and the entry is closed; that covers work landing, a question being answered, or scope being cut, whichever the chosen option was. superseded — the problem went away or was overtaken, and nothing was carried out."
+        },
+        "decision": {
+          "type": "object",
+          "required": [
+            "chose",
+            "date"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "chose": {
+              "type": "string",
+              "description": "The id of the chosen solution."
+            },
+            "date": {
+              "type": "string",
+              "format": "date"
+            },
+            "note": {
+              "type": "string",
+              "description": "The reasoning, in the operator's words where they gave it."
+            }
+          },
+          "description": "Which option was chosen and why. Set when the ruling is made, and kept afterwards."
+        },
+        "resolution": {
+          "type": "object",
+          "description": "What actually happened. Required once status is complete — a closed entry without proof is a claim, not a record.",
+          "required": [
+            "date"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "date": {
+              "type": "string",
+              "format": "date",
+              "description": "The day it was carried out."
+            },
+            "note": {
+              "type": "string",
+              "description": "What was done, in one or two sentences. Say it in the same plain terms as the problem."
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              },
+              "description": "Proof it happened: the commit, the pull request, the test that now covers it, the ruling that cut the scope."
+            },
+            "differs": {
+              "type": "string",
+              "description": "Where what landed differs from the option that was chosen, and why. Leave out when it matches."
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "decided"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "decision"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "complete"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "resolution"
+            ]
+          }
+        }
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "kind",
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "code",
+            "document",
+            "finding",
+            "run",
+            "commit",
+            "test",
+            "measurement"
+          ],
+          "description": "What sort of thing is being cited."
+        },
+        "ref": {
+          "type": "string",
+          "description": "The citation itself: path:line, a spec path, a commit hash, a run identifier."
+        },
+        "note": {
+          "type": "string",
+          "description": "What this citation shows, in one sentence. Required in practice — a bare path proves nothing."
+        },
+        "url": {
+          "type": "string",
+          "description": "Optional link, where one exists and the reader can open it."
+        },
+        "verified": {
+          "type": "boolean",
+          "default": true,
+          "description": "False marks the claim as unproven on the page. Say in the note what would settle it."
+        }
+      }
+    },
+    "unwound": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "now": {
+          "type": "string",
+          "description": "How the thing actually behaves today."
+        },
+        "whyWrong": {
+          "type": "string",
+          "description": "Why that behaviour is a problem. Use where there is a defect."
+        },
+        "target": {
+          "type": "string",
+          "description": "The state we want instead. Use where there is no defect, only a gap."
+        },
+        "diagrams": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/diagram"
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "now"
+          ]
+        },
+        {
+          "required": [
+            "target"
+          ]
+        }
+      ]
+    },
+    "diagram": {
+      "type": "object",
+      "required": [
+        "kind",
+        "caption"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "mermaid",
+            "archify",
+            "svg"
+          ],
+          "description": "mermaid renders natively in the page. archify embeds a rendered archify page. svg inlines a self-contained file."
+        },
+        "caption": {
+          "type": "string",
+          "description": "What the reader should take from the picture. Not a title — a claim."
+        },
+        "source": {
+          "type": "string",
+          "description": "kind=mermaid: the diagram text itself."
+        },
+        "file": {
+          "type": "string",
+          "description": "kind=archify: published path of the rendered archify page, e.g. diagrams/q1-flow.html. kind=svg: local path of the .svg file to inline."
+        },
+        "spec": {
+          "type": "string",
+          "description": "kind=archify: path of the archify JSON this page was rendered from. Keep it so the picture can be edited rather than redrawn."
+        },
+        "archifyType": {
+          "type": "string",
+          "enum": [
+            "architecture",
+            "workflow",
+            "sequence",
+            "dataflow",
+            "lifecycle"
+          ],
+          "description": "kind=archify: which archify renderer produced the page."
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 1400,
+          "default": 520,
+          "description": "kind=archify: force a fixed frame height in pixels. Leave it out — the renderer works the height out from the drawing's own proportions, which is what stops it being cropped."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "mermaid"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "source"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "archify",
+                  "svg"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "file"
+            ]
+          }
+        }
+      ]
+    },
+    "solution": {
+      "type": "object",
+      "required": [
+        "id",
+        "label",
+        "summary",
+        "cost"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "Short handle, unique within the entry."
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 90,
+          "description": "The option as a headline."
+        },
+        "recommended": {
+          "type": "boolean",
+          "default": false
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 20,
+          "description": "What doing this actually means."
+        },
+        "cost": {
+          "type": "object",
+          "required": [
+            "work"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "work": {
+              "type": "string",
+              "description": "How much work, in real terms. Not a t-shirt size on its own."
+            },
+            "risk": {
+              "type": "string",
+              "description": "What could go wrong if we pick this."
+            },
+            "forecloses": {
+              "type": "string",
+              "description": "What this rules out later."
+            }
+          }
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional ordered steps, where the option is not self-evident."
+        }
+      }
+    },
+    "mechanicalItem": {
+      "type": "object",
+      "required": [
+        "summary"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "What was wrong and what was done, in one sentence."
+        },
+        "detail": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        "rolledUp": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "outstandingItem": {
+      "type": "object",
+      "required": [
+        "summary"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "The work, named so the reader knows what it delivers."
+        },
+        "detail": {
+          "type": "string"
+        },
+        "blockedBy": {
+          "type": "string",
+          "description": "The entry id this waits on, where it waits on a ruling. e.g. Q-2."
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "not-started",
+            "in-progress",
+            "blocked"
+          ],
+          "default": "not-started"
+        }
+      }
+    }
+  }
+}

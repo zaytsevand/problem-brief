@@ -1,0 +1,271 @@
+{
+  "title": "Invoice importer — open decisions",
+  "subject": "Three things about the supplier-invoice importer need your ruling before the release can be signed off.",
+  "generated": "2026-09-11",
+  "source": "the implementation review on the importer branch, re-checked against the branch tip this morning",
+  "context": "The review produced eleven separate complaints. Nine of them come from three underlying causes, so they are grouped below as three decisions rather than eleven. The other two were unambiguous mistakes and are already fixed — they are listed at the end so you know they were handled.",
+  "decisions": [
+    {
+      "id": "Q-1",
+      "title": "The proof that the reader works was built on files we no longer use",
+      "problem": "The measurement that says the invoice reader is 94% accurate was taken against ten saved PDF files. Those saved files were replaced with live downloads from the suppliers last week, and the measurement was never re-taken.",
+      "brief": "That number is the only evidence we have that the reader is good enough to ship. Every later decision on this branch cites it. If the live documents differ from the saved copies — and they already differ in two known ways, because two suppliers changed their invoice template — then the number is not about the system we are about to release. It is about a system that no longer exists. We would be signing off on a measurement of the wrong thing.",
+      "evidence": [
+        {
+          "kind": "measurement",
+          "ref": "runs/2026-08-28T122844Z/summary.json",
+          "note": "The 94% figure, taken against the saved files on 28 August."
+        },
+        {
+          "kind": "commit",
+          "ref": "c2e7760",
+          "note": "The commit that replaced the saved files with live downloads. No new measurement followed it."
+        },
+        {
+          "kind": "finding",
+          "ref": "the review's first red flag",
+          "note": "Raised independently: no document has been read from a live download since the change."
+        }
+      ],
+      "unwound": {
+        "now": "The benchmark loads ten PDF files from disk, runs the reader over each, and compares its answers to a hand-written answer key. Nothing in that path touches the network, so it cannot notice that a supplier has redesigned a template.\n\nThe live path does something different: it fetches the document, waits for the whole file, and only then reads it. Two of the ten suppliers have changed their template since the copies were saved.",
+        "whyWrong": "We are reporting a number as though it describes the shipping system. It describes a fixture. The gap is not theoretical — we already know two of ten documents differ, so the true accuracy could be anywhere from 74% to 94% and we cannot say which.",
+        "diagrams": [
+          {
+            "kind": "mermaid",
+            "caption": "The measured path and the shipped path diverge at the first step, and nothing downstream notices.",
+            "source": "flowchart LR\n  subgraph measured[\"What we measured\"]\n    A[\"Saved PDF files\\n(28 August)\"] --> B[\"Invoice reader\"] --> C[\"Compare to answer key\"] --> D[\"94%\"]\n  end\n  subgraph shipped[\"What we ship\"]\n    E[\"Live download\"] --> F[\"Wait for whole file\"] --> G[\"Invoice reader\"] --> H[\"Posted to the ledger\"]\n  end\n  A -. \"two of ten\\nno longer match\" .-> E"
+          }
+        ]
+      },
+      "solutions": [
+        {
+          "id": "rerun-live",
+          "label": "Re-take the measurement against the ten live documents before sign-off",
+          "recommended": true,
+          "summary": "Point the benchmark at live downloads instead of the saved files, re-run it, and re-write the answer key for the two templates that changed. Sign-off waits for the new number.",
+          "cost": {
+            "work": "About a day: half of it re-writing the answer key for the two changed templates, half waiting on the run.",
+            "risk": "The new number may be materially worse, which would itself delay the release. That is the point of taking it.",
+            "forecloses": "Nothing."
+          },
+          "steps": [
+            "Re-write the answer key for the two suppliers whose templates changed.",
+            "Run the benchmark against live downloads, not the saved files.",
+            "Record the new number next to the old one so the gap is visible."
+          ]
+        },
+        {
+          "id": "ship-caveat",
+          "label": "Ship on the old number, with it labelled as measured against saved files",
+          "recommended": false,
+          "summary": "Leave the measurement alone, but change every place that cites it to say what it was actually taken against, and open a follow-up to re-take it after release.",
+          "cost": {
+            "work": "An hour of editing.",
+            "risk": "We release without knowing the real accuracy. If it is near 74%, roughly one invoice in four is posted wrong, and we find out from the finance team.",
+            "forecloses": "Nothing formally, but a follow-up filed after a release tends not to get done."
+          }
+        },
+        {
+          "id": "narrow-claim",
+          "label": "Drop the accuracy claim from the sign-off entirely",
+          "recommended": false,
+          "summary": "Stop treating the number as a release condition. Sign off on the code review alone and treat accuracy as something we learn in production.",
+          "cost": {
+            "work": "None.",
+            "risk": "Removes the only quantitative bar this work had. Nothing then stops a regression from shipping.",
+            "forecloses": "Makes it much harder to argue for the bar later, once we have shipped without it once."
+          }
+        }
+      ],
+      "rolledUp": [
+        "The measurement no longer describes the shipping system (the review's first red flag)",
+        "The two acceptance criteria in the design note are written in terms of the retired measurement method",
+        "No test covers the live download path at all"
+      ]
+    },
+    {
+      "id": "Q-2",
+      "title": "One failure of the parsing service is handled silently, and has cost us four measurements",
+      "problem": "When the call to the parsing service fails because the connection drops, the code catches it in a general-purpose handler that records nothing. The run continues and the result looks like a normal, confident answer.",
+      "brief": "The four other ways this call can fail each set a flag we can look for afterwards. This fifth one does not. That means a benchmark run can contain silent holes and still report a clean number. The file's own comment says this class of mistake has already cost us measurements four times — and then the file repeats it.",
+      "evidence": [
+        {
+          "kind": "code",
+          "ref": "importer/parser_client.py:212",
+          "note": "The general-purpose handler with no flag set, reached when the connection drops."
+        },
+        {
+          "kind": "code",
+          "ref": "importer/parser_client.py:18",
+          "note": "The file's own comment naming this exact failure and counting four past losses."
+        },
+        {
+          "kind": "code",
+          "ref": "importer/receipt_client.py:96",
+          "note": "A second, independently written copy of the same call handling, already out of step: it names three outcomes where the first names five."
+        }
+      ],
+      "unwound": {
+        "now": "The call is wrapped in a ladder of handlers, one per known failure. Four of them set a named flag that later shows up in the run summary. The fifth handler is the catch-all at the bottom, which logs a line and returns an empty answer.\n\nAn empty answer is indistinguishable downstream from a real answer that found nothing.",
+        "whyWrong": "A run with twenty silent connection drops and a run with no failures at all produce the same summary. We cannot tell a good measurement from a broken one after the fact, which is precisely what the four previous losses were.",
+        "target": "Every way this call can fail sets a named flag, and a run summary that contains any flag is not quotable as a measurement until the flags are explained."
+      },
+      "solutions": [
+        {
+          "id": "name-the-fifth",
+          "label": "Give the connection failure its own handler and flag, and make any flag disqualify the run",
+          "recommended": true,
+          "summary": "Add the missing handler next to the other four, set a flag the same way, and make the summary refuse to print a headline number when any flag is set.",
+          "cost": {
+            "work": "Half a day including the test that proves a dropped connection shows up in the summary.",
+            "risk": "Runs that used to look clean will start showing flags. That is the intended effect, but it will make the next few runs look worse.",
+            "forecloses": "Nothing."
+          }
+        },
+        {
+          "id": "single-caller",
+          "label": "Do the above, and also merge the two copies of the call handling into one",
+          "recommended": false,
+          "summary": "Same fix, plus collapse the second, drifted copy into the first so the two cannot disagree again.",
+          "cost": {
+            "work": "Two to three days — the two copies have different callers and different return shapes.",
+            "risk": "A wider change than the release needs, touching code the review did not look at.",
+            "forecloses": "Nothing, but it is hard to undo once the callers are rewritten."
+          }
+        }
+      ],
+      "assumptions": [
+        "I have not confirmed that the four earlier losses were all this same failure — the comment says so but no run is cited. Checking the four run summaries for the pattern would settle it."
+      ],
+      "rolledUp": [
+        "The unflagged fifth failure (the review's second red flag)",
+        "An unguarded read of the first item in the service's reply, which throws when the reply is empty",
+        "The two drifted copies of the call handling"
+      ]
+    },
+    {
+      "id": "Q-3",
+      "title": "An import can stop halfway and hand back to the person, and nothing says what happens next",
+      "problem": "When the importer cannot read a field, it stops and hands the run back to whoever started it. The design says this is not the end of the run, but no part of the system defines how a handed-back run resumes.",
+      "brief": "In practice the run just stops. The person sees a half-imported batch and no instruction. There is no button that resumes, no saved position, and no message saying what went wrong or what to do. From their side this is indistinguishable from a crash, except that it is silent.",
+      "evidence": [
+        {
+          "kind": "document",
+          "ref": "docs/design/invoice-import.md",
+          "note": "States that handing back is a pause, not an ending, and that the run resumes afterwards."
+        },
+        {
+          "kind": "code",
+          "ref": "importer/runner.py:341",
+          "note": "The hand-back path returns and clears the batch. Nothing reads the position back."
+        },
+        {
+          "kind": "finding",
+          "ref": "the review's complaint about dead ends",
+          "note": "Raised as a state the person cannot recover from without starting the batch again."
+        }
+      ],
+      "unwound": {
+        "now": "The run reaches a field it cannot read, records the reason, clears the batch and returns. The dashboard shows the import as stopped.",
+        "target": "The person is told, in one sentence, what the importer could not work out, and is given one action that continues the run from where it stopped.",
+        "diagrams": [
+          {
+            "kind": "archify",
+            "caption": "Where the run stops today, and the step that does not exist yet.",
+            "file": "diagrams/q3-handback.html",
+            "spec": "diagrams/q3-handback.lifecycle.json",
+            "archifyType": "lifecycle"
+          }
+        ]
+      },
+      "solutions": [
+        {
+          "id": "resume-point",
+          "label": "Save the position when handing back, and add one resume action",
+          "recommended": true,
+          "summary": "Keep the batch and the position when the run hands back. The dashboard grows one button that reopens the import where it stopped, with the unread field highlighted.",
+          "cost": {
+            "work": "Three to four days, most of it in holding a part-finished batch safely across the pause.",
+            "risk": "A held-open batch is something we currently always release at the end of a run. Holding one has a cost and a timeout to design.",
+            "forecloses": "Nothing."
+          }
+        },
+        {
+          "id": "explain-only",
+          "label": "Explain the stop clearly, but require a fresh start",
+          "recommended": false,
+          "summary": "Do not keep the batch. Tell the person plainly what could not be read and that the import must be started again.",
+          "cost": {
+            "work": "A day.",
+            "risk": "Honest but frustrating: they redo work the system already did.",
+            "forecloses": "Nothing, though it sets the expectation that stopping means losing progress."
+          }
+        }
+      ],
+      "status": "complete",
+      "decision": {
+        "chose": "resume-point",
+        "date": "2026-09-11",
+        "note": "Losing a part-finished batch is the worse failure. Design the timeout separately."
+      },
+      "resolution": {
+        "date": "2026-09-14",
+        "note": "The batch and the position are now kept when the run hands back, and the dashboard has one button that reopens the import where it stopped with the unread field highlighted.",
+        "differs": "The held-open batch times out after twenty minutes rather than being held indefinitely, which the option did not specify. Past that the person starts again.",
+        "evidence": [
+          {
+            "kind": "commit",
+            "ref": "a41f9c2",
+            "note": "Keeps the batch and position on hand-back, and adds the resume action."
+          },
+          {
+            "kind": "test",
+            "ref": "tests/integration/test_handback_resume.py",
+            "note": "Covers a hand-back followed by a resume that finishes the import."
+          }
+        ]
+      }
+    }
+  ],
+  "mechanical": [
+    {
+      "summary": "The design note still described the older two-step download; rewritten to describe the single fetch actually in the code.",
+      "detail": "Three places in the note and one drawing referred to the retired arrangement.",
+      "evidence": [
+        {
+          "kind": "document",
+          "ref": "docs/design/invoice-import.md",
+          "note": "Corrected in four places."
+        }
+      ]
+    },
+    {
+      "summary": "The design note counted twenty-three steps where the code declares twenty-two; recounted and corrected.",
+      "evidence": [
+        {
+          "kind": "code",
+          "ref": "importer/pipeline.py",
+          "note": "Twenty-two declared steps, nineteen of them reachable."
+        }
+      ]
+    }
+  ],
+  "outstanding": [
+    {
+      "summary": "Write the test that proves a dropped connection appears in the run summary.",
+      "blockedBy": "Q-2",
+      "state": "blocked"
+    },
+    {
+      "summary": "Design the timeout for a held-open batch during a paused import.",
+      "detail": "Needed by the resume work, and it has its own cost question: how long we are willing to hold a part-finished batch open.",
+      "blockedBy": "Q-3",
+      "state": "not-started"
+    },
+    {
+      "summary": "Replace the two supplier templates in the benchmark whose documents changed.",
+      "state": "in-progress"
+    }
+  ]
+}
