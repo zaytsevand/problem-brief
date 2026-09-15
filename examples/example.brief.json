@@ -7,9 +7,18 @@
   "source": "the implementation review on the importer branch, re-checked against the branch tip this morning",
   "context": "Nine of the eleven complaints come from three underlying causes, so they are grouped below as three decisions:\n- two were unambiguous mistakes and are already fixed\n- they are listed at the end so you know they were handled",
   "changes": [
-    "Q-1 and Q-2 now say how they bear on the release: Q-1 blocks sign-off, Q-2 is a real decision that can wait.",
-    "Q-3: ruled → complete. The handed-back import now resumes, and a test covers it.",
-    "Outstanding work: the timeout for a paused batch is done."
+    {
+      "kind": "changed",
+      "text": "Q-1 and Q-2 now say how they bear on the release: Q-1 blocks sign-off, Q-2 is a real decision that can wait."
+    },
+    {
+      "kind": "completed",
+      "text": "Q-3: outstanding work → complete. The handed-back import now resumes, and a test covers it."
+    },
+    {
+      "kind": "completed",
+      "text": "The timeout for a paused batch is done."
+    }
   ],
   "background": "The review produced eleven separate complaints on 11 September. The brief was re-checked against the branch tip on the morning of 14 September, and again today.",
   "decisions": [

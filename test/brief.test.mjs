@@ -121,12 +121,12 @@ test("the summary renders as lists: what changed, and what waits on the reader",
     entry("Q-1", { short: "posting to the ledger", bearing: "blocks-goal", bearingReason: "Needed to post." }),
     entry("Q-2", { short: "export format", bearing: "escalated", bearingReason: "Export only." }),
   ], {
-    changes: ["Q-1 raised.", "Q-2: open → decided, then reopened."],
+    changes: [{ kind: "raised", text: "Q-1 raised." }, { kind: "changed", text: "Q-2: open → decided, then reopened." }],
     background: "Nine reviewers read the code on 11 September.",
     source: "the nine-advisor review",
   }));
   const top = html.match(/<header class="top">([^]*?)<\/header>/)[1];
-  assert.match(top, /<h2>Since the last version<\/h2><ul><li>/);
+  assert.match(top, /<h2>Since the last version<\/h2><div class="tr">/);
   assert.match(top, /<h2>Waiting on you<\/h2>/);
   assert.match(top, /Blocks the goal[^]*href="#Q-1"[^]*posting to the ledger/);
   assert.match(top, /Escalated, not blocking[^]*href="#Q-2"[^]*export format/);
@@ -186,4 +186,49 @@ test("a superseded entry reads as retracted", () => {
   assert.match(html, /data-filter="superseded"[^>]*>\s*<span class="chip-n">1<\/span> retracted/);
   assert.match(html, /<span class="chip chip-superseded chip-static">Retracted<\/span>/);
   assert.doesNotMatch(html, /no longer live/i);
+});
+
+/* ── changes: typed transitions, grouped and marked ────────────────────── */
+
+test("changes are grouped by transition: new, changed, then closings, notes last", () => {
+  const html = render(brief([
+    entry("Q-1", { bearing: "escalated", bearingReason: "Export only." }),
+  ], { changes: [
+    { kind: "retracted", text: "Q-1 was overtaken." },
+    "Most work is on local branches.",
+    { kind: "completed", text: "The retry test landed." },
+    { kind: "changed", text: "Q-1: open → decided." },
+    { kind: "raised", text: "Q-1 raised." },
+  ] }));
+  const since = html.match(/<h2>Since the last version<\/h2>([^]*?)<\/section>/)[1];
+  const order = [...since.matchAll(/data-kind="(\w+)"/g)].map((m) => m[1]);
+  assert.deepEqual(order, ["raised", "changed", "completed", "retracted", "note"]);
+  for (const k of ["raised", "changed", "completed", "retracted"]) {
+    assert.match(since, new RegExp(`data-kind="${k}"[^]*?<svg[^>]*class="tr-icon tr-${k}"`));
+  }
+  assert.match(since, /<h3[^>]*>New<span class="tr-n">1<\/span><\/h3>/);
+  assert.match(since, /<h3[^>]*>Changed<span class="tr-n">1<\/span><\/h3>/);
+  assert.match(since, /<h3[^>]*>Done<span class="tr-n">1<\/span><\/h3>/);
+  assert.match(since, /<h3[^>]*>Retracted<span class="tr-n">1<\/span><\/h3>/);
+});
+
+test("an unknown transition kind is refused", () => {
+  const r = messages(brief([entry("Q-1", { bearing: "escalated", bearingReason: "Export only." })],
+    { changes: [{ kind: "moved", text: "Q-1 moved somewhere." }] }));
+  assert.ok(r.errors.some((m) => m.includes("changes")), r.errors.join("\n"));
+});
+
+test("an untyped change is allowed but flagged", () => {
+  const r = messages(brief([entry("Q-1", { bearing: "escalated", bearingReason: "Export only." })],
+    { changes: ["Q-1 raised."] }));
+  assert.equal(r.ok, true);
+  assert.ok(r.warnings.some((m) => m.includes("changes[0]")), r.warnings.join("\n"));
+});
+
+test("a deliberate note is quiet and shown with the notes", () => {
+  const b = brief([entry("Q-1", { bearing: "escalated", bearingReason: "Export only." })],
+    { changes: [{ kind: "note", text: "Everything is on local branches." }, { kind: "raised", text: "Q-1 raised." }] });
+  assert.deepEqual(messages(b).warnings, []);
+  const since = render(b).match(/<h2>Since the last version<\/h2>([^]*?)<\/section>/)[1];
+  assert.deepEqual([...since.matchAll(/data-kind="(\w+)"/g)].map((m) => m[1]), ["raised", "note"]);
 });

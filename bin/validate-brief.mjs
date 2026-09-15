@@ -330,6 +330,19 @@ function semanticErrors(brief) {
     }
   });
 
+  const KINDS = ["raised", "changed", "completed", "retracted", "note"];
+  (brief.changes ?? []).forEach((c, i) => {
+    const where = `changes[${i}]`;
+    if (typeof c === "string") {
+      out.push({ path: where, severity: "warning", message: "has no kind, so it is shown last among the notes",
+        hint: `write it as { "kind": …, "text": … } with kind one of ${KINDS.join(", ")}` });
+    } else if (c && typeof c === "object" && !KINDS.includes(c.kind)) {
+      const guess = typeof c.kind === "string" ? nearest(c.kind, KINDS) : null;
+      out.push({ path: `${where} → kind`, message: `is ${JSON.stringify(c.kind)}, which is not a transition`,
+        hint: (guess ? `did you mean "${guess}"? ` : "") + `use one of: ${KINDS.join(", ")}` });
+    }
+  });
+
   out.push(...stateErrors(brief), ...bearingErrors(brief), ...referenceErrors(brief), ...timestampErrors(brief));
   return out;
 }

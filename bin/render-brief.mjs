@@ -387,6 +387,33 @@ function entry(e, baseDir) {
 </section>`;
 }
 
+/* ── transitions ────────────────────────────────────────────────────────────
+   What moved since the last version, grouped by the kind of move and always in
+   the same order: what is new, what changed, then what closed. Each kind has
+   its own mark, drawn rather than typed so it keeps its shape in every font and
+   takes its colour from the theme. Shape carries the meaning; colour repeats it. */
+
+const TRANSITIONS = [
+  ["raised", "New", '<circle cx="8" cy="8" r="6.25"/><path d="M8 5v6M5 8h6"/>'],
+  ["changed", "Changed", '<circle cx="8" cy="8" r="6.25"/><path d="M4.75 8h6.25M8.75 5.5 11.25 8l-2.5 2.5"/>'],
+  ["completed", "Done", '<circle cx="8" cy="8" r="6.25" class="fill"/><path d="m5.1 8.2 2 2 3.8-4.2" class="knock"/>'],
+  ["retracted", "Retracted", '<circle cx="8" cy="8" r="6.25"/><path d="M4.6 11.4 11.4 4.6"/>'],
+  ["note", "Notes", '<circle cx="8" cy="8" r="2" class="fill"/>'],
+];
+
+function transitions(list) {
+  const kindOf = (c) => (typeof c === "string" ? "note" : c.kind);  // an untyped line is a note
+  return `<div class="tr">` + TRANSITIONS.map(([kind, label, glyph]) => {
+    const items = list.filter((c) => kindOf(c) === kind);
+    if (!items.length) return "";
+    const icon = `<svg class="tr-icon tr-${kind}" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">${glyph}</svg>`;
+    return `<div class="tr-group" data-kind="${kind}"><h3 class="tr-head">${label}` +
+      `<span class="tr-n">${items.length}</span></h3><ul>` +
+      items.map((c) => `<li>${icon}<span>${inline(typeof c === "string" ? c : c.text)}</span></li>`).join("") +
+      `</ul></div>`;
+  }).join("") + `</div>`;
+}
+
 /* ── page ───────────────────────────────────────────────────────────────── */
 
 const CSS = `
@@ -467,6 +494,20 @@ h2,h3,h4{text-wrap:balance;}
 .context li{margin:.2em 0;}
 .context p{margin:.3em 0 .7em;}
 .waiting-row ul{list-style:none;padding-left:0;}
+.tr{display:grid;gap:.9em;margin:.2em 0 .8em;}
+.tr-head{display:flex;align-items:baseline;gap:.45em;font-size:.82rem;margin:0 0 .25em;color:var(--ink);}
+.tr-n{font-weight:500;color:var(--ink-3);font-variant-numeric:tabular-nums;font-size:.9em;}
+.context .tr ul{list-style:none;padding-left:0;margin:0;}
+.context .tr li{display:grid;grid-template-columns:16px minmax(0,1fr);gap:.6em;align-items:start;margin:.3em 0;}
+.tr-icon{margin-top:.28em;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;}
+.tr-icon .fill{fill:currentColor;}
+.tr-icon .knock{stroke:var(--card);stroke-width:1.8;}
+.tr-raised{color:var(--accent);}
+.tr-changed{color:var(--warn);}
+.tr-completed{color:var(--rec);}
+.tr-retracted{color:var(--ink-3);}
+.tr-note{color:var(--ink-3);}
+[data-kind="retracted"] li > span{color:var(--ink-3);}
 .waiting-row .n{font-variant-numeric:tabular-nums;font-weight:650;margin-right:.3em;}
 .background{padding:10px 0 0;}
 .background summary{cursor:pointer;font-family:ui-sans-serif,system-ui,sans-serif;font-size:.74rem;
@@ -715,7 +756,7 @@ function page(brief, baseDir) {
     : `<p>Nothing is waiting on a ruling.</p>`;
 
   const changes = brief.changes?.length
-    ? `<section><h2>Since the last version</h2><ul>${brief.changes.map((c) => `<li>${inline(c)}</li>`).join("")}</ul></section>` : "";
+    ? `<section><h2>Since the last version</h2>${transitions(brief.changes)}</section>` : "";
   const background = brief.background || brief.source
     ? `<details class="background"><summary>Background</summary>${prose(brief.background)}` +
       (brief.source ? `<p class="source">These findings come from ${inline(brief.source)}.</p>` : "") + `</details>` : "";

@@ -227,7 +227,13 @@ a bearing, not a ruling.
 The box above entry one is read first, often on a phone. It is structure, never
 one paragraph:
 
-- `changes` — what moved since the last version, one bullet per change.
+- `changes` — what moved since the last version, one item per change, each
+  with its `kind`: `raised` (new entry or work), `changed` (moved state without
+  closing, or a ruling changed), `completed` (carried out), `retracted` (went
+  away or was overtaken), or `note` (about the brief as a whole). The page
+  groups them in that order — new first, changes next, closings last, notes
+  after — and marks each kind with its own icon. Write the kind; never order
+  the list by hand.
 - **Waiting on you** — built by the renderer from the entries: what blocks the
   goal, then what is escalated. Do not write it by hand.
 - `context` — anything else the reader needs before entry one. Optional.
@@ -474,7 +480,8 @@ end with the chat summary.
 | Leaving finished outstanding work as `not-started` or `blocked` | Set `state: "done"`; it stays on the page |
 | A chat summary that retells the brief | Bullets of what moved, ≤400 words, then the two lines: blocks the goal, escalated |
 | Presenting an unrelated decision as a blocker | Bracket it `"bearing": "escalated"` with its reason; only what stands in the goal's way is `blocks-goal` |
-| A headline summary written as one paragraph | `changes` as bullets; leave *waiting on you* to the renderer; history in `background` |
+| A headline summary written as one paragraph | `changes` as typed items; leave *waiting on you* to the renderer; history in `background` |
+| A change with no `kind` | Give it one, so it lands in its group with its icon; `note` only for the brief as a whole |
 | Keeping `generated` beside `updated` | Delete it; a re-check moves `updated` |
 
 ## Red flags — stop and rewrite

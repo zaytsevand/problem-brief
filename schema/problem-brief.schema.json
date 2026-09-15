@@ -52,11 +52,18 @@
     },
     "changes": {
       "type": "array",
+      "description": "What moved since the last version, one item per change. Give each its kind, so the page can group them — new first, then changes, then closings — and mark each with its icon. Entry ids become links carrying the entry's short label. A plain string is still accepted, as a general note shown last.",
       "items": {
-        "type": "string",
-        "minLength": 3
-      },
-      "description": "What moved since the last version, one bullet per change: a state change ('Q-2: open → decided, name the fifth failure'), a new entry ('Q-6 raised: one plain line'), work that finished. Shown first, as a list. Entry ids become links carrying the entry's short label."
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 3
+          },
+          {
+            "$ref": "#/$defs/change"
+          }
+        ]
+      }
     },
     "background": {
       "type": "string",
@@ -295,6 +302,33 @@
           }
         }
       ]
+    },
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "text"
+      ],
+      "description": "One change since the last version.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "raised",
+            "changed",
+            "completed",
+            "retracted",
+            "note"
+          ],
+          "description": "raised — a new entry or new outstanding work. changed — an entry moved state without closing (open → decided), or its ruling or content changed in a way that matters to the reader. completed — an entry or piece of work was carried out. retracted — an entry went away or was overtaken. note — about the brief as a whole rather than one entry; shown last."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 3,
+          "description": "One plain line: the id with what moved, e.g. 'Q-2: open → decided, name the fifth failure'."
+        }
+      }
     },
     "evidence": {
       "type": "object",
