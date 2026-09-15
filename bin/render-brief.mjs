@@ -45,6 +45,7 @@ let ENTRIES = new Map();
    the meaning is not said twice. */
 function citations(html) {
   let inTag = 0;
+  const labelled = new Set();  // label an id once per passage, not every time it recurs
   return html.split(/(<[^>]+>)/).map((part) => {
     if (part.startsWith("<")) {
       if (/^<(a|code)[\s>]/.test(part)) inTag++;
@@ -55,7 +56,8 @@ function citations(html) {
     return part.replace(/(\()?\b(Q-\d+)\b(?!\s*\()/g, (m, open, id) => {
       const e = ENTRIES.get(id);
       if (!e) return m;
-      const label = e.short && !open ? ` (${esc(e.short)})` : "";
+      const label = e.short && !open && !labelled.has(id) ? ` (${esc(e.short)})` : "";
+      labelled.add(id);
       return `${open ?? ""}<a class="qref" href="#${id}" title="${esc(e.title)}">${id}${label}</a>`;
     });
   }).join("");
@@ -285,6 +287,11 @@ const group = (e) => {
 };
 const BEARING = { "blocks-goal": "tag-block", escalated: "tag-alt" };
 
+/* Carried out, but not quite as ruled: the implementer drifted by their own
+   decision and recorded what, and why. The old free-text `differs` is not
+   counted — it mixed drifts with plain remarks, and a remark is not an amendment. */
+const amendmentsOf = (e) => (e?.status === "complete" ? e.resolution?.amendments ?? [] : []);
+
 /* ── entry ──────────────────────────────────────────────────────────────── */
 
 const EV_LABEL = {
@@ -355,6 +362,11 @@ function entry(e, baseDir) {
     ? `<div class="ruled ruled-done"><strong>Completed ${esc(r.date)}.</strong>` +
       (r.note ? ` ${inline(r.note)}` : "") +
       (r.differs ? `<div class="differs"><strong>Landed differently:</strong> ${inline(r.differs)}</div>` : "") +
+      (amendmentsOf(e).length ? `<div class="amended"><h4>Amended while carried out</h4>` +
+        amendmentsOf(e).map((a) => `<dl class="amend">` +
+          (a.ruled ? `<div><dt>Ruled</dt><dd>${inline(a.ruled)}</dd></div>` : "") +
+          `<div><dt>Done instead</dt><dd>${inline(a.done)}</dd></div>` +
+          (a.why ? `<div><dt>Why</dt><dd>${inline(a.why)}</dd></div>` : "") + `</dl>`).join("") + `</div>` : "") +
       (r.evidence?.length ? evidence(r.evidence) : "") + `</div>`
     : e.status === "superseded"
       ? `<div class="ruled ruled-old">Retracted — the problem went away or was overtaken, so nothing was carried out. Kept for the record.</div>`
@@ -373,7 +385,9 @@ function entry(e, baseDir) {
   <header class="entry-head">
     <a class="qid" href="#${esc(e.id)}">${esc(e.id)}</a>
     <h2>${inline(e.title, { refs: false })}</h2>
-    <span class="chip chip-${g} chip-static">${esc(STATE_LABEL[g])}</span>
+    ${amendmentsOf(e).length
+      ? `<span class="chip chip-${g} chip-amended chip-static">${esc(STATE_LABEL[g])} · amended</span>`
+      : `<span class="chip chip-${g} chip-static">${esc(STATE_LABEL[g])}</span>`}
   </header>
   <p class="stamps">${stamps(e, "raised")}</p>
   ${bearing}
@@ -397,6 +411,7 @@ const TRANSITIONS = [
   ["raised", "New", '<circle cx="8" cy="8" r="6.25"/><path d="M8 5v6M5 8h6"/>'],
   ["changed", "Changed", '<circle cx="8" cy="8" r="6.25"/><path d="M4.75 8h6.25M8.75 5.5 11.25 8l-2.5 2.5"/>'],
   ["completed", "Done", '<circle cx="8" cy="8" r="6.25" class="fill"/><path d="m5.1 8.2 2 2 3.8-4.2" class="knock"/>'],
+  ["amended", "Done, amended", '<circle cx="8" cy="8" r="6.25"/><path d="m5.1 8.2 2 2 3.8-4.2"/>'],
   ["retracted", "Retracted", '<circle cx="8" cy="8" r="6.25"/><path d="M4.6 11.4 11.4 4.6"/>'],
   ["note", "Notes", '<circle cx="8" cy="8" r="2" class="fill"/>'],
 ];
@@ -430,12 +445,22 @@ function newAdditions(list) {
 function transitions(list) {
   const kindOf = (c) => (typeof c === "string" ? "note" : c.kind);  // an untyped line is a note
   return `<div class="tr">` + TRANSITIONS.filter(([kind]) => kind !== "raised").map(([kind, label, glyph]) => {
-    const items = list.filter((c) => kindOf(c) === kind);
+    if (kind === "amended") return "";
+    let items = list.filter((c) => kindOf(c) === kind);
     if (!items.length) return "";
+    const amended = (c) => {
+      if (kind !== "completed" || typeof c === "string") return false;
+      const id = c.id ?? String(c.text).match(/\bQ-\d+\b/)?.[0];
+      return amendmentsOf(ENTRIES.get(id)).length > 0;
+    };
+    // What landed differently from the ruling is what the reader must look at.
+    items = [...items.filter(amended), ...items.filter((c) => !amended(c))];
     const icon = `<svg class="tr-icon tr-${kind}" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">${glyph}</svg>`;
     return `<div class="tr-group" data-kind="${kind}"><h3 class="tr-head">${label}` +
       `<span class="tr-n">${items.length}</span></h3><ul>` +
-      items.map((c) => `<li>${icon}<span>${inline(typeof c === "string" ? c : c.text)}</span></li>`).join("") +
+      items.map((c) => amended(c)
+        ? `<li class="amended-item">${trIcon("amended")}<span>${changeText(c)} <span class="tag tag-amended">amended</span></span></li>`
+        : `<li>${icon}<span>${changeText(c)}</span></li>`).join("") +
       `</ul></div>`;
   }).join("") + `</div>`;
 }
@@ -534,6 +559,18 @@ h2,h3,h4{text-wrap:balance;}
 .tr-changed{color:var(--warn);}
 .tr-completed{color:var(--rec);}
 .tr-retracted{color:var(--ink-3);}
+.tr-amended{color:var(--warn);}
+.tag-amended{color:var(--warn);border:1px solid var(--warn);background:var(--warn-soft);margin-left:.3em;vertical-align:.1em;}
+.context .tr li.amended-item{background:var(--warn-soft);border-radius:5px;padding:.25em .4em;margin-left:-.4em;}
+.chip-static.chip-amended{color:var(--warn);border-color:var(--warn);background:var(--warn-soft);}
+.amended{margin:.7em 0 .2em;padding:.6em .8em;border:1px solid var(--warn);background:var(--warn-soft);border-radius:6px;color:var(--ink);}
+.amended h4{margin:0 0 .4em;font-size:.72rem;text-transform:uppercase;letter-spacing:.09em;color:var(--warn);}
+dl.amend{margin:0;display:grid;gap:.2em;}
+dl.amend + dl.amend{margin-top:.6em;padding-top:.6em;border-top:1px solid var(--warn);}
+dl.amend div{display:grid;grid-template-columns:7em minmax(0,1fr);gap:.6em;}
+dl.amend dt{font-family:ui-sans-serif,system-ui,sans-serif;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);padding-top:.25em;}
+dl.amend dd{margin:0;}
+@media (max-width:640px){dl.amend div{grid-template-columns:1fr;gap:0;}}
 .tr-note{color:var(--ink-3);}
 [data-kind="retracted"] li > span{color:var(--ink-3);}
 .waiting-row .n{font-variant-numeric:tabular-nums;font-weight:650;margin-right:.3em;}

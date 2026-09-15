@@ -261,7 +261,37 @@
             },
             "differs": {
               "type": "string",
-              "description": "Where what landed differs from the option that was chosen, and why. Leave out when it matches."
+              "description": "Retired in favour of amendments. Still accepted, shown as one amendment, with a warning."
+            },
+            "amendments": {
+              "type": "array",
+              "minItems": 1,
+              "description": "Where the implementer drifted from the recorded ruling by their own decision, one item per drift, each saying what was ruled, what was done instead and why. Its presence makes the entry 'complete, with amendments', which the page marks on the entry and in the summary. Never edit the ruling itself to match what landed.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "done",
+                  "why"
+                ],
+                "properties": {
+                  "ruled": {
+                    "type": "string",
+                    "minLength": 3,
+                    "description": "What the recorded ruling said, on this point. Optional when the option's own wording already says it."
+                  },
+                  "done": {
+                    "type": "string",
+                    "minLength": 3,
+                    "description": "What was carried out instead."
+                  },
+                  "why": {
+                    "type": "string",
+                    "minLength": 3,
+                    "description": "Why the implementer drifted: what they found that the ruling did not anticipate."
+                  }
+                }
+              }
             }
           }
         }

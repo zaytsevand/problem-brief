@@ -284,6 +284,11 @@ function semanticErrors(brief) {
       }
     });
 
+    if (e?.resolution?.differs) {
+      out.push({ path: `${where} → resolution → differs`, severity: "warning",
+        message: "is retired — record the drift as amendments instead",
+        hint: 'write it as "amendments": [{ "ruled": …, "done": …, "why": … }], so the page can show what was ruled, what was done instead and why' });
+    }
     if (e?.status === "complete") {
       const r = e.resolution;
       if (r && !r.note && !(r.evidence?.length)) {

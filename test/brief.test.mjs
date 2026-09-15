@@ -262,3 +262,61 @@ test("a raised change pointing at an unknown id is refused", () => {
     { changes: [{ kind: "raised", text: "Something new.", id: "Q-9" }] }));
   assert.ok(r.errors.some((m) => m.includes("Q-9")), r.errors.join("\n"));
 });
+
+/* ── done, with amendments to the ruling ───────────────────────────────── */
+
+const ruled = { status: "complete", decision: { chose: "a", date: "2026-09-14" } };
+const amendment = { ruled: "Deduplicate on the invoice number.", done: "Deduplicated on supplier and invoice number together.", why: "Two suppliers reuse invoice numbers." };
+
+test("a completed entry can record amendments to its ruling, and they validate", () => {
+  const b = brief([entry("Q-1", { ...ruled, resolution: { date: "2026-09-15", note: "Landed with a test.", amendments: [amendment] } })]);
+  assert.deepEqual(messages(b).errors, []);
+});
+
+test("an amendment without its reason is refused", () => {
+  const { why, ...noWhy } = amendment;
+  const b = brief([entry("Q-1", { ...ruled, resolution: { date: "2026-09-15", note: "Landed.", amendments: [noWhy] } })]);
+  assert.ok(messages(b).errors.some((m) => m.includes("why")), messages(b).errors.join("\n"));
+});
+
+test("the old free-text differs still works but asks to become an amendment", () => {
+  const b = brief([entry("Q-1", { ...ruled, resolution: { date: "2026-09-15", note: "Landed.", differs: "Keyed on supplier too." } })]);
+  const r = messages(b);
+  assert.equal(r.ok, true);
+  assert.ok(r.warnings.some((m) => m.includes("differs")), r.warnings.join("\n"));
+});
+
+test("an amended entry says so on its chip and inside the entry", () => {
+  const html = render(brief([entry("Q-1", { ...ruled, resolution: { date: "2026-09-15", note: "Landed.", amendments: [amendment] } })]));
+  assert.match(html, /<span class="chip chip-complete chip-amended chip-static">Complete · amended<\/span>/);
+  const box = html.match(/<div class="amended">([^]*?)<\/div><\/div>/)?.[0] ?? "";
+  assert.match(box, /Amended while carried out/);
+  assert.match(box, /Ruled[^]*Deduplicate on the invoice number\./);
+  assert.match(box, /Done instead[^]*supplier and invoice number together/);
+  assert.match(box, /Why[^]*reuse invoice numbers/);
+});
+
+test("in the summary, a done item for an amended entry is marked and listed first", () => {
+  const html = render(brief([
+    entry("Q-1", { status: "complete", resolution: { date: "2026-09-15", note: "Landed as ruled." } }),
+    entry("Q-2", { ...ruled, resolution: { date: "2026-09-15", note: "Landed.", amendments: [amendment] } }),
+  ], { changes: [
+    { kind: "completed", text: "Q-1 is done." },
+    { kind: "completed", text: "Q-2 is done." },
+  ] }));
+  const done = html.match(/data-kind="completed"([^]*?)<\/div>/)[1];
+  assert.match(done, /<li class="amended-item">[^]*tr-amended[^]*Q-2[^]*<span class="tag tag-amended">amended<\/span>[^]*<li>[^]*Q-1/);
+});
+
+test("an id cited twice in one passage carries its label only the first time", () => {
+  const html = render(brief([
+    entry("Q-1", { short: "ledger posting", bearing: "escalated", bearingReason: "Q-1 first, then Q-1 again." }),
+  ]));
+  assert.match(html, /Q-1 \(ledger posting\)<\/a> first, then <a class="qref" href="#Q-1"[^>]*>Q-1<\/a> again/);
+});
+
+test("an old differs note is shown as a remark, not as an amendment", () => {
+  const html = render(brief([entry("Q-1", { ...ruled, resolution: { date: "2026-09-15", note: "Landed.", differs: "The comparison was not reported." } })]));
+  assert.match(html, /Landed differently:<\/strong> The comparison was not reported\./);
+  assert.doesNotMatch(html, /class="chip chip-complete chip-amended/);
+});

@@ -13,7 +13,7 @@
     },
     {
       "kind": "completed",
-      "text": "Q-3: outstanding work → complete. The handed-back import now resumes, and a test covers it."
+      "text": "Q-3: outstanding work → complete. The handed-back import now resumes, with a twenty-minute limit the ruling did not set."
     },
     {
       "kind": "completed",
@@ -242,7 +242,13 @@
       "resolution": {
         "date": "2026-09-14",
         "note": "The batch and the position are now kept when the run hands back, and the dashboard has one button that reopens the import where it stopped with the unread field highlighted.",
-        "differs": "The held-open batch times out after twenty minutes rather than being held indefinitely, which the option did not specify. Past that the person starts again.",
+        "amendments": [
+          {
+            "ruled": "Save the position when handing back, and hold the batch open until the person resumes.",
+            "done": "The held-open batch times out after twenty minutes; past that the person starts again.",
+            "why": "The option did not say how long a batch may be held, and an indefinitely held batch keeps a database lock the nightly import needs."
+          }
+        ],
         "evidence": [
           {
             "kind": "commit",

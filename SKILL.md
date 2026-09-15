@@ -142,8 +142,15 @@ and the page is refreshed by moving entries along, not by rewriting it.
 `resolution`: the date, one or two plain sentences saying what happened, and
 evidence — the commit, the pull request, the test that now covers it, the ruling
 that cut the scope. Where what happened differs from the option that was chosen,
-say so in `differs` rather than quietly editing the option. The renderer refuses
-to close an entry that carries no proof.
+record it in `amendments` rather than quietly editing the option: one item per
+drift, saying what was ruled, what was done instead, and why the implementer
+chose to drift. That makes the entry **complete, with amendments**: its chip
+reads *Complete · amended*, the drift is shown inside the entry, and a done item
+about it is highlighted and listed first in the summary. A remark that is not a
+drift from the ruling (a measurement not yet reported, a follow-up) belongs in
+the resolution note, not in amendments. The old free-text `differs` still
+renders as a remark, with a warning. The renderer refuses to close an entry
+that carries no proof.
 
 `complete` is deliberately wider than "fixed". Not every entry ends in a repair:
 some end because the question was answered, some because the scope was cut, some
@@ -475,6 +482,7 @@ end with the chat summary.
 | Renumbering entries on a refresh | Ids are permanent; closed entries stay, marked closed |
 | Deleting an entry once it is done | Set `status: "complete"` with a `resolution`; it moves to Closed |
 | Marking something `complete` when only the ruling was made | That is `decided`; `complete` means it was carried out |
+| Editing the ruling to match what landed, or a remark filed as a drift | Record each real drift in `resolution.amendments` — ruled, done instead, why (say "not recorded" if nobody wrote the reason); remarks go in the note |
 | Using `"embed": "file"` without publishing the companion | Drop the setting — the drawing then travels inside the page |
 | Flattening an archify picture to a still image | Embed the live page; flattening throws away what it is for |
 | Setting a frame height by hand | Let the renderer read the drawing's proportions, or it gets cropped |
