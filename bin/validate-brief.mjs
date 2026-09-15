@@ -15,7 +15,8 @@
  *
  *   2. The rules the schema cannot express: the recommended option must be
  *      listed first, a citation must say what it shows, an option must carry a
- *      price, a closed entry must carry proof.
+ *      price, a closed entry must carry proof, a status must agree with what
+ *      the entry records, and every timestamp must agree with the others.
  *
  * Errors are written for whoever has to fix them — a readable path, what is
  * wrong, and what to do about it. An unknown field is matched against the
@@ -141,6 +142,10 @@ class Validator {
       if (schema.format === "date" && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
         this.add(path, `"${value}" is not a date`, "write it as YYYY-MM-DD, e.g. 2026-09-11");
       }
+      if (schema.format === "date-time" && !isTimestamp(value)) {
+        this.add(path, `"${value}" is not a timestamp`,
+          "write it as YYYY-MM-DDTHH:MM with a time zone, e.g. 2026-09-15T09:40Z or 2026-09-15T10:40+01:00");
+      }
     }
 
     if (typeof value === "number") {
@@ -168,7 +173,7 @@ class Validator {
       const known = Object.keys(schema.properties ?? {});
       for (const req of schema.required ?? []) {
         if (value[req] === undefined) {
-          const d = this.deref(schema.properties?.[req])?.description;
+          const d = schema.properties?.[req]?.description ?? this.deref(schema.properties?.[req])?.description;
           this.add(path, `is missing "${req}"`, d);
         }
       }
@@ -209,6 +214,9 @@ class Validator {
     return ok;
   }
 }
+
+const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+const isTimestamp = (v) => TIMESTAMP.test(v) && !Number.isNaN(Date.parse(v));
 
 const article = (t) => (/^[aeiou]/.test(t) ? `an ${t}` : `a ${t}`);
 const plural = (n, w) => (n === 1 ? w : w + "s");
@@ -276,6 +284,11 @@ function semanticErrors(brief) {
       }
     });
 
+    if (e?.resolution?.differs) {
+      out.push({ path: `${where} → resolution → differs`, severity: "warning",
+        message: "is retired — record the drift as amendments instead",
+        hint: 'write it as "amendments": [{ "ruled": …, "done": …, "why": … }], so the page can show what was ruled, what was done instead and why' });
+    }
     if (e?.status === "complete") {
       const r = e.resolution;
       if (r && !r.note && !(r.evidence?.length)) {
@@ -300,14 +313,208 @@ function semanticErrors(brief) {
     });
   });
 
-  const ids = new Set((brief.decisions ?? []).map((e) => e?.id));
+  const byId = new Map((brief.decisions ?? []).map((e) => [e?.id, e]));
   (brief.outstanding ?? []).forEach((o, i) => {
-    if (o?.blockedBy && !ids.has(o.blockedBy)) {
-      out.push({ path: `outstanding[${i}]`, message: `waits on "${o.blockedBy}", which is not an entry on this page`,
-        hint: `entries on this page: ${[...ids].join(", ") || "none"}` });
+    if (!o?.blockedBy) return;
+    const where = `outstanding[${i}]`;
+    const target = byId.get(o.blockedBy);
+    if (!target) {
+      out.push({ path: where, message: `waits on "${o.blockedBy}", which is not an entry on this page`,
+        hint: `entries on this page: ${[...byId.keys()].join(", ") || "none"}` });
+      return;
+    }
+    const ts = target.status ?? "open";
+    if (ts !== "open" && o.state === "blocked") {
+      out.push({ path: where, message: `is marked blocked on ${o.blockedBy}, but ${o.blockedBy} is ${ts}`,
+        hint: "the ruling it waited on has been made — set state to not-started, in-progress or done" });
+    }
+    if (ts === "superseded" && o.state !== "done") {
+      out.push({ path: where, severity: "warning",
+        message: `waits on ${o.blockedBy}, which is superseded`,
+        hint: "the problem this work served went away — check whether the work is still wanted" });
     }
   });
 
+  const KINDS = ["raised", "changed", "completed", "retracted", "note"];
+  (brief.changes ?? []).forEach((c, i) => {
+    const where = `changes[${i}]`;
+    if (typeof c === "string") {
+      out.push({ path: where, severity: "warning", message: "has no kind, so it is shown last among the notes",
+        hint: `write it as { "kind": …, "text": … } with kind one of ${KINDS.join(", ")}` });
+    } else if (c?.id && !(brief.decisions ?? []).some((e) => e?.id === c.id)) {
+      out.push({ path: `${where} → id`, message: `points at ${c.id}, which is not an entry on this page`,
+        hint: "fix the id, or drop it if the change is not about one entry" });
+    } else if (c && typeof c === "object" && !KINDS.includes(c.kind)) {
+      const guess = typeof c.kind === "string" ? nearest(c.kind, KINDS) : null;
+      out.push({ path: `${where} → kind`, message: `is ${JSON.stringify(c.kind)}, which is not a transition`,
+        hint: (guess ? `did you mean "${guess}"? ` : "") + `use one of: ${KINDS.join(", ")}` });
+    }
+  });
+
+  out.push(...stateErrors(brief), ...bearingErrors(brief), ...referenceErrors(brief), ...enumerationWarnings(brief), ...timestampErrors(brief));
+  return out;
+}
+
+/* ── bearing on the goal ────────────────────────────────────────────────────
+   "Awaiting your ruling" used to mean two different things: the work cannot go
+   on until you rule, and someone should rule on this some day. Presented side
+   by side they compete for the same attention, and the reader ends up deferring
+   unrelated questions one at a time. Every live entry now says which it is. */
+
+function bearingErrors(brief) {
+  const out = [];
+  let blockers = 0;
+  (brief.decisions ?? []).forEach((e, i) => {
+    if (!e) return;
+    const where = `decisions[${i}]${e.id ? ` (${e.id})` : ""}`;
+    const st = e.status ?? "open";
+    const live = st === "open" || st === "decided";
+    if (live && !e.bearing) {
+      out.push({ path: where, message: `is ${st === "open" ? "awaiting a ruling" : "ruled but not carried out"} and has no bearing`,
+        hint: 'set bearing to "blocks-goal" if the goal cannot be reached without it, or "escalated" if it is a real decision that can wait — plus a one-line bearingReason' });
+    }
+    if (e.bearing && !e.bearingReason) {
+      out.push({ path: `${where} → bearingReason`, message: `is missing — the entry is marked ${e.bearing} without saying why`,
+        hint: "one line on why this is, or is not, on the goal's path" });
+    }
+    if (live && e.bearing === "blocks-goal") blockers++;
+  });
+  if (blockers && !brief.goal) {
+    out.push({ path: "goal", message: `is missing, but ${blockers} entr${blockers === 1 ? "y blocks" : "ies block"} it`,
+      hint: "state the goal in the operator's own words — an entry can only block a goal the page names" });
+  }
+  return out;
+}
+
+/* ── citations ──────────────────────────────────────────────────────────────
+   Prose cites entries by id, and the page turns each citation into a link. A
+   citation to an id that is not on the page is a dead link and, usually, a typo. */
+
+const CITED = /\bQ-\d+\b/g;
+
+/* Three or more entries named in one sentence is a list written as prose: the
+   reader has to unpick it, and the page cannot group it. */
+function enumerationWarnings(brief) {
+  const out = [];
+  const walk = (v, path) => {
+    if (typeof v === "string") {
+      const hit = v.split(/(?<=[.!?])\s+/).find((sentence) => new Set(sentence.match(CITED) ?? []).size >= 3);
+      if (hit) out.push({ path, severity: "warning", message: "names three or more entries in one sentence — write them as a list",
+        hint: "one line per entry with what it is, e.g. a dash list, or typed changes in the summary" });
+    } else if (Array.isArray(v)) v.forEach((x, i) => walk(x, `${path}[${i}]`));
+    else if (v && typeof v === "object") {
+      for (const [k, x] of Object.entries(v)) if (!["id", "rolledUp", "evidence"].includes(k)) walk(x, path ? `${path} → ${k}` : k);
+    }
+  };
+  walk(brief, "");
+  return out;
+}
+
+function referenceErrors(brief) {
+  const ids = new Set((brief.decisions ?? []).map((e) => e?.id));
+  const seen = new Set();
+  const out = [];
+  const walk = (v, path) => {
+    if (typeof v === "string") {
+      for (const id of v.match(CITED) ?? []) {
+        if (ids.has(id) || seen.has(`${path}|${id}`)) continue;
+        seen.add(`${path}|${id}`);
+        out.push({ path, severity: "warning", message: `cites ${id}, which is not an entry on this page`,
+          hint: "fix the id, or add the entry it refers to" });
+      }
+    } else if (Array.isArray(v)) v.forEach((x, i) => walk(x, `${path}[${i}]`));
+    else if (v && typeof v === "object") {
+      for (const [k, x] of Object.entries(v)) if (k !== "id") walk(x, path ? `${path} → ${k}` : k);
+    }
+  };
+  walk(brief, "");
+  return out;
+}
+
+/* ── state that contradicts its own record ──────────────────────────────────
+   The most common way a refreshed brief goes wrong is an item whose status was
+   never moved along: a ruling recorded on an entry still marked open, a proof of
+   completion on an entry still marked decided. The record says one thing and
+   the chip says another, and the reader believes the chip. */
+
+function stateErrors(brief) {
+  const out = [];
+  (brief.decisions ?? []).forEach((e, i) => {
+    if (!e) return;
+    const where = `decisions[${i}]${e.id ? ` (${e.id})` : ""}`;
+    const st = e.status ?? "open";
+    if (st === "open" && e.decision) {
+      out.push({ path: where, message: "records a ruling but is still marked open",
+        hint: 'set status to "decided" — or "complete" with a resolution, if it has since been carried out' });
+    }
+    if ((st === "open" || st === "decided") && e.resolution) {
+      out.push({ path: where, message: `records a resolution but is still marked ${st}`,
+        hint: 'set status to "complete" — the resolution says it was carried out' });
+    }
+    if (e.decision?.chose && !(e.solutions ?? []).some((s) => s?.id === e.decision.chose)) {
+      out.push({ path: `${where} → decision`, message: `chose "${e.decision.chose}", which is not one of this entry's options`,
+        hint: `options here: ${(e.solutions ?? []).map((s) => s?.id).join(", ")}` });
+    }
+  });
+  return out;
+}
+
+/* ── timestamps ─────────────────────────────────────────────────────────────
+   Every item carries when it was written and when it last changed. The stamps
+   must agree with each other and with the dates the item records, or the page
+   is claiming a history that did not happen — usually because something was
+   edited and its stamp was not moved. */
+
+function timestampErrors(brief) {
+  const out = [];
+  const t = (v) => (typeof v === "string" && isTimestamp(v) ? Date.parse(v) : null);
+  const day = (v) => (typeof v === "string" && isTimestamp(v) ? v.slice(0, 10) : null);
+  const briefCreated = t(brief.created);
+  const briefUpdated = t(brief.updated);
+
+  if (briefCreated !== null && briefUpdated !== null && briefUpdated < briefCreated) {
+    out.push({ path: "updated", message: "is earlier than created", hint: "a brief cannot change before it was written" });
+  }
+  if (brief.generated) {
+    out.push({ path: "generated", severity: "warning",
+      message: "is retired — the page shows one stamp, updated, and re-checking the facts moves it",
+      hint: "delete generated; when you re-check every item's state and claim, move the brief's updated stamp to that moment" });
+  }
+
+  const item = (x, where) => {
+    if (!x) return;
+    const c = t(x.created), u = t(x.updated);
+    if (c !== null && u !== null && u < c) {
+      out.push({ path: where, message: "was updated before it was created", hint: "updated can never be earlier than created" });
+    }
+    if (c !== null && briefCreated !== null && c < briefCreated) {
+      out.push({ path: where, message: "was created before the brief itself",
+        hint: "move the brief's created back, or the item's forward" });
+    }
+    if (u !== null && briefUpdated !== null && u > briefUpdated) {
+      out.push({ path: where, message: `changed at ${x.updated}, after the brief's own updated stamp (${brief.updated})`,
+        hint: "move the brief's updated stamp whenever any item on it changes" });
+    }
+    return day(x.updated);
+  };
+
+  (brief.decisions ?? []).forEach((e, i) => {
+    const where = `decisions[${i}]${e?.id ? ` (${e.id})` : ""}`;
+    const changed = item(e, where);
+    if (!changed) return;
+    for (const [label, date] of [["ruling", e.decision?.date], ["resolution", e.resolution?.date]]) {
+      if (date && date > changed) {
+        out.push({ path: where, message: `records a ${label} dated ${date} but says it last changed ${changed}`,
+          hint: "recording a ruling or a resolution is a change — move updated to when you recorded it" });
+      }
+    }
+    if (e.decision?.date && e.resolution?.date && e.resolution.date < e.decision.date) {
+      out.push({ path: `${where} → resolution`, message: `is dated ${e.resolution.date}, before the ruling (${e.decision.date})`,
+        hint: "an option cannot be carried out before it was chosen" });
+    }
+  });
+  (brief.mechanical ?? []).forEach((m, i) => item(m, `mechanical[${i}]`));
+  (brief.outstanding ?? []).forEach((o, i) => item(o, `outstanding[${i}]`));
   return out;
 }
 

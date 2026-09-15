@@ -10,7 +10,7 @@ description: >-
   Dependencies.
 license: MIT
 metadata:
-  version: "1.0"
+  version: "1.1"
   requires:
     - archify
     - humanizer
@@ -75,6 +75,36 @@ is missing, say so rather than silently downgrading every picture to mermaid —
 the reader cannot tell the difference and will assume the simpler drawing was a
 choice.
 
+## Start every run with a state check
+
+**Before writing a word, bring the state of every item up to date.** Of all the
+mistakes a refreshed brief makes, this one does the most damage. The chip
+says *awaiting your ruling* on something ruled on three days ago, or *outstanding
+work* on something merged yesterday, and the reader trusts the chip.
+
+This comes first on every run: a new brief built from an old one, a refresh, or
+folding in comments. Walk the whole file, item by item, nothing skipped:
+
+| Item | Ask | Where to look |
+|---|---|---|
+| `open` entry | Has it been ruled on since — in chat, in a comment, in a commit message? | This conversation, `action: "comments"`, the branch log |
+| `decided` entry | Has the chosen option been carried out? | Commits, merged pull requests, the tests, the tree itself |
+| `complete` entry | Does the proof still stand — is the commit on the branch, does the test still exist? | The tree |
+| any entry | Has the problem gone away or been overtaken? Then it is `superseded` (shown as *retracted*). | The tree, later rulings |
+| `open` or `decided` entry | Does its `bearing` still hold against the goal? Re-judge every one whenever the goal changes. | The goal as the operator last stated it |
+| `outstanding` item | Is it done? Is the entry it waited on still awaiting a ruling? | The tree; the entry's own status |
+| `mechanical` item | Is the fix still in place? | The tree |
+
+For each item that moves, record why (`decision`, `resolution`, the new
+`state`) and move its `updated` stamp. Only then go on to the facts
+(**Freshness**), the comments, and any new entries.
+
+The validator catches a state that contradicts its own record: a ruling on an
+entry still marked open, a resolution on one still marked decided, work marked
+blocked on an entry that has been ruled, a ruling dated after the entry says it
+last changed. It **cannot** see a ruling that lives only in chat or a commit
+that was never recorded. That is what the walk above is for.
+
 ## The entry shape
 
 Every entry, in this order. The order is the deliverable — do not reshuffle it.
@@ -101,19 +131,26 @@ Every field carries a description saying what belongs in it.
 An entry is never deleted and never renumbered. It moves through four states,
 and the page is refreshed by moving entries along, not by rewriting it.
 
-| `status` | Means | Needs |
-|---|---|---|
-| `open` | Awaiting your ruling. | — |
-| `decided` | A way forward was chosen. It has **not** been carried out. | `decision` — which option, when, and why |
-| `complete` | The chosen option has been carried out. Closed. | `resolution` — when, what happened, and proof |
-| `superseded` | The problem went away or was overtaken. Nothing was carried out. | — |
+| `status` | Page shows | Means | Needs |
+|---|---|---|---|
+| `open` | *blocks the goal* or *escalated, not blocking* | Awaiting your ruling. | `bearing` and `bearingReason` |
+| `decided` | *outstanding work* | A way forward was chosen. It has **not** been carried out. | `decision` — which option, when, and why; `bearing` and `bearingReason` |
+| `complete` | *complete* | The chosen option has been carried out. Closed. | `resolution` — when, what happened, and proof |
+| `superseded` | *retracted* | The problem went away or was overtaken. Nothing was carried out. | — |
 
 **Closing an entry** means setting `status` to `complete` and filling in
 `resolution`: the date, one or two plain sentences saying what happened, and
 evidence — the commit, the pull request, the test that now covers it, the ruling
 that cut the scope. Where what happened differs from the option that was chosen,
-say so in `differs` rather than quietly editing the option. The renderer refuses
-to close an entry that carries no proof.
+record it in `amendments` rather than quietly editing the option: one item per
+drift, saying what was ruled, what was done instead, and why the implementer
+chose to drift. That makes the entry **complete, with amendments**: its chip
+reads *Complete · amended*, the drift is shown inside the entry, and a done item
+about it is highlighted and listed first in the summary. A remark that is not a
+drift from the ruling (a measurement not yet reported, a follow-up) belongs in
+the resolution note, not in amendments. The old free-text `differs` still
+renders as a remark, with a warning. The renderer refuses to close an entry
+that carries no proof.
 
 `complete` is deliberately wider than "fixed". Not every entry ends in a repair:
 some end because the question was answered, some because the scope was cut, some
@@ -126,8 +163,11 @@ question; it does not close the entry.
 
 **How the page uses the states.** Every entry carries a chip saying where it
 stands, and the counts along the top are the controls: click one and the page
-shows that category alone. It opens on **awaiting your ruling**, because that is
-the only part waiting on the reader. "Everything" shows the lot.
+shows that category alone. It opens on **blocks the goal**, because that is what
+stands between the reader and what they are driving at; with nothing blocking,
+it opens on the escalated questions. A ruled entry not yet carried out is shown
+under **outstanding work** with the outstanding list, because that is what it is:
+agreed work, waiting to be done. "Everything" shows the lot.
 
 Nothing is ever removed from the document — a filter only decides what is on
 screen. So a page with no scripting shows the whole brief, a link to `Q-3`
@@ -136,6 +176,27 @@ entry's category), and the reader's last choice is remembered between visits.
 
 That is what keeps a long-running brief readable: closed entries stay citable
 for good without burying the three things that still need a decision.
+
+**Timestamps.** The brief and every item on it (entries, handled fixes,
+outstanding work) carry two stamps: `created`, when it was first written, and
+`updated`, when it last changed in any way. Write them as a moment with its
+zone, `2026-09-15T09:40Z`, because a brief is often refreshed more than once a
+day.
+
+- `created` is set once and never touched again.
+- `updated` moves with **every** change to that item: wording, evidence,
+  status, ruling, resolution. It does not move when nothing changed. Re-stamping
+  every item on a refresh destroys the one thing the stamp is for, which is
+  showing the reader what moved.
+- The brief's own `updated` moves whenever anything on it does, so it is never
+  earlier than any item's.
+- Re-checking the facts and every item's state is a change to the brief: move
+  the brief's own `updated` to that moment. There is one stamp for it, not two.
+  `generated` is retired, and the validator warns when it is still present.
+
+The page shows both stamps on every item, and only the two stamps on the
+brief's own line, so the reader can see what is new since they last looked. The validator rejects stamps that contradict each other
+or the dates the item records.
 
 **Not every fix needs an entry.** Something unambiguous, with no judgement in
 it, goes in `mechanical` — handled without asking, listed so you know it was
@@ -149,11 +210,52 @@ rolled into each group.
 
 Separate the material by what it demands of the reader:
 
-- **Decisions** — needs a ruling. These are the brief.
+- **Blocks the goal** — needs a ruling, and the goal cannot be reached without
+  it. These are the brief. Mark them `"bearing": "blocks-goal"`.
+- **Escalated, not blocking** — a real decision that belongs to the operator,
+  but unrelated to the goal being driven now. Visible, never presented as a
+  blocker, never asked one at a time in the middle of the work. Mark them
+  `"bearing": "escalated"`.
 - **Mechanical** — an unambiguous fix with no judgement in it. **Fix these
   yourself first**, then list them as already done. Never ask about them.
 - **Outstanding work** — known, agreed, not yet done. A separate list at the
   end, not mixed into the decisions.
+
+**The goal comes first.** Before bracketing anything, write `goal` in the
+operator's own words: what the current work is driving towards. Every `open` and
+`decided` entry then carries a `bearing` and a one-line `bearingReason` saying
+why it is, or is not, on the goal's path. The validator refuses a live entry
+without a bearing, a bearing without a reason, and a blocker on a brief with no
+goal. When the operator defers something "because it doesn't block X", that is
+a bearing, not a ruling.
+
+## The summary at the top
+
+The box above entry one is read first, often on a phone. It is structure, never
+one paragraph:
+
+- `changes` — what moved since the last version, one item per change, each
+  with its `kind`: `raised` (new entry or work), `changed` (moved state without
+  closing, or a ruling changed), `completed` (carried out), `retracted` (went
+  away or was overtaken), or `note` (about the brief as a whole). The page
+  groups them — changes, then closings, then notes — and marks each kind with
+  its own icon. Write the kind; never order the list by hand.
+- **New additions are pinned above everything**, whatever their weight: every
+  `raised` change goes to a "New since the last version" block at the very top,
+  split into what blocks the goal, then what is escalated, then other new work.
+  The entry is taken from the change's `id`, or the first entry id in its text.
+  A question the reader has not seen yet is never left at the bottom of the box.
+- **Waiting on you** — built by the renderer from the entries: what blocks the
+  goal, then what is escalated. Do not write it by hand.
+- `context` — anything else the reader needs before entry one. Optional.
+- `background` — earlier history, folded away. `source` goes with it, never on
+  the stamp line.
+
+Give every entry a `short` label of two to five words. Wherever an id stands
+bare in text, the page shows it as `Q-29 (one-call page read)`, linked to the
+entry; an id the prose already explains, in brackets after the meaning, is
+linked without repeating the label. The validator warns on a cited id that is
+not on the page.
 
 ## Language
 
@@ -173,6 +275,10 @@ The brief is read by a person, so it is written for a person.
   *"the rule that two suppliers must independently show the fault (FR-018)"* is
   readable and still searchable; `FR-018` alone is neither.
 - Problem first, background second. Never the reverse.
+- **Two or more things enumerated are a list, not a sentence.** Every prose field
+  renders `- ` and `1. ` lines as real lists, including a lead-in line followed
+  straight by its list. The validator warns when one sentence names three or
+  more entries.
 - Mark unproven claims as unproven, explicitly, and say what evidence would
   settle them.
 
@@ -204,8 +310,9 @@ above all unknown fields, which come back matched against the field you probably
 meant (`"recommend"` → *did you mean "recommended"?*). Then it checks the rules a
 schema cannot state: exactly one recommended option and it must be listed first,
 every citation carries a note, every option carries a price, a closed entry
-carries proof, an id is never reused, and outstanding work never waits on an
-entry that does not exist.
+carries proof, an id is never reused, outstanding work never waits on an entry
+that does not exist, every status agrees with what its entry records, and every
+timestamp agrees with the others.
 
 Errors name the entry, the field, and what to do. Fix them all before rendering;
 the renderer runs the same check and refuses anyway.
@@ -213,7 +320,8 @@ the renderer runs the same check and refuses anyway.
 Add `--json` when another tool needs the result rather than a person.
 
 `examples/example.brief.json` is a complete worked brief: three entries, both
-diagram kinds, one closed as complete, plus the handled and outstanding lists.
+diagram kinds, one closed as complete, plus the handled and outstanding lists,
+all timestamped.
 Start from it rather than from an empty file.
 
 **Where the files go.** Put the brief JSON, the rendered page and the diagram
@@ -299,8 +407,9 @@ drop a label — do not fight it by lowering the quality profile.
 1. Render the page from the JSON, then publish it with the `Artifact` tool.
    Load `artifact-design` first, as that tool requires. Pass every archify
    diagram in `files`.
-2. **Hand the link back in chat.** The operator reads on mobile and cannot see
-   tool output. A brief that was published but not linked was not delivered.
+2. **Hand the link back in chat, with the update summary** (see **Report back
+   in chat**). The operator reads on mobile and cannot see tool output. A brief
+   that was published but not linked was not delivered.
 3. **Update in place.** When the brief already exists, republish to the same URL
    (`url:` parameter, or the same local file path within one session). Do not
    mint a second page for the same subject. If you do not have the URL, find it
@@ -308,9 +417,31 @@ drop a label — do not fight it by lowering the quality profile.
 4. **Read comments before republishing** (`action: "comments"`), fold them in,
    then resolve the threads you actually addressed.
 
+## Report back in chat
+
+Every run ends with a short summary in chat: after a publish, after a refresh,
+after an `AskUserQuestion` round. It is the only part the operator is certain
+to read, so it says what **moved**, not what the brief says.
+
+- **Up to 400 words**, as a bulleted list of changes.
+- **The state delta only.** An entry that changed state reads
+  `Q-2: open → decided (name the fifth failure)`; a new entry reads
+  `Q-6 raised: one plain line`; handled fixes and outstanding work the same
+  way. Say what changed in content only where it changes the ruling being asked
+  for.
+- **Do not repeat the brief.** No problem statements, no evidence, no options.
+  The link carries those.
+- Close with two lines, ids with their short labels: `Blocks the goal: Q-4
+  (…)` and `Escalated, not blocking: Q-6 (…)`. Say `Blocks the goal: nothing`
+  when that is so; it is the most useful line in the summary.
+- On a first publish there is no earlier state, so list the counts per state
+  and those two lines.
+- If nothing moved, say so in one line and do not republish.
+
 ## Freshness — the failure that recurs most
 
-Every republish is re-derived from the current state of the code, the branch and
+This comes after the state check, and covers the claims rather than the
+statuses. Every republish is re-derived from the current state of the code, the branch and
 the run. Never from a snapshot file, an earlier draft, or a subagent's report
 from an hour ago.
 
@@ -329,7 +460,12 @@ compensations and the stores that the original had.
 
 When asked for `AskUserQuestion` instead of a page, the content rules are
 unchanged — plain English, problem first, grouped by root cause, recommended
-option first and labelled `(Recommended)`. Only the page is dropped.
+option first and labelled `(Recommended)`. Only the page is dropped. The state
+check still comes first, so nothing already ruled on is asked again. Only
+`blocks-goal` entries are asked; `escalated` ones are listed in the message, not
+asked, so the operator can pull one forward if they choose. Record the
+answers back into the JSON, moving each entry's status and `updated` stamp, and
+end with the chat summary.
 
 ## Common mistakes
 
@@ -347,9 +483,20 @@ option first and labelled `(Recommended)`. Only the page is dropped.
 | Renumbering entries on a refresh | Ids are permanent; closed entries stay, marked closed |
 | Deleting an entry once it is done | Set `status: "complete"` with a `resolution`; it moves to Closed |
 | Marking something `complete` when only the ruling was made | That is `decided`; `complete` means it was carried out |
+| Editing the ruling to match what landed, or a remark filed as a drift | Record each real drift in `resolution.amendments` — ruled, done instead, why (say "not recorded" if nobody wrote the reason); remarks go in the note |
 | Using `"embed": "file"` without publishing the companion | Drop the setting — the drawing then travels inside the page |
 | Flattening an archify picture to a still image | Embed the live page; flattening throws away what it is for |
 | Setting a frame height by hand | Let the renderer read the drawing's proportions, or it gets cropped |
+| Refreshing the facts but not the states | Walk every item's state first; a chip that is out of date is worse than no chip |
+| Editing an item without moving its `updated` | Every change moves the stamp, and the brief's own stamp with it |
+| Re-stamping every item on a refresh | Move `updated` only on the items that actually changed |
+| Leaving finished outstanding work as `not-started` or `blocked` | Set `state: "done"`; it stays on the page |
+| A chat summary that retells the brief | Bullets of what moved, ≤400 words, then the two lines: blocks the goal, escalated |
+| Presenting an unrelated decision as a blocker | Bracket it `"bearing": "escalated"` with its reason; only what stands in the goal's way is `blocks-goal` |
+| A headline summary written as one paragraph | `changes` as typed items; leave *waiting on you* to the renderer; history in `background` |
+| A new question recorded only in "Waiting on you" | Add a `raised` change with its `id`, so it is pinned to the top |
+| A change with no `kind` | Give it one, so it lands in its group with its icon; `note` only for the brief as a whole |
+| Keeping `generated` beside `updated` | Delete it; a re-check moves `updated` |
 
 ## Red flags — stop and rewrite
 
@@ -359,6 +506,10 @@ option first and labelled `(Recommended)`. Only the page is dropped.
 - Prose carried over verbatim from the previous version of the page.
 - "The operator will know what I mean." They will not.
 - Reaching for the HTML instead of the JSON.
+- Starting to write before every item's state has been checked.
+- An entry the conversation ruled on still reading *awaiting your ruling*.
+- A brief with open entries and no `goal`.
+- "The operator deferred it" recorded as a ruling rather than as `escalated`.
 
 ## What is in this skill
 
@@ -366,5 +517,7 @@ option first and labelled `(Recommended)`. Only the page is dropped.
 |---|---|
 | `schema/problem-brief.schema.json` | The data contract. Field descriptions say what belongs where. |
 | `bin/render-brief.mjs` | JSON to page. Fixed layout, no dependencies, refuses malformed briefs. |
+| `bin/validate-brief.mjs` | Schema check plus the rules a schema cannot state: recommendations, proof, states, timestamps. |
 | `examples/example.brief.json` | A complete worked brief — start from this. |
 | `examples/diagrams/*.lifecycle.json` | The archify picture source for the worked example. |
+| `test/brief.test.mjs` | The validator and renderer behaviour, pinned. Run `node --test test/*.test.mjs`. |
