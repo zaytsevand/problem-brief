@@ -24,6 +24,11 @@
       "minLength": 10,
       "description": "One plain sentence naming what this brief is about and who must act on it."
     },
+    "goal": {
+      "type": "string",
+      "minLength": 10,
+      "description": "What the current work is driving towards, in the operator's own words. Every open or ruled entry is judged against it: does it block the goal, or is it a real decision that can wait? Required once any entry blocks the goal."
+    },
     "created": {
       "$ref": "#/$defs/timestamp",
       "description": "When this brief was first written. Set once and never changed."
@@ -35,15 +40,27 @@
     "generated": {
       "type": "string",
       "format": "date",
-      "description": "Date the facts and the state of every item on this page were last re-checked against the tree. Not the date the page was first written."
+      "description": "Retired. Re-checking the facts and every item's state is a change to the brief: move the brief's `updated` stamp instead. Still accepted so older briefs load, with a warning."
     },
     "source": {
       "type": "string",
-      "description": "What produced these findings, in plain English. e.g. 'the implementation review on the importer branch, 2026-09-11'."
+      "description": "What produced these findings, in plain English, e.g. 'the implementation review on the importer branch, 11 September'. Shown folded away with the background, never on the stamp line."
     },
     "context": {
       "type": "string",
-      "description": "One paragraph the reader needs before entry one. Optional. Never a summary of the entries."
+      "description": "Free text the reader needs before entry one, when changes and background do not fit it. Optional. Write two or more things as a dash list, never as one run-on paragraph."
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 3
+      },
+      "description": "What moved since the last version, one bullet per change: a state change ('Q-2: open → decided, name the fifth failure'), a new entry ('Q-6 raised: one plain line'), work that finished. Shown first, as a list. Entry ids become links carrying the entry's short label."
+    },
+    "background": {
+      "type": "string",
+      "description": "Earlier history the reader may want but does not need to act: what happened on previous days, how the brief came about. Folded away under 'Background' so it never competes with what changed."
     },
     "decisions": {
       "type": "array",
@@ -112,6 +129,12 @@
           "maxLength": 90,
           "description": "The problem as a headline, in plain English. No identifiers standing alone."
         },
+        "short": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 40,
+          "description": "A label of two to five words for this entry, e.g. 'one-call page read'. Wherever the entry's id is cited on the page, it is shown as 'Q-29 (one-call page read)' so the reader never has to remember what a bare id means."
+        },
         "problem": {
           "type": "string",
           "minLength": 20,
@@ -168,6 +191,19 @@
           ],
           "default": "open",
           "description": "open — needs your ruling. decided — you chose a way forward, it has not been carried out yet. complete — the chosen way forward has been carried out and the entry is closed; that covers work landing, a question being answered, or scope being cut, whichever the chosen option was. superseded — the problem went away or was overtaken, and nothing was carried out."
+        },
+        "bearing": {
+          "type": "string",
+          "enum": [
+            "blocks-goal",
+            "escalated"
+          ],
+          "description": "How this entry bears on the brief's goal. blocks-goal: the goal cannot be reached until it is ruled on or carried out. escalated: a real decision for the operator that does not stand in the goal's way, so it stays visible but never reads as a blocker. Required while the entry is open or decided; re-judge it whenever the goal changes."
+        },
+        "bearingReason": {
+          "type": "string",
+          "minLength": 5,
+          "description": "One line saying why the entry is, or is not, on the goal's path. Required with bearing."
         },
         "decision": {
           "type": "object",

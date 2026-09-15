@@ -330,7 +330,65 @@ function semanticErrors(brief) {
     }
   });
 
-  out.push(...stateErrors(brief), ...timestampErrors(brief));
+  out.push(...stateErrors(brief), ...bearingErrors(brief), ...referenceErrors(brief), ...timestampErrors(brief));
+  return out;
+}
+
+/* ── bearing on the goal ────────────────────────────────────────────────────
+   "Awaiting your ruling" used to mean two different things: the work cannot go
+   on until you rule, and someone should rule on this some day. Presented side
+   by side they compete for the same attention, and the reader ends up deferring
+   unrelated questions one at a time. Every live entry now says which it is. */
+
+function bearingErrors(brief) {
+  const out = [];
+  let blockers = 0;
+  (brief.decisions ?? []).forEach((e, i) => {
+    if (!e) return;
+    const where = `decisions[${i}]${e.id ? ` (${e.id})` : ""}`;
+    const st = e.status ?? "open";
+    const live = st === "open" || st === "decided";
+    if (live && !e.bearing) {
+      out.push({ path: where, message: `is ${st === "open" ? "awaiting a ruling" : "ruled but not carried out"} and has no bearing`,
+        hint: 'set bearing to "blocks-goal" if the goal cannot be reached without it, or "escalated" if it is a real decision that can wait — plus a one-line bearingReason' });
+    }
+    if (e.bearing && !e.bearingReason) {
+      out.push({ path: `${where} → bearingReason`, message: `is missing — the entry is marked ${e.bearing} without saying why`,
+        hint: "one line on why this is, or is not, on the goal's path" });
+    }
+    if (live && e.bearing === "blocks-goal") blockers++;
+  });
+  if (blockers && !brief.goal) {
+    out.push({ path: "goal", message: `is missing, but ${blockers} entr${blockers === 1 ? "y blocks" : "ies block"} it`,
+      hint: "state the goal in the operator's own words — an entry can only block a goal the page names" });
+  }
+  return out;
+}
+
+/* ── citations ──────────────────────────────────────────────────────────────
+   Prose cites entries by id, and the page turns each citation into a link. A
+   citation to an id that is not on the page is a dead link and, usually, a typo. */
+
+const CITED = /\bQ-\d+\b/g;
+
+function referenceErrors(brief) {
+  const ids = new Set((brief.decisions ?? []).map((e) => e?.id));
+  const seen = new Set();
+  const out = [];
+  const walk = (v, path) => {
+    if (typeof v === "string") {
+      for (const id of v.match(CITED) ?? []) {
+        if (ids.has(id) || seen.has(`${path}|${id}`)) continue;
+        seen.add(`${path}|${id}`);
+        out.push({ path, severity: "warning", message: `cites ${id}, which is not an entry on this page`,
+          hint: "fix the id, or add the entry it refers to" });
+      }
+    } else if (Array.isArray(v)) v.forEach((x, i) => walk(x, `${path}[${i}]`));
+    else if (v && typeof v === "object") {
+      for (const [k, x] of Object.entries(v)) if (k !== "id") walk(x, path ? `${path} → ${k}` : k);
+    }
+  };
+  walk(brief, "");
   return out;
 }
 
@@ -378,10 +436,10 @@ function timestampErrors(brief) {
   if (briefCreated !== null && briefUpdated !== null && briefUpdated < briefCreated) {
     out.push({ path: "updated", message: "is earlier than created", hint: "a brief cannot change before it was written" });
   }
-  if (brief.generated && day(brief.updated) && brief.generated < day(brief.updated)) {
+  if (brief.generated) {
     out.push({ path: "generated", severity: "warning",
-      message: `says the facts were last re-checked ${brief.generated}, but the brief changed ${day(brief.updated)}`,
-      hint: "re-check every item's state and every claim before publishing a change, then move generated to today" });
+      message: "is retired — the page shows one stamp, updated, and re-checking the facts moves it",
+      hint: "delete generated; when you re-check every item's state and claim, move the brief's updated stamp to that moment" });
   }
 
   const item = (x, where) => {

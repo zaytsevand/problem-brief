@@ -34,22 +34,58 @@ const esc = (s) => String(s ?? "")
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
   .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
-function inline(s) {
-  return esc(s)
+/* Entries on this page, so a citation in any text can become a link. Set once
+   per page, before anything is rendered. */
+let ENTRIES = new Map();
+
+/* Every entry id in running text becomes a link to that entry. A bare id also
+   carries the entry's short label, because an id alone means nothing to a reader
+   who does not hold every entry in their head. An id the author already put in
+   brackets after the meaning — "its log entry (Q-33)" — is left unlabelled, so
+   the meaning is not said twice. */
+function citations(html) {
+  let inTag = 0;
+  return html.split(/(<[^>]+>)/).map((part) => {
+    if (part.startsWith("<")) {
+      if (/^<(a|code)[\s>]/.test(part)) inTag++;
+      else if (/^<\/(a|code)>/.test(part)) inTag--;
+      return part;
+    }
+    if (inTag) return part;
+    return part.replace(/(\()?\b(Q-\d+)\b(?!\s*\()/g, (m, open, id) => {
+      const e = ENTRIES.get(id);
+      if (!e) return m;
+      const label = e.short && !open ? ` (${esc(e.short)})` : "";
+      return `${open ?? ""}<a class="qref" href="#${id}" title="${esc(e.title)}">${id}${label}</a>`;
+    });
+  }).join("");
+}
+
+function inline(s, { refs = true } = {}) {
+  const html = esc(s)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return refs ? citations(html) : html;
 }
 
+/* Paragraphs, and dash or numbered lists — including a lead-in line followed
+   directly by its list, which is how people actually write one. */
 function prose(s) {
   if (!s) return "";
-  const blocks = String(s).trim().split(/\n\s*\n/);
-  return blocks.map((b) => {
+  const LIST = /^(-|\d+\.)\s+/;
+  return String(s).trim().split(/\n\s*\n/).map((b) => {
     const lines = b.split("\n").map((l) => l.trim()).filter(Boolean);
-    if (lines.every((l) => l.startsWith("- "))) {
-      return `<ul>${lines.map((l) => `<li>${inline(l.slice(2))}</li>`).join("")}</ul>`;
+    const runs = [];
+    for (const l of lines) {
+      const kind = LIST.test(l) ? (l.startsWith("-") ? "ul" : "ol") : "p";
+      const last = runs.at(-1);
+      if (last && last.kind === kind) last.lines.push(l);
+      else runs.push({ kind, lines: [l] });
     }
-    return `<p>${inline(lines.join(" "))}</p>`;
+    return runs.map((r) => r.kind === "p"
+      ? `<p>${inline(r.lines.join(" "))}</p>`
+      : `<${r.kind}>${r.lines.map((l) => `<li>${inline(l.replace(LIST, ""))}</li>`).join("")}</${r.kind}>`).join("");
   }).join("");
 }
 
@@ -180,8 +216,9 @@ const FILTER_SCRIPT = `
   var tocNav  = document.querySelector('nav.toc');
   var empty   = document.querySelector('.toc .empty');
   var HEADS = {
-    open: 'What needs deciding', decided: 'Ruled, waiting to be carried out',
-    complete: 'Completed', superseded: 'No longer live',
+    blocks: 'What blocks the goal', escalated: 'Escalated, not blocking the goal',
+    open: 'What needs deciding',
+    complete: 'Completed', superseded: 'Retracted',
     mechanical: 'Fixed without asking', outstanding: 'Outstanding work', all: 'Everything on this page'
   };
 
@@ -189,9 +226,10 @@ const FILTER_SCRIPT = `
 
   function apply(name, remember){
     if (!has(name)) name = 'all';
-    var isState = ['open','decided','complete','superseded'].indexOf(name) > -1;
-    entries.forEach(function(el){ el.hidden = !(name === 'all' || el.dataset.state === name); });
-    tocRows.forEach(function(el){ el.hidden = !(name === 'all' || el.dataset.state === name); });
+    var isState = ['blocks','escalated','open','outstanding','complete','superseded'].indexOf(name) > -1;
+    function shown(el){ return name === 'all' || el.dataset.state === name || (name === 'outstanding' && el.dataset.state === 'decided'); }
+    entries.forEach(function(el){ el.hidden = !shown(el); });
+    tocRows.forEach(function(el){ el.hidden = !shown(el); });
     blocks.forEach(function(el){ el.hidden = !(name === 'all' || el.dataset.block === name); });
     // The contents list only earns its place when it lists entries.
     if (tocNav) tocNav.hidden = !(name === 'all' || isState);
@@ -216,7 +254,7 @@ const FILTER_SCRIPT = `
     if (!id) return false;
     var el = document.getElementById(id);
     if (!el || !el.dataset.state) return false;
-    apply(el.dataset.state, false);
+    apply(el.dataset.state === 'decided' ? 'outstanding' : el.dataset.state, false);
     el.scrollIntoView();
     return true;
   }
@@ -224,17 +262,28 @@ const FILTER_SCRIPT = `
 
   var saved = null;
   try { saved = localStorage.getItem(KEY); } catch (_) {}
-  if (!reveal()) apply(saved || 'open', false);
+  if (!reveal()) apply(saved || DEFAULT_FILTER, false);
 })();
 `;
 
 const STATE_LABEL = {
+  blocks: "Blocks the goal",
+  escalated: "Escalated, not blocking",
   open: "Awaiting your ruling",
-  decided: "Ruled, not yet carried out",
+  decided: "Outstanding work",
   complete: "Complete",
-  superseded: "No longer live",
+  superseded: "Retracted",
 };
-const STATE_ORDER = ["open", "decided", "complete", "superseded"];
+/* An entry awaiting a ruling is split by its bearing on the goal: what stops the
+   goal comes first and is what the page opens on; a real decision that can wait
+   stays visible without competing for the same attention. */
+const STATE_ORDER = ["blocks", "open", "escalated", "decided", "complete", "superseded"];
+const group = (e) => {
+  const st = e.status ?? "open";
+  if (st !== "open") return st;
+  return { "blocks-goal": "blocks", escalated: "escalated" }[e.bearing] ?? "open";
+};
+const BEARING = { "blocks-goal": "tag-block", escalated: "tag-alt" };
 
 /* ── entry ──────────────────────────────────────────────────────────────── */
 
@@ -308,19 +357,26 @@ function entry(e, baseDir) {
       (r.differs ? `<div class="differs"><strong>Landed differently:</strong> ${inline(r.differs)}</div>` : "") +
       (r.evidence?.length ? evidence(r.evidence) : "") + `</div>`
     : e.status === "superseded"
-      ? `<div class="ruled ruled-old">No longer live — the problem went away or was overtaken. Kept for the record.</div>`
+      ? `<div class="ruled ruled-old">Retracted — the problem went away or was overtaken, so nothing was carried out. Kept for the record.</div>`
       : "";
 
   const status = closed + ruled;
 
   const state = e.status ?? "open";
-  return `<section class="entry${state !== "open" ? " entry-closed" : ""}" id="${esc(e.id)}" data-state="${state}">
+  const g = group(e);
+  const live = state === "open" || state === "decided";
+  const bearing = live && e.bearing
+    ? `<p class="bearing"><span class="tag ${BEARING[e.bearing]}">${esc(STATE_LABEL[e.bearing === "blocks-goal" ? "blocks" : "escalated"])}</span>` +
+      `${inline(e.bearingReason)}</p>`
+    : "";
+  return `<section class="entry${state !== "open" ? " entry-closed" : ""}" id="${esc(e.id)}" data-state="${g}">
   <header class="entry-head">
     <a class="qid" href="#${esc(e.id)}">${esc(e.id)}</a>
-    <h2>${inline(e.title)}</h2>
-    <span class="chip chip-${state} chip-static">${esc(STATE_LABEL[state])}</span>
+    <h2>${inline(e.title, { refs: false })}</h2>
+    <span class="chip chip-${g} chip-static">${esc(STATE_LABEL[g])}</span>
   </header>
   <p class="stamps">${stamps(e, "raised")}</p>
+  ${bearing}
   ${status}
   <section class="part part-problem"><h3>The problem</h3>${prose(e.problem)}</section>
   <section class="part"><h3>Why it matters</h3>${prose(e.brief)}</section>
@@ -398,11 +454,34 @@ h2,h3,h4{text-wrap:balance;}
 .chip-static.chip-decided{color:var(--accent);border-color:var(--accent);background:var(--accent-soft);}
 .chip-static.chip-complete{color:var(--rec);border-color:var(--rec);background:var(--rec-soft);}
 .chip-static.chip-superseded{color:var(--ink-3);border-color:var(--line-2);background:transparent;}
-.provenance{font-size:.82rem;color:var(--ink-3);margin:0;
+.provenance{font-size:.82rem;color:var(--ink-3);margin:0 0 .8em;
   font-family:ui-sans-serif,system-ui,sans-serif;}
 .toc .empty{color:var(--ink-3);font-size:.9rem;margin:.4em 0 0;}
 .context{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
-  padding:16px 18px;margin:20px 0 0;font-size:.96rem;color:var(--ink-2);}
+  padding:4px 18px 14px;margin:20px 0 0;font-size:.96rem;color:var(--ink-2);}
+.context > section{padding:12px 0 2px;border-bottom:1px solid var(--line);}
+.context > section:last-of-type{border-bottom:0;}
+.context h2{font-size:.74rem;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3);margin:0 0 .5em;}
+.context h3{font-size:.82rem;margin:.2em 0 .3em;color:var(--ink);}
+.context ul{margin:.2em 0 .7em;padding-left:1.2em;}
+.context li{margin:.2em 0;}
+.context p{margin:.3em 0 .7em;}
+.waiting-row ul{list-style:none;padding-left:0;}
+.waiting-row .n{font-variant-numeric:tabular-nums;font-weight:650;margin-right:.3em;}
+.background{padding:10px 0 0;}
+.background summary{cursor:pointer;font-family:ui-sans-serif,system-ui,sans-serif;font-size:.74rem;
+  text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3);}
+.background .source{color:var(--ink-3);font-size:.9em;}
+.goal{margin:0 0 .5em;font-size:.98rem;color:var(--ink);}
+.goal-k{font-family:ui-sans-serif,system-ui,sans-serif;font-size:.68rem;text-transform:uppercase;letter-spacing:.09em;
+  font-weight:650;color:var(--accent);margin-right:.6em;}
+a.qref{text-decoration:none;border-bottom:1px dotted currentColor;}
+.bearing{font-size:.9rem;color:var(--ink-2);margin:.2em 0 1em;}
+.bearing .tag{margin-right:.6em;}
+.tag-block{color:var(--warn);border:1px solid var(--warn);background:var(--warn-soft);}
+.chip-static.chip-blocks{color:var(--warn);border-color:var(--warn);background:var(--warn-soft);}
+.chip-static.chip-escalated{color:var(--ink-2);border-color:var(--line-2);background:var(--card);}
+.tail .d p,.tail .d ul{margin:.3em 0;}
 
 /* contents */
 nav.toc{margin:0 0 34px;font-size:.9rem;}
@@ -585,13 +664,14 @@ const THEME_SCRIPT = `
 `;
 
 function page(brief, baseDir) {
+  ENTRIES = new Map(brief.decisions.map((e) => [e.id, e]));
   const st = (e) => e.status ?? "open";
   /* One flow, ordered by state: what needs you first, then what is merely
      recorded. Nothing is hidden from the document — the filter decides what is
      on screen, and every entry keeps its number and its anchor for good. */
   const entries = [...brief.decisions].sort(
-    (a, b) => STATE_ORDER.indexOf(st(a)) - STATE_ORDER.indexOf(st(b)));
-  const count = (k) => brief.decisions.filter((e) => st(e) === k).length;
+    (a, b) => STATE_ORDER.indexOf(group(a)) - STATE_ORDER.indexOf(group(b)));
+  const count = (k) => brief.decisions.filter((e) => group(e) === k).length;
   const mech = brief.mechanical ?? [];
   const out = brief.outstanding ?? [];
 
@@ -599,10 +679,13 @@ function page(brief, baseDir) {
      and the page shows that category alone. The page opens on what needs a
      ruling, because that is the only part that is waiting on the reader. */
   const buttons = [
-    ...STATE_ORDER.filter((k) => count(k)).map((k) =>
-      ({ key: k, n: count(k), label: STATE_LABEL[k].toLowerCase() })),
+    /* A ruling not yet carried out is work waiting to be done, so it is counted
+       and shown with the outstanding work rather than as a category of its own. */
+    ...STATE_ORDER.filter((k) => k !== "decided" && count(k)).map((k) =>
+      ({ key: k, n: count(k), label: k === "blocks" ? "block the goal" : STATE_LABEL[k].toLowerCase() })),
     mech.length ? { key: "mechanical", n: mech.length, label: "handled without asking" } : null,
-    out.length ? { key: "outstanding", n: out.length, label: "outstanding work" } : null,
+    count("decided") + out.length
+      ? { key: "outstanding", n: count("decided") + out.filter((o) => o.state !== "done").length, label: "outstanding work" } : null,
   ].filter(Boolean);
 
   const filters = `<nav class="filters" role="group" aria-label="Show one part of the page">` +
@@ -612,25 +695,48 @@ function page(brief, baseDir) {
     `<button type="button" class="chip chip-all" data-filter="all" aria-pressed="false">everything</button>` +
     `</nav>`;
 
-  const provenance = [
-    `written ${stamp(brief.created)}`,
-    brief.updated !== brief.created ? `last changed ${stamp(brief.updated)}` : null,
-    brief.generated ? `facts re-checked ${esc(brief.generated)}` : null,
-    brief.source ? esc(brief.source) : null,
-  ].filter(Boolean).join(" · ");
+  /* Just the two moments. Re-checking the facts is a change, so it moves
+     updated; what produced the findings lives with the background. */
+  const provenance = `written ${stamp(brief.created)} · updated ${stamp(brief.updated)}`;
+
+  const defaultFilter = ["blocks", "open", "escalated"].find((k) => count(k)) ??
+    (count("decided") || out.some((o) => o.state !== "done") ? "outstanding" : "all");
+
+  const ref = (e) => `<a class="qref" href="#${esc(e.id)}"><span class="n">${esc(e.id)}</span> ${inline(e.short ?? e.title, { refs: false })}</a>`;
+  const waitingList = (label, list) => list.length
+    ? `<div class="waiting-row"><h3>${label}</h3><ul>${list.map((e) => `<li>${ref(e)}</li>`).join("")}</ul></div>` : "";
+  const blockers = brief.decisions.filter((e) => group(e) === "blocks");
+  const escalated = brief.decisions.filter((e) => group(e) === "escalated");
+  const unbracketed = brief.decisions.filter((e) => group(e) === "open");
+  const waiting = blockers.length + escalated.length + unbracketed.length
+    ? (brief.goal && !blockers.length ? `<p>Nothing blocks the goal.</p>` : "") +
+      waitingList("Blocks the goal", blockers) + waitingList("Awaiting your ruling", unbracketed) +
+      waitingList("Escalated, not blocking", escalated)
+    : `<p>Nothing is waiting on a ruling.</p>`;
+
+  const changes = brief.changes?.length
+    ? `<section><h2>Since the last version</h2><ul>${brief.changes.map((c) => `<li>${inline(c)}</li>`).join("")}</ul></section>` : "";
+  const background = brief.background || brief.source
+    ? `<details class="background"><summary>Background</summary>${prose(brief.background)}` +
+      (brief.source ? `<p class="source">These findings come from ${inline(brief.source)}.</p>` : "") + `</details>` : "";
+  const summary = `<div class="context">${changes}` +
+    `<section><h2>Waiting on you</h2>${waiting}</section>` +
+    (brief.context ? `<section>${prose(brief.context)}</section>` : "") +
+    background + `</div>`;
 
   /* Say where the work stands, and only say it waits on an entry while that
      entry is still awaiting a ruling. */
   const outstandingState = (o) => {
     const target = o.blockedBy && brief.decisions.find((e) => e.id === o.blockedBy);
     const label = { "not-started": "Not started", "in-progress": "In progress", blocked: "Blocked", done: "Done" }[o.state ?? "not-started"];
-    if (target && st(target) === "open" && o.state !== "done") return `Waits on ${esc(o.blockedBy)}`;
-    return label + (o.blockedBy ? ` · follows from ${esc(o.blockedBy)}` : "");
+    const cite = target ? citations(esc(o.blockedBy)) : esc(o.blockedBy);
+    if (target && st(target) === "open" && o.state !== "done") return `Waits on ${cite}`;
+    return label + (o.blockedBy ? ` · follows from ${cite}` : "");
   };
 
-  const tocRow = (e) => `<li data-state="${st(e)}"><a href="#${esc(e.id)}">` +
-    `<span class="n">${esc(e.id)}</span><span>${inline(e.title)}</span>` +
-    `<span class="done">${esc(STATE_LABEL[st(e)].toLowerCase())}</span></a></li>`;
+  const tocRow = (e) => `<li data-state="${group(e)}"><a href="#${esc(e.id)}">` +
+    `<span class="n">${esc(e.id)}</span><span>${inline(e.title, { refs: false })}</span>` +
+    `<span class="done">${esc(STATE_LABEL[group(e)].toLowerCase())}</span></a></li>`;
 
   const toc = `<nav class="toc"><h2 data-toc-head>What needs deciding</h2>` +
     `<ol>${entries.map(tocRow).join("")}</ol>` +
@@ -640,7 +746,7 @@ function page(brief, baseDir) {
     <h2>Already fixed</h2>
     <p class="lede">Unambiguous, no judgement needed, so it was done rather than asked about.</p>
     <ul>${mech.map((m) => `<li><span class="done-mark">✓</span>${inline(m.summary)}` +
-      (m.detail ? `<div class="d">${inline(m.detail)}</div>` : "") +
+      (m.detail ? `<div class="d">${prose(m.detail)}</div>` : "") +
       (m.evidence?.length ? `<div class="b">${m.evidence.map((e) => `<code>${esc(e.ref)}</code>`).join(" · ")}</div>` : "") +
       `<p class="stamps">${stamps(m)}</p></li>`).join("")}</ul></section>` : "";
 
@@ -648,7 +754,7 @@ function page(brief, baseDir) {
     <h2>Outstanding work</h2>
     <p class="lede">Agreed and understood, not yet done. Nothing here needs a ruling.</p>
     <ul>${out.map((o) => `<li>${o.state === "done" ? `<span class="done-mark">✓</span>` : ""}${inline(o.summary)}` +
-      (o.detail ? `<div class="d">${inline(o.detail)}</div>` : "") +
+      (o.detail ? `<div class="d">${prose(o.detail)}</div>` : "") +
       `<div class="b">${outstandingState(o)}</div>` +
       `<p class="stamps">${stamps(o)}</p></li>`).join("")}</ul></section>` : "";
 
@@ -658,9 +764,10 @@ function page(brief, baseDir) {
   <header class="top">
     <h1>${inline(brief.title)}</h1>
     <p class="subject">${inline(brief.subject)}</p>
+    ${brief.goal ? `<p class="goal"><span class="goal-k">Goal</span>${inline(brief.goal)}</p>` : ""}
+    <p class="provenance">${provenance}</p>
     ${filters}
-    ${provenance ? `<p class="provenance">${provenance}</p>` : ""}
-    ${brief.context ? `<div class="context">${prose(brief.context)}</div>` : ""}
+    ${summary}
   </header>
   ${toc}
   ${entries.map((e) => entry(e, baseDir)).join("\n")}
@@ -668,7 +775,7 @@ function page(brief, baseDir) {
   ${outSec}
 </div>
 <script>${THEME_SCRIPT}</script>
-<script>${FILTER_SCRIPT}</script>
+<script>var DEFAULT_FILTER = '${defaultFilter}';${FILTER_SCRIPT}</script>
 `;
 }
 

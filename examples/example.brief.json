@@ -1,17 +1,24 @@
 {
   "title": "Invoice importer — open decisions",
   "subject": "Three things about the supplier-invoice importer need your ruling before the release can be signed off.",
+  "goal": "Sign off the importer release on a measurement of the system we actually ship.",
   "created": "2026-09-11T08:30Z",
-  "updated": "2026-09-14T16:20Z",
-  "generated": "2026-09-14",
+  "updated": "2026-09-15T09:00Z",
   "source": "the implementation review on the importer branch, re-checked against the branch tip this morning",
-  "context": "The review produced eleven separate complaints. Nine of them come from three underlying causes, so they are grouped below as three decisions rather than eleven. The other two were unambiguous mistakes and are already fixed — they are listed at the end so you know they were handled.",
+  "context": "Nine of the eleven complaints come from three underlying causes, so they are grouped below as three decisions:\n- two were unambiguous mistakes and are already fixed\n- they are listed at the end so you know they were handled",
+  "changes": [
+    "Q-1 and Q-2 now say how they bear on the release: Q-1 blocks sign-off, Q-2 is a real decision that can wait.",
+    "Q-3: ruled → complete. The handed-back import now resumes, and a test covers it.",
+    "Outstanding work: the timeout for a paused batch is done."
+  ],
+  "background": "The review produced eleven separate complaints on 11 September. The brief was re-checked against the branch tip on the morning of 14 September, and again today.",
   "decisions": [
     {
       "id": "Q-1",
       "created": "2026-09-11T08:30Z",
-      "updated": "2026-09-11T08:30Z",
+      "updated": "2026-09-15T09:00Z",
       "title": "The proof that the reader works was built on files we no longer use",
+      "short": "benchmark on stale files",
       "problem": "The measurement that says the invoice reader is 94% accurate was taken against ten saved PDF files. Those saved files were replaced with live downloads from the suppliers last week, and the measurement was never re-taken.",
       "brief": "That number is the only evidence we have that the reader is good enough to ship. Every later decision on this branch cites it. If the live documents differ from the saved copies — and they already differ in two known ways, because two suppliers changed their invoice template — then the number is not about the system we are about to release. It is about a system that no longer exists. We would be signing off on a measurement of the wrong thing.",
       "evidence": [
@@ -86,13 +93,16 @@
         "The measurement no longer describes the shipping system (the review's first red flag)",
         "The two acceptance criteria in the design note are written in terms of the retired measurement method",
         "No test covers the live download path at all"
-      ]
+      ],
+      "bearing": "blocks-goal",
+      "bearingReason": "Sign-off rests on the 94% figure, and that figure does not describe the documents we ship against."
     },
     {
       "id": "Q-2",
       "created": "2026-09-11T08:30Z",
-      "updated": "2026-09-12T10:05Z",
+      "updated": "2026-09-15T09:00Z",
       "title": "One failure of the parsing service is handled silently, and has cost us four measurements",
+      "short": "silent connection failures",
       "problem": "When the call to the parsing service fails because the connection drops, the code catches it in a general-purpose handler that records nothing. The run continues and the result looks like a normal, confident answer.",
       "brief": "The four other ways this call can fail each set a flag we can look for afterwards. This fifth one does not. That means a benchmark run can contain silent holes and still report a clean number. The file's own comment says this class of mistake has already cost us measurements four times — and then the file repeats it.",
       "evidence": [
@@ -148,13 +158,16 @@
         "The unflagged fifth failure (the review's second red flag)",
         "An unguarded read of the first item in the service's reply, which throws when the reply is empty",
         "The two drifted copies of the call handling"
-      ]
+      ],
+      "bearing": "escalated",
+      "bearingReason": "It spoils benchmark runs rather than live imports, so the release can be signed off before it is settled."
     },
     {
       "id": "Q-3",
       "created": "2026-09-11T08:30Z",
       "updated": "2026-09-14T16:20Z",
       "title": "An import can stop halfway and hand back to the person, and nothing says what happens next",
+      "short": "resuming a handed-back import",
       "problem": "When the importer cannot read a field, it stops and hands the run back to whoever started it. The design says this is not the end of the run, but no part of the system defines how a handed-back run resumes.",
       "brief": "In practice the run just stops. The person sees a half-imported batch and no instruction. There is no button that resumes, no saved position, and no message saying what went wrong or what to do. From their side this is indistinguishable from a crash, except that it is silent.",
       "evidence": [

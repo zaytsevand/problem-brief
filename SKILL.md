@@ -79,8 +79,8 @@ choice.
 
 **Before writing a word, bring the state of every item up to date.** Of all the
 mistakes a refreshed brief makes, this one does the most damage. The chip
-says *awaiting your ruling* on something ruled on three days ago, or *ruled, not
-yet carried out* on something merged yesterday, and the reader trusts the chip.
+says *awaiting your ruling* on something ruled on three days ago, or *outstanding
+work* on something merged yesterday, and the reader trusts the chip.
 
 This comes first on every run: a new brief built from an old one, a refresh, or
 folding in comments. Walk the whole file, item by item, nothing skipped:
@@ -90,7 +90,8 @@ folding in comments. Walk the whole file, item by item, nothing skipped:
 | `open` entry | Has it been ruled on since — in chat, in a comment, in a commit message? | This conversation, `action: "comments"`, the branch log |
 | `decided` entry | Has the chosen option been carried out? | Commits, merged pull requests, the tests, the tree itself |
 | `complete` entry | Does the proof still stand — is the commit on the branch, does the test still exist? | The tree |
-| any entry | Has the problem gone away or been overtaken? Then it is `superseded`. | The tree, later rulings |
+| any entry | Has the problem gone away or been overtaken? Then it is `superseded` (shown as *retracted*). | The tree, later rulings |
+| `open` or `decided` entry | Does its `bearing` still hold against the goal? Re-judge every one whenever the goal changes. | The goal as the operator last stated it |
 | `outstanding` item | Is it done? Is the entry it waited on still awaiting a ruling? | The tree; the entry's own status |
 | `mechanical` item | Is the fix still in place? | The tree |
 
@@ -130,12 +131,12 @@ Every field carries a description saying what belongs in it.
 An entry is never deleted and never renumbered. It moves through four states,
 and the page is refreshed by moving entries along, not by rewriting it.
 
-| `status` | Means | Needs |
-|---|---|---|
-| `open` | Awaiting your ruling. | — |
-| `decided` | A way forward was chosen. It has **not** been carried out. | `decision` — which option, when, and why |
-| `complete` | The chosen option has been carried out. Closed. | `resolution` — when, what happened, and proof |
-| `superseded` | The problem went away or was overtaken. Nothing was carried out. | — |
+| `status` | Page shows | Means | Needs |
+|---|---|---|---|
+| `open` | *blocks the goal* or *escalated, not blocking* | Awaiting your ruling. | `bearing` and `bearingReason` |
+| `decided` | *outstanding work* | A way forward was chosen. It has **not** been carried out. | `decision` — which option, when, and why; `bearing` and `bearingReason` |
+| `complete` | *complete* | The chosen option has been carried out. Closed. | `resolution` — when, what happened, and proof |
+| `superseded` | *retracted* | The problem went away or was overtaken. Nothing was carried out. | — |
 
 **Closing an entry** means setting `status` to `complete` and filling in
 `resolution`: the date, one or two plain sentences saying what happened, and
@@ -155,8 +156,11 @@ question; it does not close the entry.
 
 **How the page uses the states.** Every entry carries a chip saying where it
 stands, and the counts along the top are the controls: click one and the page
-shows that category alone. It opens on **awaiting your ruling**, because that is
-the only part waiting on the reader. "Everything" shows the lot.
+shows that category alone. It opens on **blocks the goal**, because that is what
+stands between the reader and what they are driving at; with nothing blocking,
+it opens on the escalated questions. A ruled entry not yet carried out is shown
+under **outstanding work** with the outstanding list, because that is what it is:
+agreed work, waiting to be done. "Everything" shows the lot.
 
 Nothing is ever removed from the document — a filter only decides what is on
 screen. So a page with no scripting shows the whole brief, a link to `Q-3`
@@ -179,11 +183,12 @@ day.
   showing the reader what moved.
 - The brief's own `updated` moves whenever anything on it does, so it is never
   earlier than any item's.
-- `generated` is separate. It is the day the facts and states were last
-  re-checked, which can happen with nothing changing.
+- Re-checking the facts and every item's state is a change to the brief: move
+  the brief's own `updated` to that moment. There is one stamp for it, not two.
+  `generated` is retired, and the validator warns when it is still present.
 
-The page shows both stamps on every item, so the reader can see what is new
-since they last looked. The validator rejects stamps that contradict each other
+The page shows both stamps on every item, and only the two stamps on the
+brief's own line, so the reader can see what is new since they last looked. The validator rejects stamps that contradict each other
 or the dates the item records.
 
 **Not every fix needs an entry.** Something unambiguous, with no judgement in
@@ -198,11 +203,42 @@ rolled into each group.
 
 Separate the material by what it demands of the reader:
 
-- **Decisions** — needs a ruling. These are the brief.
+- **Blocks the goal** — needs a ruling, and the goal cannot be reached without
+  it. These are the brief. Mark them `"bearing": "blocks-goal"`.
+- **Escalated, not blocking** — a real decision that belongs to the operator,
+  but unrelated to the goal being driven now. Visible, never presented as a
+  blocker, never asked one at a time in the middle of the work. Mark them
+  `"bearing": "escalated"`.
 - **Mechanical** — an unambiguous fix with no judgement in it. **Fix these
   yourself first**, then list them as already done. Never ask about them.
 - **Outstanding work** — known, agreed, not yet done. A separate list at the
   end, not mixed into the decisions.
+
+**The goal comes first.** Before bracketing anything, write `goal` in the
+operator's own words: what the current work is driving towards. Every `open` and
+`decided` entry then carries a `bearing` and a one-line `bearingReason` saying
+why it is, or is not, on the goal's path. The validator refuses a live entry
+without a bearing, a bearing without a reason, and a blocker on a brief with no
+goal. When the operator defers something "because it doesn't block X", that is
+a bearing, not a ruling.
+
+## The summary at the top
+
+The box above entry one is read first, often on a phone. It is structure, never
+one paragraph:
+
+- `changes` — what moved since the last version, one bullet per change.
+- **Waiting on you** — built by the renderer from the entries: what blocks the
+  goal, then what is escalated. Do not write it by hand.
+- `context` — anything else the reader needs before entry one. Optional.
+- `background` — earlier history, folded away. `source` goes with it, never on
+  the stamp line.
+
+Give every entry a `short` label of two to five words. Wherever an id stands
+bare in text, the page shows it as `Q-29 (one-call page read)`, linked to the
+entry; an id the prose already explains, in brackets after the meaning, is
+linked without repeating the label. The validator warns on a cited id that is
+not on the page.
 
 ## Language
 
@@ -222,6 +258,9 @@ The brief is read by a person, so it is written for a person.
   *"the rule that two suppliers must independently show the fault (FR-018)"* is
   readable and still searchable; `FR-018` alone is neither.
 - Problem first, background second. Never the reverse.
+- **Two or more things enumerated are a list, not a sentence.** Every prose field
+  renders `- ` and `1. ` lines as real lists, including a lead-in line followed
+  straight by its list.
 - Mark unproven claims as unproven, explicitly, and say what evidence would
   settle them.
 
@@ -374,10 +413,11 @@ to read, so it says what **moved**, not what the brief says.
   for.
 - **Do not repeat the brief.** No problem statements, no evidence, no options.
   The link carries those.
-- Close with what now waits on the operator, as ids: `Awaiting your ruling:
-  Q-4, Q-6`.
+- Close with two lines, ids with their short labels: `Blocks the goal: Q-4
+  (…)` and `Escalated, not blocking: Q-6 (…)`. Say `Blocks the goal: nothing`
+  when that is so; it is the most useful line in the summary.
 - On a first publish there is no earlier state, so list the counts per state
-  and the ids awaiting a ruling.
+  and those two lines.
 - If nothing moved, say so in one line and do not republish.
 
 ## Freshness — the failure that recurs most
@@ -403,7 +443,9 @@ compensations and the stores that the original had.
 When asked for `AskUserQuestion` instead of a page, the content rules are
 unchanged — plain English, problem first, grouped by root cause, recommended
 option first and labelled `(Recommended)`. Only the page is dropped. The state
-check still comes first, so nothing already ruled on is asked again. Record the
+check still comes first, so nothing already ruled on is asked again. Only
+`blocks-goal` entries are asked; `escalated` ones are listed in the message, not
+asked, so the operator can pull one forward if they choose. Record the
 answers back into the JSON, moving each entry's status and `updated` stamp, and
 end with the chat summary.
 
@@ -430,7 +472,10 @@ end with the chat summary.
 | Editing an item without moving its `updated` | Every change moves the stamp, and the brief's own stamp with it |
 | Re-stamping every item on a refresh | Move `updated` only on the items that actually changed |
 | Leaving finished outstanding work as `not-started` or `blocked` | Set `state: "done"`; it stays on the page |
-| A chat summary that retells the brief | Bullets of what moved, ≤400 words, then the ids awaiting a ruling |
+| A chat summary that retells the brief | Bullets of what moved, ≤400 words, then the two lines: blocks the goal, escalated |
+| Presenting an unrelated decision as a blocker | Bracket it `"bearing": "escalated"` with its reason; only what stands in the goal's way is `blocks-goal` |
+| A headline summary written as one paragraph | `changes` as bullets; leave *waiting on you* to the renderer; history in `background` |
+| Keeping `generated` beside `updated` | Delete it; a re-check moves `updated` |
 
 ## Red flags — stop and rewrite
 
@@ -442,6 +487,8 @@ end with the chat summary.
 - Reaching for the HTML instead of the JSON.
 - Starting to write before every item's state has been checked.
 - An entry the conversation ruled on still reading *awaiting your ruling*.
+- A brief with open entries and no `goal`.
+- "The operator deferred it" recorded as a ruling rather than as `escalated`.
 
 ## What is in this skill
 
@@ -452,3 +499,4 @@ end with the chat summary.
 | `bin/validate-brief.mjs` | Schema check plus the rules a schema cannot state: recommendations, proof, states, timestamps. |
 | `examples/example.brief.json` | A complete worked brief — start from this. |
 | `examples/diagrams/*.lifecycle.json` | The archify picture source for the worked example. |
+| `test/brief.test.mjs` | The validator and renderer behaviour, pinned. Run `node --test test/*.test.mjs`. |
