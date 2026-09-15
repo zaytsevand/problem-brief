@@ -7,6 +7,8 @@
   "required": [
     "title",
     "subject",
+    "created",
+    "updated",
     "decisions"
   ],
   "additionalProperties": false,
@@ -22,10 +24,18 @@
       "minLength": 10,
       "description": "One plain sentence naming what this brief is about and who must act on it."
     },
+    "created": {
+      "$ref": "#/$defs/timestamp",
+      "description": "When this brief was first written. Set once and never changed."
+    },
+    "updated": {
+      "$ref": "#/$defs/timestamp",
+      "description": "When anything on this brief last changed. Never earlier than the updated stamp of any item on it."
+    },
     "generated": {
       "type": "string",
       "format": "date",
-      "description": "Date the facts on this page were last re-derived from the tree. Not the date the page was first written."
+      "description": "Date the facts and the state of every item on this page were last re-checked against the tree. Not the date the page was first written."
     },
     "source": {
       "type": "string",
@@ -73,6 +83,8 @@
       "type": "object",
       "required": [
         "id",
+        "created",
+        "updated",
         "title",
         "problem",
         "brief",
@@ -85,6 +97,14 @@
           "type": "string",
           "pattern": "^Q-[0-9]+$",
           "description": "Stable citation handle. Q-1, Q-2, … Never renumber an existing entry."
+        },
+        "created": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When this entry was first written. Set once and never changed."
+        },
+        "updated": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When this entry last changed in any way — wording, evidence, status, ruling, resolution. Move it with every change, and only then."
         },
         "title": {
           "type": "string",
@@ -479,13 +499,23 @@
     "mechanicalItem": {
       "type": "object",
       "required": [
-        "summary"
+        "summary",
+        "created",
+        "updated"
       ],
       "additionalProperties": false,
       "properties": {
         "summary": {
           "type": "string",
           "description": "What was wrong and what was done, in one sentence."
+        },
+        "created": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When this item was first written. Set once and never changed."
+        },
+        "updated": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When this item last changed in any way — wording, evidence, status, ruling, resolution. Move it with every change, and only then."
         },
         "detail": {
           "type": "string"
@@ -507,7 +537,9 @@
     "outstandingItem": {
       "type": "object",
       "required": [
-        "summary"
+        "summary",
+        "created",
+        "updated"
       ],
       "additionalProperties": false,
       "properties": {
@@ -515,23 +547,38 @@
           "type": "string",
           "description": "The work, named so the reader knows what it delivers."
         },
+        "created": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When this item was first written. Set once and never changed."
+        },
+        "updated": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When this item last changed in any way — wording, evidence, status, ruling, resolution. Move it with every change, and only then."
+        },
         "detail": {
           "type": "string"
         },
         "blockedBy": {
           "type": "string",
-          "description": "The entry id this waits on, where it waits on a ruling. e.g. Q-2."
+          "description": "The entry id this waits on, where it waits on a ruling. e.g. Q-2. Once that entry is ruled, the item is no longer blocked — change its state."
         },
         "state": {
           "type": "string",
           "enum": [
             "not-started",
             "in-progress",
-            "blocked"
+            "blocked",
+            "done"
           ],
-          "default": "not-started"
+          "default": "not-started",
+          "description": "Where the work stands. 'blocked' only while blockedBy names an entry still awaiting a ruling. 'done' once it has been carried out — the item stays on the page, it is not deleted."
         }
       }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "A moment with its time zone: YYYY-MM-DDTHH:MM, optional seconds, then Z or an offset. e.g. 2026-09-15T09:40Z or 2026-09-15T10:40+01:00."
     }
   }
 }

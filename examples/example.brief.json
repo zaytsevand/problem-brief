@@ -1,12 +1,16 @@
 {
   "title": "Invoice importer — open decisions",
   "subject": "Three things about the supplier-invoice importer need your ruling before the release can be signed off.",
-  "generated": "2026-09-11",
+  "created": "2026-09-11T08:30Z",
+  "updated": "2026-09-14T16:20Z",
+  "generated": "2026-09-14",
   "source": "the implementation review on the importer branch, re-checked against the branch tip this morning",
   "context": "The review produced eleven separate complaints. Nine of them come from three underlying causes, so they are grouped below as three decisions rather than eleven. The other two were unambiguous mistakes and are already fixed — they are listed at the end so you know they were handled.",
   "decisions": [
     {
       "id": "Q-1",
+      "created": "2026-09-11T08:30Z",
+      "updated": "2026-09-11T08:30Z",
       "title": "The proof that the reader works was built on files we no longer use",
       "problem": "The measurement that says the invoice reader is 94% accurate was taken against ten saved PDF files. Those saved files were replaced with live downloads from the suppliers last week, and the measurement was never re-taken.",
       "brief": "That number is the only evidence we have that the reader is good enough to ship. Every later decision on this branch cites it. If the live documents differ from the saved copies — and they already differ in two known ways, because two suppliers changed their invoice template — then the number is not about the system we are about to release. It is about a system that no longer exists. We would be signing off on a measurement of the wrong thing.",
@@ -86,6 +90,8 @@
     },
     {
       "id": "Q-2",
+      "created": "2026-09-11T08:30Z",
+      "updated": "2026-09-12T10:05Z",
       "title": "One failure of the parsing service is handled silently, and has cost us four measurements",
       "problem": "When the call to the parsing service fails because the connection drops, the code catches it in a general-purpose handler that records nothing. The run continues and the result looks like a normal, confident answer.",
       "brief": "The four other ways this call can fail each set a flag we can look for afterwards. This fifth one does not. That means a benchmark run can contain silent holes and still report a clean number. The file's own comment says this class of mistake has already cost us measurements four times — and then the file repeats it.",
@@ -146,6 +152,8 @@
     },
     {
       "id": "Q-3",
+      "created": "2026-09-11T08:30Z",
+      "updated": "2026-09-14T16:20Z",
       "title": "An import can stop halfway and hand back to the person, and nothing says what happens next",
       "problem": "When the importer cannot read a field, it stops and hands the run back to whoever started it. The design says this is not the end of the run, but no part of the system defines how a handed-back run resumes.",
       "brief": "In practice the run just stops. The person sees a half-imported batch and no instruction. There is no button that resumes, no saved position, and no message saying what went wrong or what to do. From their side this is indistinguishable from a crash, except that it is silent.",
@@ -231,6 +239,8 @@
   "mechanical": [
     {
       "summary": "The design note still described the older two-step download; rewritten to describe the single fetch actually in the code.",
+      "created": "2026-09-11T08:30Z",
+      "updated": "2026-09-11T08:30Z",
       "detail": "Three places in the note and one drawing referred to the retired arrangement.",
       "evidence": [
         {
@@ -242,6 +252,8 @@
     },
     {
       "summary": "The design note counted twenty-three steps where the code declares twenty-two; recounted and corrected.",
+      "created": "2026-09-11T08:30Z",
+      "updated": "2026-09-11T08:30Z",
       "evidence": [
         {
           "kind": "code",
@@ -254,17 +266,23 @@
   "outstanding": [
     {
       "summary": "Write the test that proves a dropped connection appears in the run summary.",
+      "created": "2026-09-11T08:30Z",
+      "updated": "2026-09-11T08:30Z",
       "blockedBy": "Q-2",
       "state": "blocked"
     },
     {
       "summary": "Design the timeout for a held-open batch during a paused import.",
-      "detail": "Needed by the resume work, and it has its own cost question: how long we are willing to hold a part-finished batch open.",
+      "created": "2026-09-11T08:30Z",
+      "updated": "2026-09-14T16:20Z",
+      "detail": "Needed by the resume work. Settled as part of it: a held-open batch now times out after twenty minutes.",
       "blockedBy": "Q-3",
-      "state": "not-started"
+      "state": "done"
     },
     {
       "summary": "Replace the two supplier templates in the benchmark whose documents changed.",
+      "created": "2026-09-12T10:05Z",
+      "updated": "2026-09-13T14:00Z",
       "state": "in-progress"
     }
   ]

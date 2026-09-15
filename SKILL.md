@@ -10,7 +10,7 @@ description: >-
   Dependencies.
 license: MIT
 metadata:
-  version: "1.0"
+  version: "1.1"
   requires:
     - archify
     - humanizer
@@ -75,6 +75,35 @@ is missing, say so rather than silently downgrading every picture to mermaid —
 the reader cannot tell the difference and will assume the simpler drawing was a
 choice.
 
+## Start every run with a state check
+
+**Before writing a word, bring the state of every item up to date.** Of all the
+mistakes a refreshed brief makes, this one does the most damage. The chip
+says *awaiting your ruling* on something ruled on three days ago, or *ruled, not
+yet carried out* on something merged yesterday, and the reader trusts the chip.
+
+This comes first on every run: a new brief built from an old one, a refresh, or
+folding in comments. Walk the whole file, item by item, nothing skipped:
+
+| Item | Ask | Where to look |
+|---|---|---|
+| `open` entry | Has it been ruled on since — in chat, in a comment, in a commit message? | This conversation, `action: "comments"`, the branch log |
+| `decided` entry | Has the chosen option been carried out? | Commits, merged pull requests, the tests, the tree itself |
+| `complete` entry | Does the proof still stand — is the commit on the branch, does the test still exist? | The tree |
+| any entry | Has the problem gone away or been overtaken? Then it is `superseded`. | The tree, later rulings |
+| `outstanding` item | Is it done? Is the entry it waited on still awaiting a ruling? | The tree; the entry's own status |
+| `mechanical` item | Is the fix still in place? | The tree |
+
+For each item that moves, record why (`decision`, `resolution`, the new
+`state`) and move its `updated` stamp. Only then go on to the facts
+(**Freshness**), the comments, and any new entries.
+
+The validator catches a state that contradicts its own record: a ruling on an
+entry still marked open, a resolution on one still marked decided, work marked
+blocked on an entry that has been ruled, a ruling dated after the entry says it
+last changed. It **cannot** see a ruling that lives only in chat or a commit
+that was never recorded. That is what the walk above is for.
+
 ## The entry shape
 
 Every entry, in this order. The order is the deliverable — do not reshuffle it.
@@ -136,6 +165,26 @@ entry's category), and the reader's last choice is remembered between visits.
 
 That is what keeps a long-running brief readable: closed entries stay citable
 for good without burying the three things that still need a decision.
+
+**Timestamps.** The brief and every item on it (entries, handled fixes,
+outstanding work) carry two stamps: `created`, when it was first written, and
+`updated`, when it last changed in any way. Write them as a moment with its
+zone, `2026-09-15T09:40Z`, because a brief is often refreshed more than once a
+day.
+
+- `created` is set once and never touched again.
+- `updated` moves with **every** change to that item: wording, evidence,
+  status, ruling, resolution. It does not move when nothing changed. Re-stamping
+  every item on a refresh destroys the one thing the stamp is for, which is
+  showing the reader what moved.
+- The brief's own `updated` moves whenever anything on it does, so it is never
+  earlier than any item's.
+- `generated` is separate. It is the day the facts and states were last
+  re-checked, which can happen with nothing changing.
+
+The page shows both stamps on every item, so the reader can see what is new
+since they last looked. The validator rejects stamps that contradict each other
+or the dates the item records.
 
 **Not every fix needs an entry.** Something unambiguous, with no judgement in
 it, goes in `mechanical` — handled without asking, listed so you know it was
@@ -204,8 +253,9 @@ above all unknown fields, which come back matched against the field you probably
 meant (`"recommend"` → *did you mean "recommended"?*). Then it checks the rules a
 schema cannot state: exactly one recommended option and it must be listed first,
 every citation carries a note, every option carries a price, a closed entry
-carries proof, an id is never reused, and outstanding work never waits on an
-entry that does not exist.
+carries proof, an id is never reused, outstanding work never waits on an entry
+that does not exist, every status agrees with what its entry records, and every
+timestamp agrees with the others.
 
 Errors name the entry, the field, and what to do. Fix them all before rendering;
 the renderer runs the same check and refuses anyway.
@@ -213,7 +263,8 @@ the renderer runs the same check and refuses anyway.
 Add `--json` when another tool needs the result rather than a person.
 
 `examples/example.brief.json` is a complete worked brief: three entries, both
-diagram kinds, one closed as complete, plus the handled and outstanding lists.
+diagram kinds, one closed as complete, plus the handled and outstanding lists,
+all timestamped.
 Start from it rather than from an empty file.
 
 **Where the files go.** Put the brief JSON, the rendered page and the diagram
@@ -299,8 +350,9 @@ drop a label — do not fight it by lowering the quality profile.
 1. Render the page from the JSON, then publish it with the `Artifact` tool.
    Load `artifact-design` first, as that tool requires. Pass every archify
    diagram in `files`.
-2. **Hand the link back in chat.** The operator reads on mobile and cannot see
-   tool output. A brief that was published but not linked was not delivered.
+2. **Hand the link back in chat, with the update summary** (see **Report back
+   in chat**). The operator reads on mobile and cannot see tool output. A brief
+   that was published but not linked was not delivered.
 3. **Update in place.** When the brief already exists, republish to the same URL
    (`url:` parameter, or the same local file path within one session). Do not
    mint a second page for the same subject. If you do not have the URL, find it
@@ -308,9 +360,30 @@ drop a label — do not fight it by lowering the quality profile.
 4. **Read comments before republishing** (`action: "comments"`), fold them in,
    then resolve the threads you actually addressed.
 
+## Report back in chat
+
+Every run ends with a short summary in chat: after a publish, after a refresh,
+after an `AskUserQuestion` round. It is the only part the operator is certain
+to read, so it says what **moved**, not what the brief says.
+
+- **Up to 400 words**, as a bulleted list of changes.
+- **The state delta only.** An entry that changed state reads
+  `Q-2: open → decided (name the fifth failure)`; a new entry reads
+  `Q-6 raised: one plain line`; handled fixes and outstanding work the same
+  way. Say what changed in content only where it changes the ruling being asked
+  for.
+- **Do not repeat the brief.** No problem statements, no evidence, no options.
+  The link carries those.
+- Close with what now waits on the operator, as ids: `Awaiting your ruling:
+  Q-4, Q-6`.
+- On a first publish there is no earlier state, so list the counts per state
+  and the ids awaiting a ruling.
+- If nothing moved, say so in one line and do not republish.
+
 ## Freshness — the failure that recurs most
 
-Every republish is re-derived from the current state of the code, the branch and
+This comes after the state check, and covers the claims rather than the
+statuses. Every republish is re-derived from the current state of the code, the branch and
 the run. Never from a snapshot file, an earlier draft, or a subagent's report
 from an hour ago.
 
@@ -329,7 +402,10 @@ compensations and the stores that the original had.
 
 When asked for `AskUserQuestion` instead of a page, the content rules are
 unchanged — plain English, problem first, grouped by root cause, recommended
-option first and labelled `(Recommended)`. Only the page is dropped.
+option first and labelled `(Recommended)`. Only the page is dropped. The state
+check still comes first, so nothing already ruled on is asked again. Record the
+answers back into the JSON, moving each entry's status and `updated` stamp, and
+end with the chat summary.
 
 ## Common mistakes
 
@@ -350,6 +426,11 @@ option first and labelled `(Recommended)`. Only the page is dropped.
 | Using `"embed": "file"` without publishing the companion | Drop the setting — the drawing then travels inside the page |
 | Flattening an archify picture to a still image | Embed the live page; flattening throws away what it is for |
 | Setting a frame height by hand | Let the renderer read the drawing's proportions, or it gets cropped |
+| Refreshing the facts but not the states | Walk every item's state first; a chip that is out of date is worse than no chip |
+| Editing an item without moving its `updated` | Every change moves the stamp, and the brief's own stamp with it |
+| Re-stamping every item on a refresh | Move `updated` only on the items that actually changed |
+| Leaving finished outstanding work as `not-started` or `blocked` | Set `state: "done"`; it stays on the page |
+| A chat summary that retells the brief | Bullets of what moved, ≤400 words, then the ids awaiting a ruling |
 
 ## Red flags — stop and rewrite
 
@@ -359,6 +440,8 @@ option first and labelled `(Recommended)`. Only the page is dropped.
 - Prose carried over verbatim from the previous version of the page.
 - "The operator will know what I mean." They will not.
 - Reaching for the HTML instead of the JSON.
+- Starting to write before every item's state has been checked.
+- An entry the conversation ruled on still reading *awaiting your ruling*.
 
 ## What is in this skill
 
@@ -366,5 +449,6 @@ option first and labelled `(Recommended)`. Only the page is dropped.
 |---|---|
 | `schema/problem-brief.schema.json` | The data contract. Field descriptions say what belongs where. |
 | `bin/render-brief.mjs` | JSON to page. Fixed layout, no dependencies, refuses malformed briefs. |
+| `bin/validate-brief.mjs` | Schema check plus the rules a schema cannot state: recommendations, proof, states, timestamps. |
 | `examples/example.brief.json` | A complete worked brief — start from this. |
 | `examples/diagrams/*.lifecycle.json` | The archify picture source for the worked example. |

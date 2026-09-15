@@ -104,6 +104,14 @@ cite it. It moves through four states instead:
 | `complete` | The chosen option was carried out. Closed, with proof. |
 | `superseded` | The problem went away or was overtaken. |
 
+Every run starts by bringing those states up to date, before any facts are
+re-checked. The brief and every item on it carry `created` and `updated`
+timestamps, and the page shows both, so the reader can see what moved. The
+validator rejects a status that contradicts the entry's own record (a ruling
+on an entry still marked open, work marked blocked on something already ruled)
+and timestamps that contradict each other. Each run ends with a short chat
+summary of what changed state.
+
 The counts along the top of the page are filters — click one and the page shows
 that category alone. It opens on what is awaiting a ruling, since that is the
 only part waiting on the reader. Everything stays in the document, so a link to

@@ -53,6 +53,18 @@ function prose(s) {
   }).join("");
 }
 
+/* A timestamp is shown exactly as written — date, time and its own zone — so
+   two readers in different places read the same moment. */
+function stamp(v) {
+  if (!v) return "";
+  const m = String(v).match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/);
+  const text = m ? `${m[1]} ${m[2]} ${m[3] === "Z" ? "UTC" : m[3]}` : String(v);
+  return `<time datetime="${esc(v)}">${esc(text)}</time>`;
+}
+
+const stamps = (x, first = "added") =>
+  `${first} ${stamp(x.created)}` + (x.updated && x.updated !== x.created ? ` · last changed ${stamp(x.updated)}` : "");
+
 /* ── diagrams ───────────────────────────────────────────────────────────── */
 
 function diagram(d, baseDir) {
@@ -308,6 +320,7 @@ function entry(e, baseDir) {
     <h2>${inline(e.title)}</h2>
     <span class="chip chip-${state} chip-static">${esc(STATE_LABEL[state])}</span>
   </header>
+  <p class="stamps">${stamps(e, "raised")}</p>
   ${status}
   <section class="part part-problem"><h3>The problem</h3>${prose(e.problem)}</section>
   <section class="part"><h3>Why it matters</h3>${prose(e.brief)}</section>
@@ -405,12 +418,15 @@ nav.toc .done{color:var(--ink-3);font-size:.8em;flex:none;margin-left:auto;}
 .entry{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
   padding:26px 26px 24px;margin:0 0 22px;}
 .entry-closed{opacity:.72;}
-.entry-head{display:flex;gap:.75em;align-items:baseline;margin:0 0 18px;
+.entry-head{display:flex;gap:.75em;align-items:baseline;margin:0 0 8px;
   border-bottom:1px solid var(--line);padding-bottom:14px;}
 .qid{flex:none;font-size:.76rem;font-weight:650;letter-spacing:.06em;color:var(--accent);
   background:var(--accent-soft);padding:.3em .6em;border-radius:5px;text-decoration:none;}
 .entry-head h2{font-size:1.32rem;line-height:1.28;margin:0;letter-spacing:-.005em;flex:1 1 12ch;min-width:0;}
 .entry-head{flex-wrap:wrap;}
+.stamps{font-family:ui-sans-serif,system-ui,sans-serif;font-size:.78rem;color:var(--ink-3);
+  margin:0 0 16px;font-variant-numeric:tabular-nums;}
+.tail li .stamps{margin:.35em 0 0;}
 .part{margin:0 0 20px;} .part:last-child{margin-bottom:0;}
 .part>h3{font-size:.74rem;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3);
   margin:0 0 .6em;font-weight:650;}
@@ -597,9 +613,20 @@ function page(brief, baseDir) {
     `</nav>`;
 
   const provenance = [
+    `written ${stamp(brief.created)}`,
+    brief.updated !== brief.created ? `last changed ${stamp(brief.updated)}` : null,
     brief.generated ? `facts re-checked ${esc(brief.generated)}` : null,
     brief.source ? esc(brief.source) : null,
   ].filter(Boolean).join(" · ");
+
+  /* Say where the work stands, and only say it waits on an entry while that
+     entry is still awaiting a ruling. */
+  const outstandingState = (o) => {
+    const target = o.blockedBy && brief.decisions.find((e) => e.id === o.blockedBy);
+    const label = { "not-started": "Not started", "in-progress": "In progress", blocked: "Blocked", done: "Done" }[o.state ?? "not-started"];
+    if (target && st(target) === "open" && o.state !== "done") return `Waits on ${esc(o.blockedBy)}`;
+    return label + (o.blockedBy ? ` · follows from ${esc(o.blockedBy)}` : "");
+  };
 
   const tocRow = (e) => `<li data-state="${st(e)}"><a href="#${esc(e.id)}">` +
     `<span class="n">${esc(e.id)}</span><span>${inline(e.title)}</span>` +
@@ -615,16 +642,15 @@ function page(brief, baseDir) {
     <ul>${mech.map((m) => `<li><span class="done-mark">✓</span>${inline(m.summary)}` +
       (m.detail ? `<div class="d">${inline(m.detail)}</div>` : "") +
       (m.evidence?.length ? `<div class="b">${m.evidence.map((e) => `<code>${esc(e.ref)}</code>`).join(" · ")}</div>` : "") +
-      `</li>`).join("")}</ul></section>` : "";
+      `<p class="stamps">${stamps(m)}</p></li>`).join("")}</ul></section>` : "";
 
   const outSec = out.length ? `<section class="tail" data-block="outstanding">
     <h2>Outstanding work</h2>
     <p class="lede">Agreed and understood, not yet done. Nothing here needs a ruling.</p>
-    <ul>${out.map((o) => `<li>${inline(o.summary)}` +
+    <ul>${out.map((o) => `<li>${o.state === "done" ? `<span class="done-mark">✓</span>` : ""}${inline(o.summary)}` +
       (o.detail ? `<div class="d">${inline(o.detail)}</div>` : "") +
-      (o.blockedBy ? `<div class="b">Waits on ${esc(o.blockedBy)}</div>`
-        : o.state && o.state !== "not-started" ? `<div class="b">${esc(o.state.replace("-", " "))}</div>` : "") +
-      `</li>`).join("")}</ul></section>` : "";
+      `<div class="b">${outstandingState(o)}</div>` +
+      `<p class="stamps">${stamps(o)}</p></li>`).join("")}</ul></section>` : "";
 
   return `<title>${esc(brief.title)}</title>
 <style>${CSS}</style>
