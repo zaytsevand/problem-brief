@@ -33,7 +33,19 @@
     },
     "context": {
       "type": "string",
-      "description": "One paragraph the reader needs before entry one. Optional. Never a summary of the entries."
+      "description": "What the reader needs before entry one, kept short. Optional. Never a summary of the entries, never the list of what changed (that is changes), and never older background (that is background). Anything that names two or more things is written as a list, one '- ' line each."
+    },
+    "changes": {
+      "type": "array",
+      "description": "Since the last version of the page: one item per entry that moved state or is new, e.g. 'Q-3 is complete — the resume action landed.' Cite entries by id; the page adds each entry's short label. Leave out on a first version.",
+      "items": {
+        "type": "string",
+        "minLength": 5
+      }
+    },
+    "background": {
+      "type": "string",
+      "description": "Earlier history the reader may want but does not need to make a ruling. Shown folded away under the summary."
     },
     "decisions": {
       "type": "array",
@@ -91,6 +103,12 @@
           "minLength": 5,
           "maxLength": 90,
           "description": "The problem as a headline, in plain English. No identifiers standing alone."
+        },
+        "short": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 40,
+          "description": "A label of five words or fewer, shown after the id wherever the page cites this entry: 'Q-3 (resuming a handed-back import)'. Lower case unless a word needs capitals. Without it the page cuts one from the title, which reads worse."
         },
         "problem": {
           "type": "string",
@@ -520,7 +538,7 @@
         },
         "blockedBy": {
           "type": "string",
-          "description": "The entry id this waits on, where it waits on a ruling. e.g. Q-2."
+          "description": "The entry id this waits on, where it waits on a ruling. e.g. Q-2. The page shows it with the entry's short label."
         },
         "state": {
           "type": "string",

@@ -28,7 +28,7 @@
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCHEMA_PATH = join(HERE, "..", "schema", "problem-brief.schema.json");
@@ -301,14 +301,104 @@ function semanticErrors(brief) {
   });
 
   const ids = new Set((brief.decisions ?? []).map((e) => e?.id));
+  const cited = new Set();
   (brief.outstanding ?? []).forEach((o, i) => {
+    if (o?.blockedBy) cited.add(o.blockedBy);
     if (o?.blockedBy && !ids.has(o.blockedBy)) {
       out.push({ path: `outstanding[${i}]`, message: `waits on "${o.blockedBy}", which is not an entry on this page`,
         hint: `entries on this page: ${[...ids].join(", ") || "none"}` });
     }
   });
 
+  for (const { path, key, text } of strings(brief)) {
+    const unknown = new Set();
+    for (const id of text.match(ID) ?? []) {
+      cited.add(id);
+      if (!ids.has(id)) unknown.add(id);
+    }
+    if (unknown.size) {
+      out.push({ path, severity: "warning",
+        message: `cites ${[...unknown].map((x) => `"${x}"`).join(", ")}, which ${unknown.size === 1 ? "is not an entry" : "are not entries"} on this page`,
+        hint: `the reference is shown as plain text with nothing to follow — entries on this page: ${[...ids].join(", ") || "none"}` });
+    }
+    if (ENUMERATED.has(key) && !path.includes("evidence")) {
+      const found = enumeration(text);
+      if (found) out.push({ path, severity: "warning", message: found, hint: LIST_HINT });
+    }
+  }
+
+  (brief.decisions ?? []).forEach((e, i) => {
+    if (!e?.id) return;
+    if (cited.has(e.id) && !e.short) {
+      out.push({ path: at(e, i), severity: "warning", message: 'is cited elsewhere on the page but has no "short" label',
+        hint: `the page cuts a label from the title instead — give it one of five words or fewer, e.g. "short": "${suggestShort(e.title)}"` });
+    }
+    if (e.short && e.short.trim().split(/\s+/).length > 5) {
+      out.push({ path: `${at(e, i)} → short`, severity: "warning", message: "is longer than five words",
+        hint: "it follows the id in running text, so it has to be brief — the title is where the detail goes" });
+    }
+  });
+
   return out;
+}
+
+/* ── prose that names things in a row ──────────────────────────────────────
+   A sentence that enumerates is a list the author has not broken up. Only the
+   fields the page shows as running text are checked; titles, labels, steps and
+   evidence notes are single lines by design. */
+
+const ID = /\bQ-\d+\b/g;
+const LIST_LINE = /^\s*(?:[-*]|\d+[.)])\s+/;
+const ENUMERATED = new Set([
+  "subject", "context", "background", "changes",
+  "problem", "brief", "now", "whyWrong", "target",
+  "summary", "work", "risk", "forecloses", "note", "differs", "detail",
+]);
+const SKIPPED = new Set(["id", "chose", "blockedBy", "ref", "url", "file", "spec", "source", "kind",
+  "archifyType", "embed", "status", "state", "date", "generated", "diagramTheme"]);
+const LIST_HINT = 'write it as a bulleted list — end the lead-in with a colon, then one "- " line per item';
+
+/* Every string in the brief with a readable path, skipping fields that are
+   handles or file paths rather than prose. */
+function* strings(value, path = "", key = "") {
+  if (typeof value === "string") {
+    yield { path, key, text: value };
+  } else if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) yield* strings(value[i], `${path}[${i}]`, key);
+  } else if (value && typeof value === "object") {
+    for (const [k, v] of Object.entries(value)) {
+      if (SKIPPED.has(k)) continue;
+      const label = /^decisions\[\d+\]$/.test(path) && value.id ? `${path} (${value.id})` : path;
+      yield* strings(v, label ? `${label} → ${k}` : k, k);
+    }
+  }
+}
+
+function enumeration(text) {
+  const running = text.split("\n").filter((l) => !LIST_LINE.test(l)).join(" ");
+  const sentences = running.replace(/`[^`]*`/g, "code").split(/(?<=[.!?])\s+/);
+  for (const raw of sentences) {
+    const excerpt = `"${raw.trim().slice(0, 60)}${raw.trim().length > 60 ? "…" : ""}"`;
+    const entries = new Set(raw.match(ID) ?? []);
+    if (entries.size >= 2) {
+      return `cites ${entries.size} entries in one sentence: ${excerpt}`;
+    }
+    // Brackets hold asides, not items, and a thousands separator is not a comma.
+    const s = raw.replace(/\([^)]*\)/g, "").replace(/(\d),(\d)/g, "$1$2");
+    const segments = s.split(/[,;]/);
+    if (segments.length < 3) continue;
+    const middle = segments.slice(1, -1);
+    const short = middle.every((m) => m.trim() && m.trim().split(/\s+/).length <= 5);
+    const series = middle.length >= 2 || /^\s*(?:and|or)\s/i.test(segments[segments.length - 1]);
+    if ((s.match(/;/g) ?? []).length >= 2 || (short && series)) {
+      return `names ${segments.length} things in one sentence: ${excerpt}`;
+    }
+  }
+  return null;
+}
+
+function suggestShort(title) {
+  return String(title ?? "").toLowerCase().split(/\s+/).slice(0, 5).join(" ");
 }
 
 const ordinal = (n) => ["", "first", "second", "third", "fourth", "fifth"][n] ?? `${n}th`;
@@ -346,7 +436,7 @@ export function formatReport(result, file) {
 
 /* ── CLI ────────────────────────────────────────────────────────────────── */
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const file = process.argv[2];
   const asJson = process.argv.includes("--json");
   if (!file) {

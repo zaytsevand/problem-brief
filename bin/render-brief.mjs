@@ -27,31 +27,103 @@ const notes = { inlined: 0, companions: new Set(), problems: [] };
 const mb = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 
 /* ── text ──────────────────────────────────────────────────────────────────
-   A deliberately small subset of markdown: paragraphs, dash lists, bold,
-   inline code and links. Anything more belongs in a diagram or a solution.   */
+   A deliberately small subset of markdown: paragraphs, dash and numbered
+   lists, bold, inline code and links. Anything more belongs in a diagram or a
+   solution.                                                                  */
 
 const esc = (s) => String(s ?? "")
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
   .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
-function inline(s) {
-  return esc(s)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+/* Every entry on the page, by id, so prose that cites one can say what it is.
+   Filled in by page() before anything is rendered. */
+const REFS = new Map();
+
+/* The words a label should never end on once it has been cut short. */
+const DANGLING = /\s+(?:the|a|an|and|or|of|to|in|on|for|with|that|is|are|was|by)$/i;
+
+/* A short label for an entry with none of its own: the title, cut at a word
+   boundary. An identifier never stands alone, so a clumsy label still beats
+   none. */
+function derivedLabel(title) {
+  const words = String(title).trim().split(/\s+/);
+  let out = "";
+  for (const w of words) {
+    const next = out ? `${out} ${w}` : w;
+    if (next.length > 36 && out) break;
+    out = next;
+  }
+  const cut = out.length < String(title).trim().length;
+  out = out.replace(/[.,;:—–-]+$/, "");
+  if (cut) {
+    while (DANGLING.test(out)) out = out.replace(DANGLING, "");
+    out += "…";
+  }
+  // "The proof that…" reads as a sentence start; an acronym keeps its capitals.
+  return /^[A-Z][a-z]/.test(out) ? out[0].toLowerCase() + out.slice(1) : out;
 }
 
+/* Q-3 in prose becomes a link to the entry, followed by its short label the
+   first time it appears in a field. An id the author already labelled — one
+   followed by a bracket — is linked and left alone. An id that is not on the
+   page stays plain text; the validator reports it. */
+function entryRef(id, after, seen) {
+  const e = REFS.get(id);
+  if (!e) return id;
+  const link = `<a class="ref" href="#${esc(id)}" title="${esc(e.title)}">${esc(id)}</a>`;
+  const labelled = /^\s?\(/.test(after);
+  if (labelled || seen.has(id)) return link;
+  seen.add(id);
+  return `${link}<span class="ref-label"> (${inline(e.label, seen, false)})</span>`;
+}
+
+function inline(s, seen = new Set(), refs = true) {
+  const held = [];
+  const hold = (html) => `\u0000${held.push(html) - 1}\u0000`;
+  const restore = (h) => h.replace(/\u0000(\d+)\u0000/g, (_, i) => restore(held[i]));
+  // Code and links are set aside first, so an id inside either is left as written.
+  let h = esc(String(s ?? "").replace(/\u0000/g, ""))
+    .replace(/`([^`]+)`/g, (_, c) => hold(`<code>${c}</code>`))
+    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, (_, t, u) =>
+      hold(`<a href="${u}" target="_blank" rel="noopener">${t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")}</a>`))
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  if (refs) h = h.replace(/\bQ-\d+\b/g, (id, off, str) => entryRef(id, str.slice(off + id.length), seen));
+  return restore(h);
+}
+
+const LIST_ITEM = /^(?:[-*]|(\d+)[.)])\s+/;
+
+/* Paragraphs split on blank lines. Inside one, a run of lines that start with
+   "- " or "1. " is a list, and the lines around it stay paragraphs — so an
+   author can write "Three things changed:" and then the three things. */
 function prose(s) {
   if (!s) return "";
+  const seen = new Set();
   const blocks = String(s).trim().split(/\n\s*\n/);
   return blocks.map((b) => {
     const lines = b.split("\n").map((l) => l.trim()).filter(Boolean);
-    if (lines.every((l) => l.startsWith("- "))) {
-      return `<ul>${lines.map((l) => `<li>${inline(l.slice(2))}</li>`).join("")}</ul>`;
+    const runs = [];
+    for (const l of lines) {
+      const m = l.match(LIST_ITEM);
+      const kind = !m ? "p" : m[1] ? "ol" : "ul";
+      const text = m ? l.slice(m[0].length) : l;
+      const last = runs[runs.length - 1];
+      if (last?.kind === kind) last.items.push(text);
+      else runs.push({ kind, items: [text], start: m?.[1] ? Number(m[1]) : 1 });
     }
-    return `<p>${inline(lines.join(" "))}</p>`;
+    return runs.map((r) => {
+      if (r.kind === "p") return `<p>${inline(r.items.join(" "), seen)}</p>`;
+      const start = r.kind === "ol" && r.start !== 1 ? ` start="${r.start}"` : "";
+      return `<${r.kind}${start}>${r.items.map((x) => `<li>${inline(x, seen)}</li>`).join("")}</${r.kind}>`;
+    }).join("");
   }).join("");
 }
+
+/* A field that is usually one sentence, run on from a bold lead-in. It stays
+   inline when it is one sentence, and becomes proper blocks when the author
+   wrote a list or more than one paragraph. */
+const isBlock = (s) => /\n\s*\n/.test(String(s)) || String(s).split("\n").some((l) => LIST_ITEM.test(l.trim()));
+const flow = (s) => (isBlock(s) ? `<div class="flow">${prose(s)}</div>` : ` ${inline(s)}`);
 
 /* ── diagrams ───────────────────────────────────────────────────────────── */
 
@@ -254,7 +326,7 @@ function solutions(list) {
       ["Risk", s.cost.risk],
       ["Rules out", s.cost.forecloses],
     ].filter(([, v]) => v).map(([k, v]) =>
-      `<div class="cost-row"><dt>${k}</dt><dd>${inline(v)}</dd></div>`).join("");
+      `<div class="cost-row"><dt>${k}</dt><dd>${prose(v)}</dd></div>`).join("");
     const steps = s.steps?.length
       ? `<ol class="steps">${s.steps.map((x) => `<li>${inline(x)}</li>`).join("")}</ol>` : "";
     return `<article class="sol${s.recommended ? " sol-rec" : ""}">` +
@@ -286,14 +358,15 @@ function entry(e, baseDir) {
 
   const ruled = e.decision
     ? `<div class="ruled"><strong>Ruled ${esc(e.decision.date)}:</strong> ${chosen(e.decision.chose)}` +
-      (e.decision.note ? ` — ${inline(e.decision.note)}` : "") + `</div>`
+      (e.decision.note ? (isBlock(e.decision.note) ? flow(e.decision.note) : ` — ${inline(e.decision.note)}`) : "") +
+      `</div>`
     : "";
 
   const r = e.resolution;
   const closed = e.status === "complete"
     ? `<div class="ruled ruled-done"><strong>Completed ${esc(r.date)}.</strong>` +
-      (r.note ? ` ${inline(r.note)}` : "") +
-      (r.differs ? `<div class="differs"><strong>Landed differently:</strong> ${inline(r.differs)}</div>` : "") +
+      (r.note ? flow(r.note) : "") +
+      (r.differs ? `<div class="differs"><strong>Landed differently:</strong>${flow(r.differs)}</div>` : "") +
       (r.evidence?.length ? evidence(r.evidence) : "") + `</div>`
     : e.status === "superseded"
       ? `<div class="ruled ruled-old">No longer live — the problem went away or was overtaken. Kept for the record.</div>`
@@ -385,11 +458,31 @@ h2,h3,h4{text-wrap:balance;}
 .chip-static.chip-decided{color:var(--accent);border-color:var(--accent);background:var(--accent-soft);}
 .chip-static.chip-complete{color:var(--rec);border-color:var(--rec);background:var(--rec-soft);}
 .chip-static.chip-superseded{color:var(--ink-3);border-color:var(--line-2);background:transparent;}
+/* The stamps and the source are different kinds of fact, so each has its line. */
 .provenance{font-size:.82rem;color:var(--ink-3);margin:0;
   font-family:ui-sans-serif,system-ui,sans-serif;}
+.provenance p{margin:0;}
+.provenance .source{margin-top:.2em;}
+.provenance .k{text-transform:uppercase;letter-spacing:.07em;font-size:.9em;margin-right:.4em;}
 .toc .empty{color:var(--ink-3);font-size:.9rem;margin:.4em 0 0;}
+/* The headline summary is read first, often on a phone, so it is structure:
+   what is waiting, what moved, then the free text, with background folded. */
 .context{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
   padding:16px 18px;margin:20px 0 0;font-size:.96rem;color:var(--ink-2);}
+.context>*+*{margin-top:14px;}
+.context h2{font-family:ui-sans-serif,system-ui,sans-serif;font-size:.74rem;text-transform:uppercase;
+  letter-spacing:.09em;color:var(--ink-3);margin:0 0 .4em;font-weight:650;}
+.context ul{margin-bottom:0;}
+.awaiting p{margin:0;color:var(--ink);}
+.awaiting .none{color:var(--ink-2);}
+details.background summary{cursor:pointer;color:var(--ink-3);font-size:.84rem;
+  font-family:ui-sans-serif,system-ui,sans-serif;}
+details.background[open] summary{margin-bottom:.5em;}
+a.ref{font-family:ui-sans-serif,system-ui,sans-serif;font-size:.86em;font-weight:650;
+  text-decoration:none;white-space:nowrap;}
+a.ref:hover{text-decoration:underline;}
+.ref-label{color:inherit;}
+.flow{margin-top:.4em;}
 
 /* contents */
 nav.toc{margin:0 0 34px;font-size:.9rem;}
@@ -506,8 +599,8 @@ details.rolled ul{margin-top:.6em;}
 .tail{margin-top:40px;}
 .tail>h2{font-size:1.08rem;margin:0 0 .3em;}
 .tail>.lede{color:var(--ink-3);font-size:.9rem;margin:0 0 1em;}
-.tail ul{list-style:none;margin:0;padding:0;}
-.tail li{background:var(--card);border:1px solid var(--line);border-radius:8px;
+.tail>ul{list-style:none;margin:0;padding:0;}
+.tail>ul>li{background:var(--card);border:1px solid var(--line);border-radius:8px;
   padding:12px 15px;margin:0 0 8px;font-size:.95rem;}
 .tail li .d{color:var(--ink-2);font-size:.9rem;margin-top:.3em;}
 .tail li .b{color:var(--ink-3);font-size:.8rem;margin-top:.35em;
@@ -570,6 +663,7 @@ const THEME_SCRIPT = `
 
 function page(brief, baseDir) {
   const st = (e) => e.status ?? "open";
+  for (const e of brief.decisions) REFS.set(e.id, { title: e.title, label: e.short ?? derivedLabel(e.title) });
   /* One flow, ordered by state: what needs you first, then what is merely
      recorded. Nothing is hidden from the document — the filter decides what is
      on screen, and every entry keeps its number and its anchor for good. */
@@ -596,10 +690,38 @@ function page(brief, baseDir) {
     `<button type="button" class="chip chip-all" data-filter="all" aria-pressed="false">everything</button>` +
     `</nav>`;
 
-  const provenance = [
+  const stamps = [
     brief.generated ? `facts re-checked ${esc(brief.generated)}` : null,
-    brief.source ? esc(brief.source) : null,
   ].filter(Boolean).join(" · ");
+  const provenance = (stamps || brief.source)
+    ? `<div class="provenance">` +
+      (stamps ? `<p class="stamps">${stamps}</p>` : "") +
+      (brief.source ? `<p class="source"><span class="k">Source</span>${inline(brief.source)}</p>` : "") +
+      `</div>`
+    : "";
+
+  /* What is waiting on the reader comes from the entries themselves, so it can
+     never disagree with the chips. */
+  const open = entries.filter((e) => st(e) === "open");
+  const cite = (e) => inline(e.id);
+  const awaiting = `<section class="awaiting">` + (
+    open.length === 0
+      ? `<p class="none"><strong>Waiting on you:</strong> nothing — no entry needs a ruling.</p>`
+      : open.length === 1
+        ? `<p><strong>Waiting on you:</strong> ${cite(open[0])}</p>`
+        : `<h2>Waiting on you</h2><ul>${open.map((e) => `<li>${cite(e)}</li>`).join("")}</ul>`
+  ) + `</section>`;
+
+  const changes = brief.changes?.length
+    ? `<section class="changes"><h2>Since the last version</h2>` +
+      `<ul>${brief.changes.map((c) => `<li>${inline(c)}</li>`).join("")}</ul></section>`
+    : "";
+  const background = brief.background
+    ? `<details class="background"><summary>Background</summary>${prose(brief.background)}</details>`
+    : "";
+  const summary = `<div class="context">${changes}${awaiting}` +
+    (brief.context ? `<div class="free">${prose(brief.context)}</div>` : "") +
+    `${background}</div>`;
 
   const tocRow = (e) => `<li data-state="${st(e)}"><a href="#${esc(e.id)}">` +
     `<span class="n">${esc(e.id)}</span><span>${inline(e.title)}</span>` +
@@ -613,7 +735,7 @@ function page(brief, baseDir) {
     <h2>Already fixed</h2>
     <p class="lede">Unambiguous, no judgement needed, so it was done rather than asked about.</p>
     <ul>${mech.map((m) => `<li><span class="done-mark">✓</span>${inline(m.summary)}` +
-      (m.detail ? `<div class="d">${inline(m.detail)}</div>` : "") +
+      (m.detail ? `<div class="d">${prose(m.detail)}</div>` : "") +
       (m.evidence?.length ? `<div class="b">${m.evidence.map((e) => `<code>${esc(e.ref)}</code>`).join(" · ")}</div>` : "") +
       `</li>`).join("")}</ul></section>` : "";
 
@@ -621,8 +743,8 @@ function page(brief, baseDir) {
     <h2>Outstanding work</h2>
     <p class="lede">Agreed and understood, not yet done. Nothing here needs a ruling.</p>
     <ul>${out.map((o) => `<li>${inline(o.summary)}` +
-      (o.detail ? `<div class="d">${inline(o.detail)}</div>` : "") +
-      (o.blockedBy ? `<div class="b">Waits on ${esc(o.blockedBy)}</div>`
+      (o.detail ? `<div class="d">${prose(o.detail)}</div>` : "") +
+      (o.blockedBy ? `<div class="b">Waits on ${inline(o.blockedBy)}</div>`
         : o.state && o.state !== "not-started" ? `<div class="b">${esc(o.state.replace("-", " "))}</div>` : "") +
       `</li>`).join("")}</ul></section>` : "";
 
@@ -631,10 +753,10 @@ function page(brief, baseDir) {
 <div class="wrap">
   <header class="top">
     <h1>${inline(brief.title)}</h1>
-    <p class="subject">${inline(brief.subject)}</p>
+    <div class="subject">${prose(brief.subject)}</div>
     ${filters}
-    ${provenance ? `<p class="provenance">${provenance}</p>` : ""}
-    ${brief.context ? `<div class="context">${prose(brief.context)}</div>` : ""}
+    ${provenance}
+    ${summary}
   </header>
   ${toc}
   ${entries.map((e) => entry(e, baseDir)).join("\n")}

@@ -137,6 +137,38 @@ entry's category), and the reader's last choice is remembered between visits.
 That is what keeps a long-running brief readable: closed entries stay citable
 for good without burying the three things that still need a decision.
 
+## The headline summary
+
+The box under the counts is the first thing the reader sees, often on a phone.
+It is built from fields, not written as one paragraph:
+
+| Field | Shown as | Holds |
+|---|---|---|
+| `changes` | **Since the last version** — a list | One item per entry that moved state or is new: *"Q-3 is complete: the resume action landed."* Leave it out on a first version. |
+| — | **Waiting on you** | Worked out from the entries still `open`, so it can never disagree with the counts. Nothing to write. |
+| `context` | Free text | Only what the reader needs before entry one. Short. |
+| `background` | **Background**, folded away | Earlier history the reader may want but does not need to make a ruling. |
+
+Never put the changes, the waiting list or old history into `context`. That is
+how the summary turns back into a wall.
+
+The stamps (`generated`) and the `source` get a line each, so the source never
+reads as part of the date line.
+
+## Citing entries
+
+**An id is always followed by a short label.** Give every entry a `short` label
+of five words or fewer. Wherever prose on the page cites `Q-3`, the renderer
+links it to the entry and adds the label the first time it appears in that
+field: *Q-3 (resuming a handed-back import)*. The same goes for `blockedBy` in
+outstanding work and for the waiting list.
+
+- Write the bare id in the JSON and let the page add the label. If you write a
+  label yourself, as `Q-3 (…)`, the page links the id and leaves your words alone.
+- An entry with no `short` gets a label cut from its title, which reads worse.
+  The validator warns about every cited entry that has none.
+- An id inside `code` or a link is left as written.
+
 **Not every fix needs an entry.** Something unambiguous, with no judgement in
 it, goes in `mechanical` — handled without asking, listed so you know it was
 done. An entry is for something that needed you.
@@ -172,6 +204,18 @@ The brief is read by a person, so it is written for a person.
   first, in the same sentence, with the identifier trailing as the pointer.
   *"the rule that two suppliers must independently show the fault (FR-018)"* is
   readable and still searchable; `FR-018` alone is neither.
+- **Two or more things named in a row make a list.** Entries, reasons, files,
+  steps, changes: end the lead-in with a colon and put each item on its own
+  `- ` line (or `1. ` where the order matters). This applies to every prose
+  field, including `context`, `subject`, the problem and explanation, the
+  unwound text, option summaries and costs, decision and resolution notes, and
+  the details of handled and outstanding work. The page renders those lines as
+  real lists, and a paragraph can come before or after the list in the same
+  field.
+
+  ```json
+  "brief": "The person is left with nothing to act on:\n- no button that resumes\n- no saved position\n- no message saying what to do"
+  ```
 - Problem first, background second. Never the reverse.
 - Mark unproven claims as unproven, explicitly, and say what evidence would
   settle them.
@@ -206,6 +250,12 @@ schema cannot state: exactly one recommended option and it must be listed first,
 every citation carries a note, every option carries a price, a closed entry
 carries proof, an id is never reused, and outstanding work never waits on an
 entry that does not exist.
+
+It also warns, without refusing, about the writing rules above. It flags:
+
+- prose that cites an id that is not on the page
+- a cited entry with no `short` label
+- a sentence that names three or more things in a row, or cites two or more entries, when it should be a list
 
 Errors name the entry, the field, and what to do. Fix them all before rendering;
 the renderer runs the same check and refuses anyway.
@@ -340,6 +390,9 @@ option first and labelled `(Recommended)`. Only the page is dropped.
 | A problem with no recommendation | Always recommend one option and say why |
 | Solutions with no cost attached | Price each one: work, risk, what it rules out |
 | Identifiers standing in for meaning | Meaning first, identifier as the pointer |
+| An entry with no `short` label | Give it one; the page shows it after every citation of the id |
+| The summary written as one paragraph | Use `changes` and `background`; keep `context` short |
+| "A, B, C and D" in a sentence | One `- ` line per item |
 | Publishing a second page for the same subject | Republish to the same URL |
 | Republishing without re-deriving the facts | Re-check every claim against the tree first |
 | Publishing without sending the link | Put the URL in your chat reply |

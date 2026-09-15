@@ -1,13 +1,19 @@
 {
   "title": "Invoice importer — open decisions",
   "subject": "Three things about the supplier-invoice importer need your ruling before the release can be signed off.",
-  "generated": "2026-09-11",
+  "generated": "2026-09-14",
   "source": "the implementation review on the importer branch, re-checked against the branch tip this morning",
-  "context": "The review produced eleven separate complaints. Nine of them come from three underlying causes, so they are grouped below as three decisions rather than eleven. The other two were unambiguous mistakes and are already fixed — they are listed at the end so you know they were handled.",
+  "changes": [
+    "Q-3 is complete: the resume action landed, with a twenty-minute limit on holding a batch open.",
+    "Nothing new has been raised since the last version."
+  ],
+  "context": "Sign-off waits on both open rulings.",
+  "background": "The review produced eleven separate complaints. Nine of them come from three underlying causes, so they are grouped below as three decisions rather than eleven. The other two were unambiguous mistakes and are already fixed — they are listed at the end so you know they were handled.",
   "decisions": [
     {
       "id": "Q-1",
       "title": "The proof that the reader works was built on files we no longer use",
+      "short": "measured against retired files",
       "problem": "The measurement that says the invoice reader is 94% accurate was taken against ten saved PDF files. Those saved files were replaced with live downloads from the suppliers last week, and the measurement was never re-taken.",
       "brief": "That number is the only evidence we have that the reader is good enough to ship. Every later decision on this branch cites it. If the live documents differ from the saved copies — and they already differ in two known ways, because two suppliers changed their invoice template — then the number is not about the system we are about to release. It is about a system that no longer exists. We would be signing off on a measurement of the wrong thing.",
       "evidence": [
@@ -28,7 +34,7 @@
         }
       ],
       "unwound": {
-        "now": "The benchmark loads ten PDF files from disk, runs the reader over each, and compares its answers to a hand-written answer key. Nothing in that path touches the network, so it cannot notice that a supplier has redesigned a template.\n\nThe live path does something different: it fetches the document, waits for the whole file, and only then reads it. Two of the ten suppliers have changed their template since the copies were saved.",
+        "now": "The benchmark works in three steps:\n- load ten PDF files from disk\n- run the reader over each\n- compare its answers to a hand-written answer key\n\nNothing in that path touches the network, so it cannot notice that a supplier has redesigned a template.\n\nThe live path does something different:\n- fetch the document\n- wait for the whole file\n- only then read it\n\nTwo of the ten suppliers have changed their template since the copies were saved.",
         "whyWrong": "We are reporting a number as though it describes the shipping system. It describes a fixture. The gap is not theoretical — we already know two of ten documents differ, so the true accuracy could be anywhere from 74% to 94% and we cannot say which.",
         "diagrams": [
           {
@@ -43,17 +49,12 @@
           "id": "rerun-live",
           "label": "Re-take the measurement against the ten live documents before sign-off",
           "recommended": true,
-          "summary": "Point the benchmark at live downloads instead of the saved files, re-run it, and re-write the answer key for the two templates that changed. Sign-off waits for the new number.",
+          "summary": "Sign-off waits for a new number, taken like this:\n1. Point the benchmark at live downloads instead of the saved files.\n2. Re-write the answer key for the two templates that changed.\n3. Re-run it.",
           "cost": {
-            "work": "About a day: half of it re-writing the answer key for the two changed templates, half waiting on the run.",
+            "work": "About a day:\n- half of it re-writing the answer key for the two changed templates\n- half waiting on the run",
             "risk": "The new number may be materially worse, which would itself delay the release. That is the point of taking it.",
             "forecloses": "Nothing."
-          },
-          "steps": [
-            "Re-write the answer key for the two suppliers whose templates changed.",
-            "Run the benchmark against live downloads, not the saved files.",
-            "Record the new number next to the old one so the gap is visible."
-          ]
+          }
         },
         {
           "id": "ship-caveat",
@@ -87,6 +88,7 @@
     {
       "id": "Q-2",
       "title": "One failure of the parsing service is handled silently, and has cost us four measurements",
+      "short": "silent parsing failure",
       "problem": "When the call to the parsing service fails because the connection drops, the code catches it in a general-purpose handler that records nothing. The run continues and the result looks like a normal, confident answer.",
       "brief": "The four other ways this call can fail each set a flag we can look for afterwards. This fifth one does not. That means a benchmark run can contain silent holes and still report a clean number. The file's own comment says this class of mistake has already cost us measurements four times — and then the file repeats it.",
       "evidence": [
@@ -147,8 +149,9 @@
     {
       "id": "Q-3",
       "title": "An import can stop halfway and hand back to the person, and nothing says what happens next",
+      "short": "resuming a handed-back import",
       "problem": "When the importer cannot read a field, it stops and hands the run back to whoever started it. The design says this is not the end of the run, but no part of the system defines how a handed-back run resumes.",
-      "brief": "In practice the run just stops. The person sees a half-imported batch and no instruction. There is no button that resumes, no saved position, and no message saying what went wrong or what to do. From their side this is indistinguishable from a crash, except that it is silent.",
+      "brief": "In practice the run just stops. The person sees a half-imported batch and nothing to act on:\n- no button that resumes\n- no saved position\n- no message saying what went wrong or what to do\n\nFrom their side this is indistinguishable from a crash, except that it is silent.",
       "evidence": [
         {
           "kind": "document",
@@ -265,7 +268,8 @@
     },
     {
       "summary": "Replace the two supplier templates in the benchmark whose documents changed.",
-      "state": "in-progress"
+      "state": "in-progress",
+      "detail": "Part of re-taking the measurement in Q-1, but it needs doing whichever way that is ruled."
     }
   ]
 }
