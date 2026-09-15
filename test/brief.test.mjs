@@ -320,3 +320,15 @@ test("an old differs note is shown as a remark, not as an amendment", () => {
   assert.match(html, /Landed differently:<\/strong> The comparison was not reported\./);
   assert.doesNotMatch(html, /class="chip chip-complete chip-amended/);
 });
+
+test("a sentence that strings three or more entry ids together is flagged as a list", () => {
+  const b = brief([
+    entry("Q-1", { bearing: "escalated", bearingReason: "Export only." }),
+    entry("Q-2", { bearing: "escalated", bearingReason: "Export only." }),
+    entry("Q-3", { bearing: "escalated", bearingReason: "Export only." }),
+  ], { context: "Three questions came in (Q-1, Q-2 and Q-3), all about the export." });
+  const r = messages(b);
+  assert.ok(r.warnings.some((m) => m.startsWith("context") && m.includes("list")), r.warnings.join("\n"));
+  const ok = messages(brief([entry("Q-1", { bearing: "escalated", bearingReason: "See Q-1 and nothing else." })]));
+  assert.ok(!ok.warnings.some((m) => m.includes("list")));
+});

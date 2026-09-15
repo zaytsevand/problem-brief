@@ -351,7 +351,7 @@ function semanticErrors(brief) {
     }
   });
 
-  out.push(...stateErrors(brief), ...bearingErrors(brief), ...referenceErrors(brief), ...timestampErrors(brief));
+  out.push(...stateErrors(brief), ...bearingErrors(brief), ...referenceErrors(brief), ...enumerationWarnings(brief), ...timestampErrors(brief));
   return out;
 }
 
@@ -391,6 +391,24 @@ function bearingErrors(brief) {
    citation to an id that is not on the page is a dead link and, usually, a typo. */
 
 const CITED = /\bQ-\d+\b/g;
+
+/* Three or more entries named in one sentence is a list written as prose: the
+   reader has to unpick it, and the page cannot group it. */
+function enumerationWarnings(brief) {
+  const out = [];
+  const walk = (v, path) => {
+    if (typeof v === "string") {
+      const hit = v.split(/(?<=[.!?])\s+/).find((sentence) => new Set(sentence.match(CITED) ?? []).size >= 3);
+      if (hit) out.push({ path, severity: "warning", message: "names three or more entries in one sentence — write them as a list",
+        hint: "one line per entry with what it is, e.g. a dash list, or typed changes in the summary" });
+    } else if (Array.isArray(v)) v.forEach((x, i) => walk(x, `${path}[${i}]`));
+    else if (v && typeof v === "object") {
+      for (const [k, x] of Object.entries(v)) if (!["id", "rolledUp", "evidence"].includes(k)) walk(x, path ? `${path} → ${k}` : k);
+    }
+  };
+  walk(brief, "");
+  return out;
+}
 
 function referenceErrors(brief) {
   const ids = new Set((brief.decisions ?? []).map((e) => e?.id));

@@ -277,7 +277,8 @@ The brief is read by a person, so it is written for a person.
 - Problem first, background second. Never the reverse.
 - **Two or more things enumerated are a list, not a sentence.** Every prose field
   renders `- ` and `1. ` lines as real lists, including a lead-in line followed
-  straight by its list.
+  straight by its list. The validator warns when one sentence names three or
+  more entries.
 - Mark unproven claims as unproven, explicitly, and say what evidence would
   settle them.
 
