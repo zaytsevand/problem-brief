@@ -336,6 +336,9 @@ function semanticErrors(brief) {
     if (typeof c === "string") {
       out.push({ path: where, severity: "warning", message: "has no kind, so it is shown last among the notes",
         hint: `write it as { "kind": …, "text": … } with kind one of ${KINDS.join(", ")}` });
+    } else if (c?.id && !(brief.decisions ?? []).some((e) => e?.id === c.id)) {
+      out.push({ path: `${where} → id`, message: `points at ${c.id}, which is not an entry on this page`,
+        hint: "fix the id, or drop it if the change is not about one entry" });
     } else if (c && typeof c === "object" && !KINDS.includes(c.kind)) {
       const guess = typeof c.kind === "string" ? nearest(c.kind, KINDS) : null;
       out.push({ path: `${where} → kind`, message: `is ${JSON.stringify(c.kind)}, which is not a transition`,

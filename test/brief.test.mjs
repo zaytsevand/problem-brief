@@ -190,7 +190,7 @@ test("a superseded entry reads as retracted", () => {
 
 /* ── changes: typed transitions, grouped and marked ────────────────────── */
 
-test("changes are grouped by transition: new, changed, then closings, notes last", () => {
+test("changes are grouped by transition: changed, then closings, notes last", () => {
   const html = render(brief([
     entry("Q-1", { bearing: "escalated", bearingReason: "Export only." }),
   ], { changes: [
@@ -202,11 +202,11 @@ test("changes are grouped by transition: new, changed, then closings, notes last
   ] }));
   const since = html.match(/<h2>Since the last version<\/h2>([^]*?)<\/section>/)[1];
   const order = [...since.matchAll(/data-kind="(\w+)"/g)].map((m) => m[1]);
-  assert.deepEqual(order, ["raised", "changed", "completed", "retracted", "note"]);
-  for (const k of ["raised", "changed", "completed", "retracted"]) {
+  assert.deepEqual(order, ["changed", "completed", "retracted", "note"]);
+  assert.match(html, /New since the last version[^]*class="tr-icon tr-raised"[^]*Since the last version/);
+  for (const k of ["changed", "completed", "retracted"]) {
     assert.match(since, new RegExp(`data-kind="${k}"[^]*?<svg[^>]*class="tr-icon tr-${k}"`));
   }
-  assert.match(since, /<h3[^>]*>New<span class="tr-n">1<\/span><\/h3>/);
   assert.match(since, /<h3[^>]*>Changed<span class="tr-n">1<\/span><\/h3>/);
   assert.match(since, /<h3[^>]*>Done<span class="tr-n">1<\/span><\/h3>/);
   assert.match(since, /<h3[^>]*>Retracted<span class="tr-n">1<\/span><\/h3>/);
@@ -230,5 +230,35 @@ test("a deliberate note is quiet and shown with the notes", () => {
     { changes: [{ kind: "note", text: "Everything is on local branches." }, { kind: "raised", text: "Q-1 raised." }] });
   assert.deepEqual(messages(b).warnings, []);
   const since = render(b).match(/<h2>Since the last version<\/h2>([^]*?)<\/section>/)[1];
-  assert.deepEqual([...since.matchAll(/data-kind="(\w+)"/g)].map((m) => m[1]), ["raised", "note"]);
+  assert.deepEqual([...since.matchAll(/data-kind="(\w+)"/g)].map((m) => m[1]), ["note"]);
+});
+
+/* ── new additions pinned to the top ───────────────────────────────────── */
+
+test("new additions are pinned above everything, blockers first, then escalated, then other", () => {
+  const html = render(brief([
+    entry("Q-1", { short: "ledger posting", bearing: "escalated", bearingReason: "Export only." }),
+    entry("Q-2", { short: "duplicate invoices", bearing: "blocks-goal", bearingReason: "Posting needs it." }),
+    entry("Q-3", { status: "complete", resolution: { date: "2026-09-15", note: "Fixed in the importer." } }),
+  ], { changes: [
+    { kind: "completed", text: "Q-3 is done." },
+    { kind: "raised", text: "Names can reach the logs.", id: "Q-1" },
+    { kind: "raised", text: "New work: write the retry test." },
+    { kind: "raised", text: "Q-2 raised: invoices post twice." },
+  ] }));
+  const top = html.match(/<div class="context">([^]*?)<\/header>/)[1];
+  const first = top.match(/<section[^>]*>([^]*?)<\/section>/)[1];
+  assert.match(first, /<h2>New since the last version<\/h2>/);
+  const groups = [...first.matchAll(/data-bearing="([\w-]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(groups, ["blocks-goal", "escalated", "other"]);
+  assert.match(first, /data-bearing="blocks-goal"[^]*Q-2[^]*data-bearing="escalated"[^]*Names can reach the logs[^]*data-bearing="other"[^]*retry test/);
+  const since = top.match(/<h2>Since the last version<\/h2>([^]*?)<\/section>/)[1];
+  assert.doesNotMatch(since, /data-kind="raised"/);
+  assert.ok(top.indexOf("New since the last version") < top.indexOf("Since the last version<"));
+});
+
+test("a raised change pointing at an unknown id is refused", () => {
+  const r = messages(brief([entry("Q-1", { bearing: "escalated", bearingReason: "Export only." })],
+    { changes: [{ kind: "raised", text: "Something new.", id: "Q-9" }] }));
+  assert.ok(r.errors.some((m) => m.includes("Q-9")), r.errors.join("\n"));
 });

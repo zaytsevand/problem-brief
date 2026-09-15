@@ -401,9 +401,35 @@ const TRANSITIONS = [
   ["note", "Notes", '<circle cx="8" cy="8" r="2" class="fill"/>'],
 ];
 
+const trIcon = (kind) => `<svg class="tr-icon tr-${kind}" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">` +
+  `${TRANSITIONS.find(([k]) => k === kind)[2]}</svg>`;
+const changeText = (c) => inline(typeof c === "string" ? c : c.text);
+
+/* New additions are what the reader has never seen, so they are pinned above
+   everything else on the page whatever their weight — and within them, what
+   stands in the goal's way comes first. */
+function newAdditions(list) {
+  const raised = list.filter((c) => typeof c === "object" && c.kind === "raised");
+  if (!raised.length) return "";
+  const bearingOf = (c) => {
+    const id = c.id ?? String(c.text).match(/\bQ-\d+\b/)?.[0];
+    const e = id && ENTRIES.get(id);
+    const live = e && ((e.status ?? "open") === "open" || e.status === "decided");
+    return live && e.bearing ? e.bearing : "other";
+  };
+  const groups = [["blocks-goal", "Blocks the goal"], ["escalated", "Escalated, not blocking"], ["other", "Other new work"]];
+  return `<section class="new-additions"><h2>New since the last version</h2><div class="tr">` +
+    groups.map(([key, label]) => {
+      const items = raised.filter((c) => bearingOf(c) === key);
+      if (!items.length) return "";
+      return `<div class="tr-group" data-bearing="${key}"><h3 class="tr-head">${label}<span class="tr-n">${items.length}</span></h3><ul>` +
+        items.map((c) => `<li>${trIcon("raised")}<span>${changeText(c)}</span></li>`).join("") + `</ul></div>`;
+    }).join("") + `</div></section>`;
+}
+
 function transitions(list) {
   const kindOf = (c) => (typeof c === "string" ? "note" : c.kind);  // an untyped line is a note
-  return `<div class="tr">` + TRANSITIONS.map(([kind, label, glyph]) => {
+  return `<div class="tr">` + TRANSITIONS.filter(([kind]) => kind !== "raised").map(([kind, label, glyph]) => {
     const items = list.filter((c) => kindOf(c) === kind);
     if (!items.length) return "";
     const icon = `<svg class="tr-icon tr-${kind}" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">${glyph}</svg>`;
@@ -503,6 +529,8 @@ h2,h3,h4{text-wrap:balance;}
 .tr-icon .fill{fill:currentColor;}
 .tr-icon .knock{stroke:var(--card);stroke-width:1.8;}
 .tr-raised{color:var(--accent);}
+.new-additions h2{color:var(--accent);}
+.new-additions [data-bearing="blocks-goal"] .tr-head{color:var(--warn);}
 .tr-changed{color:var(--warn);}
 .tr-completed{color:var(--rec);}
 .tr-retracted{color:var(--ink-3);}
@@ -755,8 +783,10 @@ function page(brief, baseDir) {
       waitingList("Escalated, not blocking", escalated)
     : `<p>Nothing is waiting on a ruling.</p>`;
 
-  const changes = brief.changes?.length
-    ? `<section><h2>Since the last version</h2>${transitions(brief.changes)}</section>` : "";
+  const pinned = newAdditions(brief.changes ?? []);
+  const rest = (brief.changes ?? []).filter((c) => !(typeof c === "object" && c.kind === "raised"));
+  const changes = pinned + (rest.length
+    ? `<section><h2>Since the last version</h2>${transitions(rest)}</section>` : "");
   const background = brief.background || brief.source
     ? `<details class="background"><summary>Background</summary>${prose(brief.background)}` +
       (brief.source ? `<p class="source">These findings come from ${inline(brief.source)}.</p>` : "") + `</details>` : "";

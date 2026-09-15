@@ -327,6 +327,11 @@
           "type": "string",
           "minLength": 3,
           "description": "One plain line: the id with what moved, e.g. 'Q-2: open → decided, name the fifth failure'."
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^Q-\\d+$",
+          "description": "The entry this change is about, when the text does not start with it. A raised change is pinned to the top of the page, grouped by that entry's bearing on the goal; without an id the first entry id in the text is used."
         }
       }
     },

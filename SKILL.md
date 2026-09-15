@@ -231,9 +231,13 @@ one paragraph:
   with its `kind`: `raised` (new entry or work), `changed` (moved state without
   closing, or a ruling changed), `completed` (carried out), `retracted` (went
   away or was overtaken), or `note` (about the brief as a whole). The page
-  groups them in that order — new first, changes next, closings last, notes
-  after — and marks each kind with its own icon. Write the kind; never order
-  the list by hand.
+  groups them — changes, then closings, then notes — and marks each kind with
+  its own icon. Write the kind; never order the list by hand.
+- **New additions are pinned above everything**, whatever their weight: every
+  `raised` change goes to a "New since the last version" block at the very top,
+  split into what blocks the goal, then what is escalated, then other new work.
+  The entry is taken from the change's `id`, or the first entry id in its text.
+  A question the reader has not seen yet is never left at the bottom of the box.
 - **Waiting on you** — built by the renderer from the entries: what blocks the
   goal, then what is escalated. Do not write it by hand.
 - `context` — anything else the reader needs before entry one. Optional.
@@ -481,6 +485,7 @@ end with the chat summary.
 | A chat summary that retells the brief | Bullets of what moved, ≤400 words, then the two lines: blocks the goal, escalated |
 | Presenting an unrelated decision as a blocker | Bracket it `"bearing": "escalated"` with its reason; only what stands in the goal's way is `blocks-goal` |
 | A headline summary written as one paragraph | `changes` as typed items; leave *waiting on you* to the renderer; history in `background` |
+| A new question recorded only in "Waiting on you" | Add a `raised` change with its `id`, so it is pinned to the top |
 | A change with no `kind` | Give it one, so it lands in its group with its icon; `note` only for the brief as a whole |
 | Keeping `generated` beside `updated` | Delete it; a re-check moves `updated` |
 
