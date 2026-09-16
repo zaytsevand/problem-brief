@@ -444,31 +444,30 @@ const trIcon = (kind) => `<svg class="tr-icon tr-${kind}" viewBox="0 0 16 16" wi
   `${TRANSITIONS.find(([k]) => k === kind)[2]}</svg>`;
 const changeText = (c) => inline(typeof c === "string" ? c : c.text);
 
-/* New additions are what the reader has never seen, so they are pinned above
-   everything else on the page whatever their weight — and within them, what
-   stands in the goal's way comes first. */
+/* New additions are what the reader has never seen, so they lead the change
+   list whatever their weight — and within them, what stands in the goal's way
+   comes first. They are groups inside the one change section, not a section of
+   their own: two headings naming the same period told the reader nothing. */
 function newAdditions(list) {
   const raised = list.filter((c) => typeof c === "object" && c.kind === "raised");
-  if (!raised.length) return "";
   const bearingOf = (c) => {
     const id = c.id ?? String(c.text).match(/\bQ-\d+\b/)?.[0];
     const e = id && ENTRIES.get(id);
     const live = e && ((e.status ?? "open") === "open" || e.status === "decided");
     return live && e.bearing ? e.bearing : "other";
   };
-  const groups = [["blocks-goal", "Blocks the goal"], ["escalated", "Escalated, not blocking"], ["other", "Other new work"]];
-  return `<section class="new-additions"><h2>New since the last version</h2><div class="tr">` +
-    groups.map(([key, label]) => {
-      const items = raised.filter((c) => bearingOf(c) === key);
-      if (!items.length) return "";
-      return `<div class="tr-group" data-bearing="${key}"><h3 class="tr-head">${label}<span class="tr-n">${items.length}</span></h3><ul>` +
-        items.map((c) => `<li>${trIcon("raised")}<span>${changeText(c)}</span></li>`).join("") + `</ul></div>`;
-    }).join("") + `</div></section>`;
+  const groups = [["blocks-goal", "New, blocking the goal"], ["escalated", "New, escalated, not blocking"], ["other", "New"]];
+  return groups.map(([key, label]) => {
+    const items = raised.filter((c) => bearingOf(c) === key);
+    if (!items.length) return "";
+    return `<div class="tr-group" data-bearing="${key}"><h3 class="tr-head">${label}<span class="tr-n">${items.length}</span></h3><ul>` +
+      items.map((c) => `<li>${trIcon("raised")}<span>${changeText(c)}</span></li>`).join("") + `</ul></div>`;
+  }).join("");
 }
 
 function transitions(list) {
   const kindOf = (c) => (typeof c === "string" ? "note" : c.kind);  // an untyped line is a note
-  return `<div class="tr">` + TRANSITIONS.filter(([kind]) => kind !== "raised").map(([kind, label, glyph]) => {
+  return `<div class="tr">` + newAdditions(list) + TRANSITIONS.filter(([kind]) => kind !== "raised").map(([kind, label, glyph]) => {
     if (kind === "amended") return "";
     let items = list.filter((c) => kindOf(c) === kind);
     if (!items.length) return "";
@@ -578,8 +577,8 @@ h2,h3,h4{text-wrap:balance;}
 .tr-icon .fill{fill:currentColor;}
 .tr-icon .knock{stroke:var(--card);stroke-width:1.8;}
 .tr-raised{color:var(--accent);}
-.new-additions h2{color:var(--accent);}
-.new-additions [data-bearing="blocks-goal"] .tr-head{color:var(--warn);}
+.tr [data-bearing] .tr-head{color:var(--accent);}
+.tr [data-bearing="blocks-goal"] .tr-head{color:var(--warn);}
 .tr-changed{color:var(--warn);}
 .tr-completed{color:var(--rec);}
 .tr-retracted{color:var(--ink-3);}
@@ -844,15 +843,14 @@ function page(brief, baseDir) {
       waitingList("Escalated, not blocking", escalated)
     : `<p>Nothing is waiting on a ruling.</p>`;
 
-  const pinned = newAdditions(brief.changes ?? []);
-  const rest = (brief.changes ?? []).filter((c) => !(typeof c === "object" && c.kind === "raised"));
-  const changes = pinned + (rest.length
-    ? `<section><h2>Since the last version</h2>${transitions(rest)}</section>` : "");
+  const changes = brief.changes?.length
+    ? `<section class="changes"><h2>Since the last version</h2>${transitions(brief.changes)}</section>` : "";
   const background = brief.background || brief.source
     ? `<details class="background"><summary>Background</summary>${prose(brief.background)}` +
       (brief.source ? `<p class="source">These findings come from ${inline(brief.source)}.</p>` : "") + `</details>` : "";
-  const summary = `<div class="context">${changes}` +
-    `<section><h2>Waiting on you</h2>${waiting}</section>` +
+  /* What asks the reader to act comes first; the history is for catching up. */
+  const summary = `<div class="context"><section><h2>Waiting on you</h2>${waiting}</section>` +
+    changes +
     (brief.context ? `<section>${prose(brief.context)}</section>` : "") +
     background + `</div>`;
 

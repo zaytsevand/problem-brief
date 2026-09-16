@@ -128,6 +128,9 @@ test("the summary renders as lists: what changed, and what waits on the reader",
   const top = html.match(/<header class="top">([^]*?)<\/header>/)[1];
   assert.match(top, /<h2>Since the last version<\/h2><div class="tr">/);
   assert.match(top, /<h2>Waiting on you<\/h2>/);
+  // Issue #9: what asks the reader to act comes before the history.
+  assert.ok(top.indexOf("<h2>Waiting on you</h2>") < top.indexOf("<h2>Since the last version</h2>"));
+  assert.ok(top.indexOf("<h2>Since the last version</h2>") < top.indexOf('class="background"'));
   assert.match(top, /Blocks the goal[^]*href="#Q-1"[^]*posting to the ledger/);
   assert.match(top, /Escalated, not blocking[^]*href="#Q-2"[^]*export format/);
   assert.match(top, /<details class="background"><summary>Background<\/summary>[^]*nine-advisor review/);
@@ -203,7 +206,7 @@ test("changes are grouped by transition: changed, then closings, notes last", ()
   const since = html.match(/<h2>Since the last version<\/h2>([^]*?)<\/section>/)[1];
   const order = [...since.matchAll(/data-kind="(\w+)"/g)].map((m) => m[1]);
   assert.deepEqual(order, ["changed", "completed", "retracted", "note"]);
-  assert.match(html, /New since the last version[^]*class="tr-icon tr-raised"[^]*Since the last version/);
+  assert.match(since, /^<div class="tr"><div class="tr-group" data-bearing="escalated">[^]*?class="tr-icon tr-raised"/);
   for (const k of ["changed", "completed", "retracted"]) {
     assert.match(since, new RegExp(`data-kind="${k}"[^]*?<svg[^>]*class="tr-icon tr-${k}"`));
   }
@@ -231,11 +234,12 @@ test("a deliberate note is quiet and shown with the notes", () => {
   assert.deepEqual(messages(b).warnings, []);
   const since = render(b).match(/<h2>Since the last version<\/h2>([^]*?)<\/section>/)[1];
   assert.deepEqual([...since.matchAll(/data-kind="(\w+)"/g)].map((m) => m[1]), ["note"]);
+  assert.ok(since.indexOf('data-bearing="other"') < since.indexOf('data-kind="note"'));
 });
 
 /* ── new additions pinned to the top ───────────────────────────────────── */
 
-test("new additions are pinned above everything, blockers first, then escalated, then other", () => {
+test("new additions lead the one change section, blockers first, then escalated, then other", () => {
   const html = render(brief([
     entry("Q-1", { short: "ledger posting", bearing: "escalated", bearingReason: "Export only." }),
     entry("Q-2", { short: "duplicate invoices", bearing: "blocks-goal", bearingReason: "Posting needs it." }),
@@ -247,14 +251,15 @@ test("new additions are pinned above everything, blockers first, then escalated,
     { kind: "raised", text: "Q-2 raised: invoices post twice." },
   ] }));
   const top = html.match(/<div class="context">([^]*?)<\/header>/)[1];
-  const first = top.match(/<section[^>]*>([^]*?)<\/section>/)[1];
-  assert.match(first, /<h2>New since the last version<\/h2>/);
-  const groups = [...first.matchAll(/data-bearing="([\w-]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(groups, ["blocks-goal", "escalated", "other"]);
-  assert.match(first, /data-bearing="blocks-goal"[^]*Q-2[^]*data-bearing="escalated"[^]*Names can reach the logs[^]*data-bearing="other"[^]*retry test/);
+  // Issue #9: one heading for the period, the new items pinned first inside it.
+  assert.doesNotMatch(top, /New since the last version/);
+  assert.equal([...top.matchAll(/<h2>Since the last version<\/h2>/g)].length, 1);
   const since = top.match(/<h2>Since the last version<\/h2>([^]*?)<\/section>/)[1];
+  const groups = [...since.matchAll(/data-(bearing|kind)="([\w-]+)"/g)].map((m) => m[2]);
+  assert.deepEqual(groups, ["blocks-goal", "escalated", "other", "completed"]);
+  assert.match(since, /data-bearing="blocks-goal"[^]*Q-2[^]*data-bearing="escalated"[^]*Names can reach the logs[^]*data-bearing="other"[^]*retry test/);
+  assert.match(since, /<h3[^>]*>New, blocking the goal<span class="tr-n">1<\/span><\/h3>/);
   assert.doesNotMatch(since, /data-kind="raised"/);
-  assert.ok(top.indexOf("New since the last version") < top.indexOf("Since the last version<"));
 });
 
 test("a raised change pointing at an unknown id is refused", () => {

@@ -52,7 +52,7 @@
     },
     "changes": {
       "type": "array",
-      "description": "What moved since the last version, one item per change. Give each its kind, so the page can group them — new first, then changes, then closings — and mark each with its icon. Entry ids become links carrying the entry's short label. A plain string is still accepted, as a general note shown last.",
+      "description": "What moved since the last version, one item per change. Give each its kind, so the page can group them under one heading — new first, then changes, then closings — and mark each with its icon. Entry ids become links carrying the entry's short label. A plain string is still accepted, as a general note shown last.",
       "items": {
         "anyOf": [
           {
@@ -361,7 +361,7 @@
         "id": {
           "type": "string",
           "pattern": "^Q-\\d+$",
-          "description": "The entry this change is about, when the text does not start with it. A raised change is pinned to the top of the page, grouped by that entry's bearing on the goal; without an id the first entry id in the text is used."
+          "description": "The entry this change is about, when the text does not start with it. A raised change leads the change list, grouped by that entry's bearing on the goal; without an id the first entry id in the text is used."
         }
       }
     },
