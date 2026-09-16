@@ -7,6 +7,8 @@
   "required": [
     "title",
     "subject",
+    "created",
+    "updated",
     "decisions"
   ],
   "additionalProperties": false,
@@ -22,30 +24,50 @@
       "minLength": 10,
       "description": "One plain sentence naming what this brief is about and who must act on it."
     },
+    "goal": {
+      "type": "string",
+      "minLength": 10,
+      "description": "What the current work is driving towards, in the operator's own words. Every open or ruled entry is judged against it: does it block the goal, or is it a real decision that can wait? Required once any entry blocks the goal."
+    },
+    "created": {
+      "$ref": "#/$defs/timestamp",
+      "description": "When this brief was first written. Set once and never changed."
+    },
+    "updated": {
+      "$ref": "#/$defs/timestamp",
+      "description": "When anything on this brief last changed. Never earlier than the updated stamp of any item on it."
+    },
     "generated": {
       "type": "string",
       "format": "date",
-      "description": "Date the facts on this page were last re-derived from the tree. Not the date the page was first written."
+      "description": "Retired. Re-checking the facts and every item's state is a change to the brief: move the brief's `updated` stamp instead. Still accepted so older briefs load, with a warning."
     },
     "source": {
       "type": "string",
-      "description": "What produced these findings, in plain English. e.g. 'the implementation review on the importer branch, 2026-09-11'."
+      "description": "What produced these findings, in plain English, e.g. 'the implementation review on the importer branch, 11 September'. Shown folded away with the background, never on the stamp line."
     },
     "context": {
       "type": "string",
-      "description": "What the reader needs before entry one, kept short. Optional. Never a summary of the entries, never the list of what changed (that is changes), and never older background (that is background). Anything that names two or more things is written as a list, one '- ' line each."
+      "description": "Free text the reader needs before entry one, when changes and background do not fit it. Optional. Write two or more things as a dash list, never as one run-on paragraph."
     },
     "changes": {
       "type": "array",
-      "description": "Since the last version of the page: one item per entry that moved state or is new, e.g. 'Q-3 is complete — the resume action landed.' Cite entries by id; the page adds each entry's short label. Leave out on a first version.",
+      "description": "What moved since the last version, one item per change. Give each its kind, so the page can group them — new first, then changes, then closings — and mark each with its icon. Entry ids become links carrying the entry's short label. A plain string is still accepted, as a general note shown last.",
       "items": {
-        "type": "string",
-        "minLength": 5
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 3
+          },
+          {
+            "$ref": "#/$defs/change"
+          }
+        ]
       }
     },
     "background": {
       "type": "string",
-      "description": "Earlier history the reader may want but does not need to make a ruling. Shown folded away under the summary."
+      "description": "Earlier history the reader may want but does not need to act: what happened on previous days, how the brief came about. Folded away under 'Background' so it never competes with what changed."
     },
     "decisions": {
       "type": "array",
@@ -85,6 +107,8 @@
       "type": "object",
       "required": [
         "id",
+        "created",
+        "updated",
         "title",
         "problem",
         "brief",
@@ -98,6 +122,14 @@
           "pattern": "^Q-[0-9]+$",
           "description": "Stable citation handle. Q-1, Q-2, … Never renumber an existing entry."
         },
+        "created": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When this entry was first written. Set once and never changed."
+        },
+        "updated": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When this entry last changed in any way — wording, evidence, status, ruling, resolution. Move it with every change, and only then."
+        },
         "title": {
           "type": "string",
           "minLength": 5,
@@ -108,7 +140,7 @@
           "type": "string",
           "minLength": 3,
           "maxLength": 40,
-          "description": "A label of five words or fewer, shown after the id wherever the page cites this entry: 'Q-3 (resuming a handed-back import)'. Lower case unless a word needs capitals. Without it the page cuts one from the title, which reads worse."
+          "description": "A label of two to five words for this entry, e.g. 'one-call page read'. Wherever the entry's id is cited on the page, it is shown as 'Q-29 (one-call page read)' so the reader never has to remember what a bare id means."
         },
         "problem": {
           "type": "string",
@@ -167,6 +199,19 @@
           "default": "open",
           "description": "open — needs your ruling. decided — you chose a way forward, it has not been carried out yet. complete — the chosen way forward has been carried out and the entry is closed; that covers work landing, a question being answered, or scope being cut, whichever the chosen option was. superseded — the problem went away or was overtaken, and nothing was carried out."
         },
+        "bearing": {
+          "type": "string",
+          "enum": [
+            "blocks-goal",
+            "escalated"
+          ],
+          "description": "How this entry bears on the brief's goal. blocks-goal: the goal cannot be reached until it is ruled on or carried out. escalated: a real decision for the operator that does not stand in the goal's way, so it stays visible but never reads as a blocker. Required while the entry is open or decided; re-judge it whenever the goal changes."
+        },
+        "bearingReason": {
+          "type": "string",
+          "minLength": 5,
+          "description": "One line saying why the entry is, or is not, on the goal's path. Required with bearing."
+        },
         "decision": {
           "type": "object",
           "required": [
@@ -216,7 +261,37 @@
             },
             "differs": {
               "type": "string",
-              "description": "Where what landed differs from the option that was chosen, and why. Leave out when it matches."
+              "description": "Retired in favour of amendments. Still accepted, shown as one amendment, with a warning."
+            },
+            "amendments": {
+              "type": "array",
+              "minItems": 1,
+              "description": "Where the implementer drifted from the recorded ruling by their own decision, one item per drift, each saying what was ruled, what was done instead and why. Its presence makes the entry 'complete, with amendments', which the page marks on the entry and in the summary. Never edit the ruling itself to match what landed.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "done",
+                  "why"
+                ],
+                "properties": {
+                  "ruled": {
+                    "type": "string",
+                    "minLength": 3,
+                    "description": "What the recorded ruling said, on this point. Optional when the option's own wording already says it."
+                  },
+                  "done": {
+                    "type": "string",
+                    "minLength": 3,
+                    "description": "What was carried out instead."
+                  },
+                  "why": {
+                    "type": "string",
+                    "minLength": 3,
+                    "description": "Why the implementer drifted: what they found that the ruling did not anticipate."
+                  }
+                }
+              }
             }
           }
         }
@@ -257,6 +332,38 @@
           }
         }
       ]
+    },
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "text"
+      ],
+      "description": "One change since the last version.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "raised",
+            "changed",
+            "completed",
+            "retracted",
+            "note"
+          ],
+          "description": "raised — a new entry or new outstanding work. changed — an entry moved state without closing (open → decided), or its ruling or content changed in a way that matters to the reader. completed — an entry or piece of work was carried out. retracted — an entry went away or was overtaken. note — about the brief as a whole rather than one entry; shown last."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 3,
+          "description": "One plain line: the id with what moved, e.g. 'Q-2: open → decided, name the fifth failure'."
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^Q-\\d+$",
+          "description": "The entry this change is about, when the text does not start with it. A raised change is pinned to the top of the page, grouped by that entry's bearing on the goal; without an id the first entry id in the text is used."
+        }
+      }
     },
     "evidence": {
       "type": "object",
@@ -497,13 +604,23 @@
     "mechanicalItem": {
       "type": "object",
       "required": [
-        "summary"
+        "summary",
+        "created",
+        "updated"
       ],
       "additionalProperties": false,
       "properties": {
         "summary": {
           "type": "string",
           "description": "What was wrong and what was done, in one sentence."
+        },
+        "created": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When this item was first written. Set once and never changed."
+        },
+        "updated": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When this item last changed in any way — wording, evidence, status, ruling, resolution. Move it with every change, and only then."
         },
         "detail": {
           "type": "string"
@@ -525,7 +642,9 @@
     "outstandingItem": {
       "type": "object",
       "required": [
-        "summary"
+        "summary",
+        "created",
+        "updated"
       ],
       "additionalProperties": false,
       "properties": {
@@ -533,23 +652,38 @@
           "type": "string",
           "description": "The work, named so the reader knows what it delivers."
         },
+        "created": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When this item was first written. Set once and never changed."
+        },
+        "updated": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When this item last changed in any way — wording, evidence, status, ruling, resolution. Move it with every change, and only then."
+        },
         "detail": {
           "type": "string"
         },
         "blockedBy": {
           "type": "string",
-          "description": "The entry id this waits on, where it waits on a ruling. e.g. Q-2. The page shows it with the entry's short label."
+          "description": "The entry id this waits on, where it waits on a ruling. e.g. Q-2. Once that entry is ruled, the item is no longer blocked — change its state."
         },
         "state": {
           "type": "string",
           "enum": [
             "not-started",
             "in-progress",
-            "blocked"
+            "blocked",
+            "done"
           ],
-          "default": "not-started"
+          "default": "not-started",
+          "description": "Where the work stands. 'blocked' only while blockedBy names an entry still awaiting a ruling. 'done' once it has been carried out — the item stays on the page, it is not deleted."
         }
       }
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "A moment with its time zone: YYYY-MM-DDTHH:MM, optional seconds, then Z or an offset. e.g. 2026-09-15T09:40Z or 2026-09-15T10:40+01:00."
     }
   }
 }

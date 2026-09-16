@@ -96,31 +96,46 @@ Start from it rather than from an empty file.
 
 The summary under the counts is structure, not a paragraph:
 
-- **Since the last version**, from `changes`, is one line per entry that moved or is new.
-- **Waiting on you** is worked out from the open entries.
+- **Since the last version**, from typed `changes`, with new entries first.
+- **Waiting on you** is worked out from the entries, so it cannot disagree with the counts.
 - `context` is short free text.
 - `background` is folded away.
 
 Wherever prose cites an entry, the page links the id and adds the entry's
-`short` label: *Q-3 (resuming a handed-back import)*. Lines starting `- ` or
-`1. ` in any prose field render as real lists, and the validator warns when a
-sentence enumerates things that should have been one.
+`short` label: *Q-3 (resuming a handed-back import)*. An entry with no label
+gets one cut from its title. Lines starting `- ` or `1. ` in any prose field
+render as real lists, and the validator warns when a sentence enumerates
+things that should have been one.
 
 ## An entry's life
 
 An entry is never deleted and never renumbered, because its number is how people
 cite it. It moves through four states instead:
 
-| State | Means |
-|---|---|
-| `open` | Waiting on a ruling. |
-| `decided` | A way forward was chosen; it has not been carried out. |
-| `complete` | The chosen option was carried out. Closed, with proof. |
-| `superseded` | The problem went away or was overtaken. |
+| State | Page shows | Means |
+|---|---|---|
+| `open` | blocks the goal / escalated, not blocking | Waiting on a ruling. |
+| `decided` | outstanding work | A way forward was chosen; it has not been carried out. |
+| `complete` | complete | The chosen option was carried out. Closed, with proof. |
+| `superseded` | retracted | The problem went away or was overtaken. |
+
+A brief names its `goal`, and every entry still waiting on a ruling or on work
+says how it bears on that goal: it **blocks the goal**, or it is **escalated,
+not blocking** — a real decision for the reader that can wait.
+
+Every run starts by bringing those states up to date, before any facts are
+re-checked. The brief and every item on it carry `created` and `updated`
+timestamps, and the page shows both, so the reader can see what moved. The
+validator rejects a status that contradicts the entry's own record (a ruling
+on an entry still marked open, work marked blocked on something already ruled)
+and timestamps that contradict each other. Each run ends with a short chat
+summary of what changed state.
 
 The counts along the top of the page are filters — click one and the page shows
-that category alone. It opens on what is awaiting a ruling, since that is the
-only part waiting on the reader. Everything stays in the document, so a link to
+that category alone. It opens on what blocks the goal, since that is what is
+waiting on the reader. Above the entries, a short summary lists what changed
+since the last version and what waits on the reader, with earlier history
+folded away. Everything stays in the document, so a link to
 an entry reaches it whatever the filter was, and a page without scripting shows
 the whole brief.
 
