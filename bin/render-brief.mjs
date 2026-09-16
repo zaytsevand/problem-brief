@@ -38,6 +38,30 @@ const esc = (s) => String(s ?? "")
    per page, before anything is rendered. */
 let ENTRIES = new Map();
 
+/* The words a label should never end on once it has been cut short. */
+const DANGLING = /\s+(?:the|a|an|and|or|of|to|in|on|for|with|that|is|are|was|by)$/i;
+
+/* A short label for an entry with none of its own: the title, cut at a word
+   boundary. An identifier never stands alone, so a clumsy label still beats
+   none. */
+function derivedLabel(title) {
+  const words = String(title).trim().split(/\s+/);
+  let out = "";
+  for (const w of words) {
+    const next = out ? `${out} ${w}` : w;
+    if (next.length > 36 && out) break;
+    out = next;
+  }
+  const cut = out.length < String(title).trim().length;
+  out = out.replace(/[.,;:—–-]+$/, "");
+  if (cut) {
+    while (DANGLING.test(out)) out = out.replace(DANGLING, "");
+    out += "…";
+  }
+  // "The proof that…" reads as a sentence start; an acronym keeps its capitals.
+  return /^[A-Z][a-z]/.test(out) ? out[0].toLowerCase() + out.slice(1) : out;
+}
+
 /* Every entry id in running text becomes a link to that entry. A bare id also
    carries the entry's short label, because an id alone means nothing to a reader
    who does not hold every entry in their head. An id the author already put in
@@ -56,7 +80,7 @@ function citations(html) {
     return part.replace(/(\()?\b(Q-\d+)\b(?!\s*\()/g, (m, open, id) => {
       const e = ENTRIES.get(id);
       if (!e) return m;
-      const label = e.short && !open && !labelled.has(id) ? ` (${esc(e.short)})` : "";
+      const label = !open && !labelled.has(id) ? ` (${esc(e.short ?? derivedLabel(e.title))})` : "";
       labelled.add(id);
       return `${open ?? ""}<a class="qref" href="#${id}" title="${esc(e.title)}">${id}${label}</a>`;
     });
@@ -377,17 +401,20 @@ function entry(e, baseDir) {
   const state = e.status ?? "open";
   const g = group(e);
   const live = state === "open" || state === "decided";
-  const bearing = live && e.bearing
-    ? `<p class="bearing"><span class="tag ${BEARING[e.bearing]}">${esc(STATE_LABEL[e.bearing === "blocks-goal" ? "blocks" : "escalated"])}</span>` +
-      `${inline(e.bearingReason)}</p>`
+  /* The bearing is named once, in the header. An open entry's state chip
+     already is its bearing; a ruled one's says "Outstanding work", so the
+     bearing gets a chip of its own beside it. The body keeps only the reason. */
+  const bearingChip = live && e.bearing && state !== "open"
+    ? `<span class="tag ${BEARING[e.bearing]}">${esc(STATE_LABEL[e.bearing === "blocks-goal" ? "blocks" : "escalated"])}</span>`
     : "";
+  const bearing = live && e.bearing ? `<p class="bearing">${inline(e.bearingReason)}</p>` : "";
   return `<section class="entry${state !== "open" ? " entry-closed" : ""}" id="${esc(e.id)}" data-state="${g}">
   <header class="entry-head">
     <a class="qid" href="#${esc(e.id)}">${esc(e.id)}</a>
     <h2>${inline(e.title, { refs: false })}</h2>
     ${amendmentsOf(e).length
       ? `<span class="chip chip-${g} chip-amended chip-static">${esc(STATE_LABEL[g])} · amended</span>`
-      : `<span class="chip chip-${g} chip-static">${esc(STATE_LABEL[g])}</span>`}
+      : `<span class="chip chip-${g} chip-static">${esc(STATE_LABEL[g])}</span>`}${bearingChip}
   </header>
   <p class="stamps">${stamps(e, "raised")}</p>
   ${bearing}
@@ -591,7 +618,6 @@ dl.amend dd{margin:0;}
   font-weight:650;color:var(--accent);margin-right:.6em;}
 a.qref{text-decoration:none;border-bottom:1px dotted currentColor;}
 .bearing{font-size:.9rem;color:var(--ink-2);margin:.2em 0 1em;}
-.bearing .tag{margin-right:.6em;}
 .tag-block{color:var(--warn);border:1px solid var(--warn);background:var(--warn-soft);}
 .chip-static.chip-blocks{color:var(--warn);border-color:var(--warn);background:var(--warn-soft);}
 .chip-static.chip-escalated{color:var(--ink-2);border-color:var(--line-2);background:var(--card);}
@@ -617,6 +643,7 @@ nav.toc .done{color:var(--ink-3);font-size:.8em;flex:none;margin-left:auto;}
   background:var(--accent-soft);padding:.3em .6em;border-radius:5px;text-decoration:none;}
 .entry-head h2{font-size:1.32rem;line-height:1.28;margin:0;letter-spacing:-.005em;flex:1 1 12ch;min-width:0;}
 .entry-head{flex-wrap:wrap;}
+.entry-head .tag{flex:none;align-self:center;}
 .stamps{font-family:ui-sans-serif,system-ui,sans-serif;font-size:.78rem;color:var(--ink-3);
   margin:0 0 16px;font-variant-numeric:tabular-nums;}
 .tail li .stamps{margin:.35em 0 0;}

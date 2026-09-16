@@ -92,6 +92,21 @@ node ~/.claude/skills/problem-brief/bin/render-brief.mjs my-brief.json out/index
 kinds of drawing, one already closed, plus the handled and outstanding lists.
 Start from it rather than from an empty file.
 
+## The top of the page
+
+The summary under the counts is structure, not a paragraph:
+
+- **Since the last version**, from typed `changes`, with new entries first.
+- **Waiting on you** is worked out from the entries, so it cannot disagree with the counts.
+- `context` is short free text.
+- `background` is folded away.
+
+Wherever prose cites an entry, the page links the id and adds the entry's
+`short` label: *Q-3 (resuming a handed-back import)*. An entry with no label
+gets one cut from its title. Lines starting `- ` or `1. ` in any prose field
+render as real lists, and the validator warns when a sentence enumerates
+things that should have been one.
+
 ## An entry's life
 
 An entry is never deleted and never renumbered, because its number is how people

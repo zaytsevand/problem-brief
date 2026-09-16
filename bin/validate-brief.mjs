@@ -27,7 +27,7 @@
  * ones the bundled schema uses. Node 18+.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -446,7 +446,38 @@ function referenceErrors(brief) {
     }
   };
   walk(brief, "");
+
+  /* A cited entry is shown with its short label; without one the page cuts a
+     label from the title, which reads worse than one the author chose. Only
+     citations from outside the entry itself count. */
+  const citedBy = new Map();
+  const collect = (v, owner) => {
+    if (typeof v === "string") {
+      for (const id of v.match(CITED) ?? []) if (id !== owner) citedBy.set(id, true);
+    } else if (Array.isArray(v)) v.forEach((x) => collect(x, owner));
+    else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) if (k !== "id") collect(x, owner);
+  };
+  for (const [k, v] of Object.entries(brief)) {
+    if (k === "decisions" && Array.isArray(v)) v.forEach((e) => collect(e, e?.id));
+    else collect(v, null);
+  }
+  (brief.decisions ?? []).forEach((e, i) => {
+    if (!e?.id) return;
+    const at = `decisions[${i}] (${e.id})`;
+    if (citedBy.has(e.id) && !e.short) {
+      out.push({ path: at, severity: "warning", message: 'is cited elsewhere on the page but has no "short" label',
+        hint: `the page cuts a label from the title instead — give it one of five words or fewer, e.g. "short": "${suggestShort(e.title)}"` });
+    }
+    if (typeof e.short === "string" && e.short.trim().split(/\s+/).length > 5) {
+      out.push({ path: `${at} → short`, severity: "warning", message: "is longer than five words",
+        hint: "it follows the id in running text, so it has to be brief — the title is where the detail goes" });
+    }
+  });
   return out;
+}
+
+function suggestShort(title) {
+  return String(title ?? "").toLowerCase().split(/\s+/).slice(0, 5).join(" ");
 }
 
 /* ── state that contradicts its own record ──────────────────────────────────
@@ -571,7 +602,14 @@ export function formatReport(result, file) {
 
 /* ── CLI ────────────────────────────────────────────────────────────────── */
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Compare real paths. A hand-built file:// string never matched on Windows
+// (backslashes), in a path with a space, or through a symlink such as an
+// install.sh --link install, and the CLI then printed nothing and exited 0.
+const invokedDirectly = () => {
+  try { return realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url)); }
+  catch { return false; }
+};
+if (process.argv[1] && invokedDirectly()) {
   const file = process.argv[2];
   const asJson = process.argv.includes("--json");
   if (!file) {
