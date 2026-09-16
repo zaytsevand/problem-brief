@@ -20,6 +20,16 @@
       "text": "The timeout for a paused batch is done."
     }
   ],
+  "history": [
+    {
+      "version": "2026-09-11T08:30Z",
+      "changes": [
+        { "kind": "raised", "text": "Q-1 raised: the reader's proof was built on files we no longer use.", "id": "Q-1" },
+        { "kind": "raised", "text": "Q-2 raised: one parsing failure is handled silently.", "id": "Q-2" },
+        { "kind": "raised", "text": "Q-3 raised: a halfway import hands back with no next step.", "id": "Q-3" }
+      ]
+    }
+  ],
   "background": "The review produced eleven separate complaints on 11 September. The brief was re-checked against the branch tip on the morning of 14 September, and again today.",
   "decisions": [
     {

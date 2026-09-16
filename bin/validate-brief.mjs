@@ -336,8 +336,8 @@ function semanticErrors(brief) {
   });
 
   const KINDS = ["raised", "changed", "completed", "retracted", "note"];
-  (brief.changes ?? []).forEach((c, i) => {
-    const where = `changes[${i}]`;
+  const checkChanges = (list, at) => (Array.isArray(list) ? list : []).forEach((c, i) => {
+    const where = `${at}[${i}]`;
     if (typeof c === "string") {
       out.push({ path: where, severity: "warning", message: "has no kind, so it is shown last among the notes",
         hint: `write it as { "kind": …, "text": … } with kind one of ${KINDS.join(", ")}` });
@@ -348,6 +348,24 @@ function semanticErrors(brief) {
       const guess = typeof c.kind === "string" ? nearest(c.kind, KINDS) : null;
       out.push({ path: `${where} → kind`, message: `is ${JSON.stringify(c.kind)}, which is not a transition`,
         hint: (guess ? `did you mean "${guess}"? ` : "") + `use one of: ${KINDS.join(", ")}` });
+    }
+  });
+  checkChanges(brief.changes, "changes");
+
+  /* Earlier versions' notes are kept, never rewritten, so each block is one
+     moment before this version and no two blocks claim the same moment. */
+  const stamped = new Set();
+  (Array.isArray(brief.history) ? brief.history : []).forEach((v, i) => {
+    checkChanges(v?.changes, `history[${i}].changes`);
+    if (typeof v?.version !== "string" || !isTimestamp(v.version)) return;
+    if (stamped.has(v.version)) {
+      out.push({ path: `history[${i}]`, message: `repeats the version stamp ${v.version}`,
+        hint: "each earlier version is one block; merge the two, or fix the stamp" });
+    }
+    stamped.add(v.version);
+    if (isTimestamp(brief.updated ?? "") && Date.parse(v.version) >= Date.parse(brief.updated)) {
+      out.push({ path: `history[${i}]`, message: `is stamped ${v.version}, not earlier than the brief's updated stamp (${brief.updated})`,
+        hint: "a history block is an earlier version — stamp it with the updated stamp the brief had before this refresh" });
     }
   });
 
