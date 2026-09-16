@@ -355,6 +355,73 @@ test("a sentence that strings three or more entry ids together is flagged as a l
   assert.ok(!ok.warnings.some((m) => m.includes("list")));
 });
 
+/* ── issue #8: earlier versions' change notes are kept ─────────────────── */
+
+const V1 = "2026-09-13T09:00Z", V2 = "2026-09-14T09:00Z";
+const withHistory = (extra = {}) => brief([
+  entry("Q-1", { short: "ledger posting", bearing: "escalated", bearingReason: "Export only." }),
+], {
+  created: V1,
+  changes: [{ kind: "changed", text: "Q-1: open → decided." }],
+  history: [
+    { version: V1, changes: [{ kind: "raised", text: "Q-1 raised.", id: "Q-1" }] },
+    { version: V2, changes: [{ kind: "note", text: "Second pass over the importer." }] },
+  ],
+  ...extra,
+});
+
+test("earlier versions' change notes validate in history", () => {
+  const r = messages(withHistory());
+  assert.equal(r.ok, true, r.errors.join("\n"));
+  assert.deepEqual(r.warnings, []);
+});
+
+test("history is checked like changes: kinds, ids, and its own stamps", () => {
+  const bad = messages(withHistory({ history: [
+    { version: V1, changes: [{ kind: "moved", text: "Q-1 moved." }] },
+    { version: V2, changes: [{ kind: "raised", text: "Something new.", id: "Q-9" }] },
+    { version: "2026-09-16T09:00Z", changes: [{ kind: "note", text: "From the future." }] },
+    { version: V2, changes: [{ kind: "note", text: "Same stamp twice." }] },
+  ] }));
+  assert.equal(bad.ok, false);
+  const has = (s) => assert.ok(bad.errors.some((m) => m.includes(s)), `${s}\n${bad.errors.join("\n")}`);
+  has("history[0].changes[0]");
+  has("Q-9");
+  has("history[2]");
+  has("history[3]");
+  assert.equal(messages(withHistory({ history: [{ version: V1, changes: [] }] })).ok, false);
+});
+
+test("a brief without history renders no version switch", () => {
+  const html = render(brief([entry("Q-1", { bearing: "escalated", bearingReason: "Export only." })],
+    { changes: [{ kind: "changed", text: "Q-1: open → decided." }] }));
+  assert.doesNotMatch(html, /data-changes-view/);
+  assert.doesNotMatch(html, /class="version"/);
+});
+
+test("earlier versions render newest first under a latest / all switch, all in the document", () => {
+  const html = render(withHistory());
+  const since = html.match(/<section class="changes">([^]*?)<\/section>/)[1];
+  assert.match(since, /<button[^>]*data-changes-view="latest"[^>]*aria-pressed="true"/);
+  assert.match(since, /<button[^>]*data-changes-view="all"/);
+  // Nothing is hidden in the markup, so a page with no scripting shows every version.
+  const versions = [...since.matchAll(/<details class="version"( open)? data-version="([^"]+)"/g)];
+  assert.deepEqual(versions.map((m) => m[2]), [V2, V1]);
+  assert.deepEqual(versions.map((m) => Boolean(m[1])), [true, false], "only the newest earlier version starts open");
+  assert.doesNotMatch(since, /<details class="version"[^>]*hidden/);
+  assert.match(since, /data-version="2026-09-14T09:00Z"[^]*Second pass over the importer/);
+  assert.match(since, /data-version="2026-09-13T09:00Z"[^]*<h3 class="tr-head">New<span class="tr-n">1<\/span>[^]*Q-1/);
+  // The current version's notes still come first and are not inside a version block.
+  assert.ok(since.indexOf("Q-1</a>: open → decided") < since.indexOf('class="version"'));
+  assert.match(html, /problem-brief-changes/);
+});
+
+test("SKILL.md tells a refresh to move changes into history, never overwrite them", () => {
+  const skill = readFileSync(join(ROOT, "SKILL.md"), "utf8");
+  assert.match(skill, /`history`/);
+  assert.match(skill, /move[^.]*`changes`[^.]*into `history`/i);
+});
+
 /* ── carried over from PR #4 ───────────────────────────────────────────── */
 
 test("an entry with no short label is cited with a label cut from its title", () => {

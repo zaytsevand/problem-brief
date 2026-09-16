@@ -65,6 +65,13 @@
         ]
       }
     },
+    "history": {
+      "type": "array",
+      "description": "Change notes from earlier versions, kept so the page can show how the brief got here. On a refresh the current changes move in here as one block, stamped with the brief's updated stamp from before the refresh, and are never overwritten. Order does not matter; the page shows the newest first.",
+      "items": {
+        "$ref": "#/$defs/version"
+      }
+    },
     "background": {
       "type": "string",
       "description": "Earlier history the reader may want but does not need to act: what happened on previous days, how the brief came about. Folded away under 'Background' so it never competes with what changed."
@@ -332,6 +339,37 @@
           }
         }
       ]
+    },
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "changes"
+      ],
+      "description": "The change notes of one earlier version of the brief.",
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/timestamp",
+          "description": "The brief's updated stamp when these notes were current. Unique across history, and earlier than the brief's own updated stamp."
+        },
+        "changes": {
+          "type": "array",
+          "minItems": 1,
+          "description": "That version's changes, exactly as they stood.",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 3
+              },
+              {
+                "$ref": "#/$defs/change"
+              }
+            ]
+          }
+        }
+      }
     },
     "change": {
       "type": "object",

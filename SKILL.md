@@ -99,6 +99,14 @@ For each item that moves, record why (`decision`, `resolution`, the new
 `state`) and move its `updated` stamp. Only then go on to the facts
 (**Freshness**), the comments, and any new entries.
 
+**Then move the current `changes` into `history`, before writing a single new
+change note.** Add one block, `{ "version": <the brief's updated stamp before
+this refresh>, "changes": <the changes array exactly as it stood> }`, and start
+`changes` empty for this version. Never overwrite or trim the old notes: they
+are the only record of *which* refresh an entry moved on, and an entry's
+`resolution` never says that. Skip the move only when the old `changes` is
+empty.
+
 The validator catches a state that contradicts its own record: a ruling on an
 entry still marked open, a resolution on one still marked decided, work marked
 blocked on an entry that has been ruled, a ruling dated after the entry says it
@@ -252,6 +260,10 @@ first; the reader catching up on history scrolls one section.
   blocks the goal, then what is escalated, then other new work. The entry is
   taken from the change's `id`, or the first entry id in its text. A question
   the reader has not seen yet is never left at the bottom of the box.
+- `history` — every earlier version's change notes, one block per version,
+  stamped. The page shows the latest version's notes by default with a
+  *latest / all versions* switch beside the heading; the newest earlier block
+  opens first and older ones stay folded. With no scripting, everything shows.
 - `context` — anything else the reader needs before entry one. Optional.
 - `background` — earlier history, folded away. `source` goes with it, never on
   the stamp line.
@@ -496,6 +508,7 @@ end with the chat summary.
 | Setting a frame height by hand | Let the renderer read the drawing's proportions, or it gets cropped |
 | Refreshing the facts but not the states | Walk every item's state first; a chip that is out of date is worse than no chip |
 | Editing an item without moving its `updated` | Every change moves the stamp, and the brief's own stamp with it |
+| Overwriting `changes` on a refresh | Move the old `changes` into `history`, stamped with the previous `updated`, then write the new ones |
 | Re-stamping every item on a refresh | Move `updated` only on the items that actually changed |
 | Leaving finished outstanding work as `not-started` or `blocked` | Set `state: "done"`; it stays on the page |
 | A chat summary that retells the brief | Bullets of what moved, ≤400 words, then the two lines: blocks the goal, escalated |

@@ -451,9 +451,10 @@ const changeText = (c) => inline(typeof c === "string" ? c : c.text);
    list whatever their weight — and within them, what stands in the goal's way
    comes first. They are groups inside the one change section, not a section of
    their own: two headings naming the same period told the reader nothing. */
-function newAdditions(list) {
+function newAdditions(list, past = false) {
   const raised = list.filter((c) => typeof c === "object" && c.kind === "raised");
   const bearingOf = (c) => {
+    if (past) return "other";  // a bearing is judged against today's goal, not that version's
     const id = c.id ?? String(c.text).match(/\bQ-\d+\b/)?.[0];
     const e = id && ENTRIES.get(id);
     const live = e && ((e.status ?? "open") === "open" || e.status === "decided");
@@ -468,9 +469,9 @@ function newAdditions(list) {
   }).join("");
 }
 
-function transitions(list) {
+function transitions(list, past = false) {
   const kindOf = (c) => (typeof c === "string" ? "note" : c.kind);  // an untyped line is a note
-  return `<div class="tr">` + newAdditions(list) + TRANSITIONS.filter(([kind]) => kind !== "raised").map(([kind, label, glyph]) => {
+  return `<div class="tr">` + newAdditions(list, past) + TRANSITIONS.filter(([kind]) => kind !== "raised").map(([kind, label, glyph]) => {
     if (kind === "amended") return "";
     let items = list.filter((c) => kindOf(c) === kind);
     if (!items.length) return "";
@@ -581,6 +582,14 @@ h2,h3,h4{text-wrap:balance;}
 .tr-icon .knock{stroke:var(--card);stroke-width:1.8;}
 .tr-raised{color:var(--accent);}
 .tr [data-bearing] .tr-head{color:var(--accent);}
+.changes-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.4em;}
+.versions{display:flex;gap:.35em;}
+.versions[hidden],.history[hidden]{display:none;}
+.history{margin-top:.6em;border-top:1px dashed var(--line);padding-top:.4em;}
+.history-head{font-size:.74rem;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3);}
+.version{margin:.3em 0;}
+.version > summary{cursor:pointer;font-size:.82rem;color:var(--ink-2);}
+.version > summary .tr-n{margin-left:.4em;}
 .tr [data-bearing="blocks-goal"] .tr-head{color:var(--warn);}
 .tr-changed{color:var(--warn);}
 .tr-completed{color:var(--rec);}
@@ -752,6 +761,32 @@ details.rolled ul{margin-top:.6em;}
 }
 `;
 
+const CHANGES_SCRIPT = `
+(function(){
+  // The whole change log is in the document and visible before this runs.
+  // The switch only folds the earlier versions away; latest is the default.
+  var KEY = 'problem-brief-changes';
+  var nav = document.querySelector('.versions');
+  var history = document.querySelector('[data-history]');
+  if (!nav || !history) return;
+  var buttons = [].slice.call(nav.querySelectorAll('[data-changes-view]'));
+  function apply(view, remember){
+    if (view !== 'all') view = 'latest';
+    history.hidden = view === 'latest';
+    buttons.forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.changesView === view)); });
+    if (remember) { try { localStorage.setItem(KEY, view); } catch (_) {} }
+  }
+  nav.addEventListener('click', function(ev){
+    var b = ev.target.closest('[data-changes-view]');
+    if (b) apply(b.dataset.changesView, true);
+  });
+  var saved = null;
+  try { saved = localStorage.getItem(KEY); } catch (_) {}
+  apply(saved, false);
+  nav.hidden = false;
+})();
+`;
+
 const THEME_SCRIPT = `
 (function(){
   // Embedded archify pages live in their own frame and cannot see the reader's
@@ -846,8 +881,23 @@ function page(brief, baseDir) {
       waitingList("Escalated, not blocking", escalated)
     : `<p>Nothing is waiting on a ruling.</p>`;
 
-  const changes = brief.changes?.length
-    ? `<section class="changes"><h2>Since the last version</h2>${transitions(brief.changes)}</section>` : "";
+  /* Every version's notes stay on the page. The newest earlier version starts
+     open and older ones folded; the switch only hides them, so with no
+     scripting the reader gets the whole log, which is the right fallback. */
+  const history = [...(brief.history ?? [])].sort((a, b) => Date.parse(b.version) - Date.parse(a.version));
+  const current = brief.changes?.length ? transitions(brief.changes) : `<p>Nothing moved in this version.</p>`;
+  const versions = history.map((v, i) =>
+    `<details class="version"${i === 0 ? " open" : ""} data-version="${esc(v.version)}">` +
+    `<summary>Version of ${stamp(v.version)}<span class="tr-n">${v.changes.length}</span></summary>` +
+    `${transitions(v.changes, true)}</details>`).join("");
+  const changes = history.length
+    ? `<section class="changes"><div class="changes-head"><h2>Since the last version</h2>` +
+      `<nav class="versions" role="group" aria-label="How much of the change log to show" hidden>` +
+      `<button type="button" class="chip" data-changes-view="latest" aria-pressed="true">latest</button>` +
+      `<button type="button" class="chip" data-changes-view="all" aria-pressed="false">all versions <span class="chip-n">${history.length + 1}</span></button>` +
+      `</nav></div>${current}<div class="history" data-history><h3 class="history-head">Earlier versions</h3>${versions}</div></section>`
+    : brief.changes?.length
+      ? `<section class="changes"><h2>Since the last version</h2>${current}</section>` : "";
   const background = brief.background || brief.source
     ? `<details class="background"><summary>Background</summary>${prose(brief.background)}` +
       (brief.source ? `<p class="source">These findings come from ${inline(brief.source)}.</p>` : "") + `</details>` : "";
@@ -909,6 +959,7 @@ function page(brief, baseDir) {
 </div>
 <script>${THEME_SCRIPT}</script>
 <script>var DEFAULT_FILTER = '${defaultFilter}';${FILTER_SCRIPT}</script>
+${history.length ? `<script>${CHANGES_SCRIPT}</script>` : ""}
 `;
 }
 

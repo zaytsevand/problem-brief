@@ -133,9 +133,10 @@ summary of what changed state.
 
 The counts along the top of the page are filters — click one and the page shows
 that category alone. It opens on what blocks the goal, since that is what is
-waiting on the reader. Above the entries, a short summary lists what changed
-since the last version and what waits on the reader, with earlier history
-folded away. Everything stays in the document, so a link to
+waiting on the reader. Above the entries, a short summary lists what waits on
+the reader, then what changed since the last version, with earlier history
+folded away. Every earlier version's change notes are kept too, behind a
+*latest / all versions* switch. Everything stays in the document, so a link to
 an entry reaches it whatever the filter was, and a page without scripting shows
 the whole brief.
 
