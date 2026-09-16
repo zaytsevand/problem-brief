@@ -96,7 +96,24 @@ test("the page opens on the blockers, and escalated entries have their own filte
   assert.match(html, /apply\(saved \|\| DEFAULT_FILTER/);
   assert.match(html, /var DEFAULT_FILTER = 'blocks'/);
   assert.match(html, /class="goal"[^]*Ship the importer\./);
-  assert.match(html, /Escalated, not blocking<\/span>Export only\./);
+  assert.match(html, /<p class="bearing">Export only\.<\/p>/);
+});
+
+test("an entry card names its bearing once, in the header", () => {
+  const html = render(brief([
+    entry("Q-1", { bearing: "escalated", bearingReason: "Export only." }),
+    entry("Q-2", { status: "decided", decision: { chose: "a", date: "2026-09-15" },
+      bearing: "blocks-goal", bearingReason: "Needed to post." }),
+  ]));
+  const card = (id) => html.match(new RegExp(`<section class="entry[^"]*" id="${id}"[^]*?</header>([^]*?)(?=<section class="entry|$)`));
+  const [q1, q1body] = [card("Q-1")[0], card("Q-1")[1]];
+  assert.equal(q1.split("Escalated, not blocking").length - 1, 1, q1);
+  assert.doesNotMatch(q1body, /Escalated, not blocking/);
+  // A ruled entry's state chip says "Outstanding work", so its bearing joins it in the header.
+  const [q2, q2body] = [card("Q-2")[0], card("Q-2")[1]];
+  assert.match(q2.split("</header>")[0], /Outstanding work<\/span>[^]*Blocks the goal/);
+  assert.doesNotMatch(q2body, /Blocks the goal/);
+  assert.match(q2body, /<p class="bearing">Needed to post\.<\/p>/);
 });
 
 /* ── the header: stamps only, structured summary ───────────────────────── */
