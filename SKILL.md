@@ -254,8 +254,10 @@ one paragraph:
 Give every entry a `short` label of two to five words. Wherever an id stands
 bare in text, the page shows it as `Q-29 (one-call page read)`, linked to the
 entry; an id the prose already explains, in brackets after the meaning, is
-linked without repeating the label. The validator warns on a cited id that is
-not on the page.
+linked without repeating the label. An entry with no `short` is still labelled,
+with its title cut at a word boundary, which reads worse than a label you chose.
+The validator warns on a cited id that is not on the page, on a cited entry
+with no `short` (and suggests one), and on a `short` longer than five words.
 
 ## Language
 

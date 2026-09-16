@@ -38,6 +38,30 @@ const esc = (s) => String(s ?? "")
    per page, before anything is rendered. */
 let ENTRIES = new Map();
 
+/* The words a label should never end on once it has been cut short. */
+const DANGLING = /\s+(?:the|a|an|and|or|of|to|in|on|for|with|that|is|are|was|by)$/i;
+
+/* A short label for an entry with none of its own: the title, cut at a word
+   boundary. An identifier never stands alone, so a clumsy label still beats
+   none. */
+function derivedLabel(title) {
+  const words = String(title).trim().split(/\s+/);
+  let out = "";
+  for (const w of words) {
+    const next = out ? `${out} ${w}` : w;
+    if (next.length > 36 && out) break;
+    out = next;
+  }
+  const cut = out.length < String(title).trim().length;
+  out = out.replace(/[.,;:—–-]+$/, "");
+  if (cut) {
+    while (DANGLING.test(out)) out = out.replace(DANGLING, "");
+    out += "…";
+  }
+  // "The proof that…" reads as a sentence start; an acronym keeps its capitals.
+  return /^[A-Z][a-z]/.test(out) ? out[0].toLowerCase() + out.slice(1) : out;
+}
+
 /* Every entry id in running text becomes a link to that entry. A bare id also
    carries the entry's short label, because an id alone means nothing to a reader
    who does not hold every entry in their head. An id the author already put in
@@ -56,7 +80,7 @@ function citations(html) {
     return part.replace(/(\()?\b(Q-\d+)\b(?!\s*\()/g, (m, open, id) => {
       const e = ENTRIES.get(id);
       if (!e) return m;
-      const label = e.short && !open && !labelled.has(id) ? ` (${esc(e.short)})` : "";
+      const label = !open && !labelled.has(id) ? ` (${esc(e.short ?? derivedLabel(e.title))})` : "";
       labelled.add(id);
       return `${open ?? ""}<a class="qref" href="#${id}" title="${esc(e.title)}">${id}${label}</a>`;
     });

@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -226,7 +226,7 @@ test("an untyped change is allowed but flagged", () => {
 });
 
 test("a deliberate note is quiet and shown with the notes", () => {
-  const b = brief([entry("Q-1", { bearing: "escalated", bearingReason: "Export only." })],
+  const b = brief([entry("Q-1", { short: "ledger posting", bearing: "escalated", bearingReason: "Export only." })],
     { changes: [{ kind: "note", text: "Everything is on local branches." }, { kind: "raised", text: "Q-1 raised." }] });
   assert.deepEqual(messages(b).warnings, []);
   const since = render(b).match(/<h2>Since the last version<\/h2>([^]*?)<\/section>/)[1];
@@ -331,4 +331,42 @@ test("a sentence that strings three or more entry ids together is flagged as a l
   assert.ok(r.warnings.some((m) => m.startsWith("context") && m.includes("list")), r.warnings.join("\n"));
   const ok = messages(brief([entry("Q-1", { bearing: "escalated", bearingReason: "See Q-1 and nothing else." })]));
   assert.ok(!ok.warnings.some((m) => m.includes("list")));
+});
+
+/* ── carried over from PR #4 ───────────────────────────────────────────── */
+
+test("an entry with no short label is cited with a label cut from its title", () => {
+  const html = render(brief([
+    entry("Q-1", { title: "The importer posts invoices twice when the network drops mid-batch",
+      bearing: "escalated", bearingReason: "Export only." }),
+    entry("Q-2", { bearing: "escalated", bearingReason: "Depends on Q-1." }),
+  ]));
+  assert.match(html, /<a class="qref" href="#Q-1"[^>]*>Q-1 \(the importer posts invoices twice…\)<\/a>/);
+});
+
+test("a cited entry with no short label is flagged, with a suggestion", () => {
+  const b = brief([
+    entry("Q-1", { title: "Duplicate invoices reach the ledger", bearing: "escalated", bearingReason: "Export only." }),
+    entry("Q-2", { short: "retry test", bearing: "escalated", bearingReason: "Depends on Q-1." }),
+  ]);
+  const r = messages(b);
+  assert.ok(r.warnings.some((m) => m.includes("(Q-1)") && m.includes('no "short"')), r.warnings.join("\n"));
+  const hint = validateBrief(b).warnings.find((w) => w.path.includes("(Q-1)")).hint;
+  assert.match(hint, /"short": "duplicate invoices reach the ledger"/);
+  assert.ok(!r.warnings.some((m) => m.includes("(Q-2)") && m.includes("no \"short\"")), r.warnings.join("\n"));
+});
+
+test("a short label longer than five words is flagged", () => {
+  const r = messages(brief([entry("Q-1", { short: "a label that is far too long", bearing: "escalated", bearingReason: "Later." })]));
+  assert.ok(r.warnings.some((m) => m.includes("short") && m.includes("five words")), r.warnings.join("\n"));
+});
+
+test("the validator CLI runs from a path with a space in it", () => {
+  const dir = join(mkdtempSync(join(tmpdir(), "brief ")), "with space");
+  mkdirSync(join(dir, "bin"), { recursive: true });
+  mkdirSync(join(dir, "schema"));
+  cpSync(join(ROOT, "bin", "validate-brief.mjs"), join(dir, "bin", "validate-brief.mjs"));
+  cpSync(join(ROOT, "schema", "problem-brief.schema.json"), join(dir, "schema", "problem-brief.schema.json"));
+  const out = execFileSync("node", [join(dir, "bin", "validate-brief.mjs"), EXAMPLE], { encoding: "utf8" });
+  assert.match(out, /is a valid problem brief/);
 });
