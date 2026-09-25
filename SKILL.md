@@ -112,6 +112,7 @@ nothing skipped:
 | `mechanical` item | Is the fix still in place? | The tree |
 | standing ruling | Does it still hold, or did the operator later say otherwise? Then mark it `replaced` and record the new one. | This conversation, comments |
 | this conversation | Did the operator answer, rule or judge anything that is not yet in the file? Record it now. | This conversation, every turn since the last run, not only the last one |
+| the brief itself | Is anything still live, or is its work done? A brief with nothing live and no work left is a candidate for retiring (see **Retiring a brief**). | Its own entries and outstanding list |
 | earlier sessions | Was anything on this subject answered in a session the brief never heard about? | `memory-recall` (memsearch), where installed; the session's summary |
 
 For each item that moves, record why (`decision`, `resolution`, the new
@@ -252,6 +253,40 @@ my phone, keep it short". Those hold beyond this brief, so also save each as a
 memory instructions. Name the file in the ruling's `memory` field, so the two
 can be found from each other. This is the one thing copied, because it has to
 work where the brief is not loaded.
+
+## Retiring a brief
+
+A brief costs something for as long as it stays registered. Every session in
+the project is handed it at startup and after every summary, and the hooks
+keep its snapshot, its page and its comment threads. When its work is
+finished, abandoned, or it was only ever a test, retire it:
+
+```bash
+node ~/.claude/skills/problem-brief/bin/brief-retire.mjs brief.json --memory-dir <memory directory>
+```
+
+That removes its pointer and its line in `MEMORY.md`, clears the hooks' state
+for it, stamps `retired` in the JSON (so it is never registered again by
+mistake), and lists the pages it was published at. The JSON stays: it is the
+record of what was ruled.
+
+- **When to offer it.** The SessionStart hook shows a brief with nothing live
+  and no work left as one line suggesting retirement, instead of its whole
+  digest. Offer it to the operator then; retire without asking only a brief
+  you made as a test, or one they already said is finished.
+- **The published page is theirs to delete.** Deleting a page cannot be undone
+  and breaks its link for everyone, including links they have shared. Retiring
+  never deletes it. Ask, and delete with the `Artifact` tool's `delete` action
+  only on a yes. Say which page it is and that the delete is permanent.
+- **Test and throwaway briefs are cleaned up in full.** Test briefs, pages
+  published to try something out, and briefs from an abandoned approach get
+  retired as soon as the test is over, with their pages deleted once the
+  operator agrees. Also remove any temporary hook or file the test added.
+  Leaving them registered means every later session is handed them.
+- **Nothing live is left behind.** The validator warns when a retired brief
+  still has open or ruled entries: once retired, no session will be reminded
+  of them. Close or retract them first, or move them to another brief.
+- **To bring one back**, remove `retired` from the JSON and register it again.
 
 ## The entry shape
 
@@ -768,6 +803,8 @@ into the JSON as soon as it comes back, moving each entry's status and
 | Writing the chat summary by hand | Post the one the publish hook computes, or run `brief-delta.mjs` |
 | Taking the automatic reply to a comment as the end of it | Read the thread, record the ruling in the JSON, republish, then resolve |
 | Waiting to be asked before starting a brief | Findings, decisions and questions go into a brief by default |
+| Leaving a finished or test brief registered | Retire it with `brief-retire.mjs`; every session is handed it until then |
+| Deleting a brief's page without asking | Retiring never deletes the page; ask, then use the `Artifact` delete action |
 
 ## Red flags — stop and rewrite
 
@@ -797,6 +834,7 @@ into the JSON as soon as it comes back, moving each entry's status and
 | `bin/brief-context.mjs` | Prints what a session must not lose; with `--hook`, the SessionStart hook that restores it after a summary. |
 | `bin/brief-delta.mjs` | The chat summary of what moved between two versions; with `--hook`, the PostToolUse hook that computes it on every publish. |
 | `bin/brief-comments.mjs` | The comment and citation hooks; `--no-ruling` marks a thread as holding nothing to record. |
+| `bin/brief-retire.mjs` | Retires a brief: out of memory and the hooks, stamped `retired`, its pages listed for the operator. |
 | `bin/install-hook.mjs` | Adds or removes all the hooks in `settings.json`; used by the installers. |
 | `bin/install-claude-md.mjs` | Adds or removes the one default-channel line in `CLAUDE.md`; used by the installers. |
 | `examples/example.brief.json` | A complete worked brief — start from this. |

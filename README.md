@@ -151,6 +151,11 @@ every publish of a brief it compares the page with the previous publish and
 hands Claude the chat summary, so the summary lists what moved and cannot
 drift into retelling the brief.
 
+A brief whose work is done, or that was only a test, is retired with
+`bin/brief-retire.mjs`: taken out of memory and the hooks, its hook state
+cleared, stamped `retired`, and its published pages listed. The pages are
+never deleted without the operator's say-so.
+
 `./install.sh --claude-md` (`.\install.ps1 -ClaudeMd`) adds one line to
 `~/.claude/CLAUDE.md` making a brief the default channel for findings,
 decisions and questions in every session, whether or not the hooks are

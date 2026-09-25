@@ -68,6 +68,10 @@
       "$ref": "#/$defs/timestamp",
       "description": "When anything on this brief last changed. Never earlier than the updated stamp of any item on it."
     },
+    "retired": {
+      "$ref": "#/$defs/timestamp",
+      "description": "When the brief was retired: its work finished or abandoned, or it was only ever a test. A retired brief is taken out of Claude's memory and the hooks (bin/brief-retire.mjs does it and sets this stamp), is not registered again, and is kept for the record. Remove the stamp to bring it back."
+    },
     "generated": {
       "type": "string",
       "format": "date",

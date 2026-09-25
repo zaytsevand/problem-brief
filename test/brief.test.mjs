@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -849,4 +849,57 @@ test("the CLAUDE.md line is added once, keeps everything else, and comes out exa
   assert.ok(text.startsWith("# Mine\n\nKeep this.\n\n- Findings, open decisions"));
   run("install-claude-md.mjs", ["--file", file, "--remove"]);
   assert.equal(readFileSync(file, "utf8"), "# Mine\n\nKeep this.\n");
+});
+
+/* ── retiring a brief ──────────────────────────────────────────────────── */
+
+test("retiring takes a brief out of memory and the hooks, stamps it, and keeps the page", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const mem = join(dir, "project", "memory");
+  mkdirSync(mem, { recursive: true });
+  writeFileSync(join(mem, "MEMORY.md"), "- [Other](other.md) — keep me\n");
+  const env = { ...process.env, PROBLEM_BRIEF_HOME: join(dir, "home") };
+  const node = (script, args, input) => execFileSync("node", [bin(script), ...args], { encoding: "utf8", env, input });
+  const path = join(dir, "old.brief.json");
+  const b = brief([entry("Q-1", { status: "complete", resolution: { date: "2026-09-15", note: "Done and merged." } })]);
+  writeFileSync(path, JSON.stringify(b));
+  node("brief-memory.mjs", [path, "--memory-dir", mem]);
+  writeFileSync(join(dir, "index.html"), render(b));
+  node("brief-delta.mjs", ["--hook"], JSON.stringify({ tool_name: "Artifact", tool_input: { file_path: "index.html" }, cwd: dir,
+    tool_response: "Published at https://claude.ai/artifact/OLDPAGE" }));
+  node("brief-comments.mjs", ["--hook"], JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "ArtifactComments",
+    transcript_path: join(dir, "project", "s.jsonl"), tool_input: { action: "read", url: "https://claude.ai/artifact/OLDPAGE", thread_id: THREAD } }));
+  assert.ok(existsSync(join(dir, "home", "threads.json")));
+
+  const out = node("brief-retire.mjs", [path, "--memory-dir", mem]);
+  assert.match(out, /https:\/\/claude\.ai\/artifact\/OLDPAGE/);
+  assert.match(out, /not deleted — ask the operator/);
+  assert.equal(readFileSync(join(mem, "MEMORY.md"), "utf8"), "- [Other](other.md) — keep me\n");
+  assert.ok(!existsSync(join(mem, "problem-brief-old.md")));
+  assert.ok(!existsSync(join(dir, "home", "published", "urls.json")));
+  assert.ok(!existsSync(join(dir, "home", "threads.json")));
+  const after = JSON.parse(readFileSync(path, "utf8"));
+  assert.match(after.retired, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z$/);
+  assert.equal(after.updated, after.retired);
+  assert.equal(messages(after).ok, true);
+  assert.throws(() => node("brief-memory.mjs", [path, "--memory-dir", mem]), /was retired/);
+});
+
+test("a brief with nothing live gets one line suggesting retirement, not its whole digest", async () => {
+  const { digest } = await import("../bin/brief-context.mjs");
+  const done = brief([entry("Q-1", { status: "complete", resolution: { date: "2026-09-15", note: "Done." } })], { rulings: [ruling("R-1")] });
+  const text = digest(done, { path: "/x/b.json", memoryDir: "/x/memory" });
+  assert.match(text, /nothing live \(1 closed, 1 standing ruling\)/);
+  assert.match(text, /brief-retire\.mjs" "\/x\/b\.json" --memory-dir "\/x\/memory"/);
+  assert.doesNotMatch(text, /Standing rulings/);
+  const busy = brief([entry("Q-1", live)], { outstanding: [] });
+  assert.doesNotMatch(digest(busy), /nothing live/);
+  const work = brief([entry("Q-1", { status: "complete", resolution: { date: "2026-09-15", note: "Done." } })],
+    { outstanding: [{ summary: "Write the migration.", created: T, updated: T }] });
+  assert.doesNotMatch(digest(work), /nothing live/);
+});
+
+test("a retired brief with live entries is flagged", () => {
+  const r = messages(brief([entry("Q-1", live)], { retired: T }));
+  assert.ok(r.warnings.some((m) => m.includes("Q-1 is still live")));
 });

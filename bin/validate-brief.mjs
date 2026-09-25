@@ -373,7 +373,25 @@ function semanticErrors(brief) {
 
   out.push(...stateErrors(brief), ...bearingErrors(brief), ...referenceErrors(brief), ...enumerationWarnings(brief), ...timestampErrors(brief),
     ...rulingErrors(brief), ...repeatWarnings(brief), ...dependencyErrors(brief), ...reversibleErrors(brief),
-    ...estimateWarnings(brief));
+    ...estimateWarnings(brief), ...retiredErrors(brief));
+  return out;
+}
+
+/* ── a retired brief ────────────────────────────────────────────────────────
+   Retiring takes a brief out of memory and the hooks. Anything still waiting
+   on the operator then waits unseen. */
+
+function retiredErrors(brief) {
+  const out = [];
+  if (!brief.retired) return out;
+  if (isTimestamp(brief.retired) && isTimestamp(brief.created) && Date.parse(brief.retired) < Date.parse(brief.created)) {
+    out.push({ path: "retired", message: "is earlier than created", hint: "a brief cannot be retired before it was written" });
+  }
+  const live = (brief.decisions ?? []).filter((e) => ["open", "decided"].includes(e?.status ?? "open")).map((e) => e.id);
+  if (live.length) {
+    out.push({ path: "retired", severity: "warning", message: `is set, but ${live.join(", ")} ${live.length === 1 ? "is" : "are"} still live`,
+      hint: "retired, they wait where no session will see them — close or retract them first, or move them to another brief" });
+  }
   return out;
 }
 

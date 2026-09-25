@@ -24,7 +24,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const MAX_RULINGS = 30;
 const MAX_TEXT = 220;
@@ -53,7 +53,22 @@ const LIVE_LABEL = {
   escalated: "escalated, not blocking",
 };
 
-export function digest(brief, { path, url } = {}) {
+const RETIRE = join(dirname(fileURLToPath(import.meta.url)), "brief-retire.mjs");
+
+/* Nothing waits on the reader, and no agreed work is left: the brief has done
+   its job. Its full digest would only cost every session tokens. */
+export const finished = (brief) =>
+  !(brief.decisions ?? []).some((e) => ["open", "decided"].includes(e.status ?? "open")) &&
+  !(brief.outstanding ?? []).some((o) => (o.state ?? "not-started") !== "done");
+
+export function digest(brief, { path, url, memoryDir } = {}) {
+  if (finished(brief)) {
+    const rulings = (brief.rulings ?? []).filter((r) => (r.status ?? "active") === "active").length;
+    return `Problem brief "${brief.title}"${path ? ` — ${path}` : ""}: nothing live (${(brief.decisions ?? []).length} closed, ` +
+      `${rulings} standing ruling${rulings === 1 ? "" : "s"}). If its work is finished, retire it, which takes it out of memory ` +
+      `and these hooks: node "${RETIRE}" "${path ?? "<brief.json>"}" --memory-dir "${memoryDir ?? "<memory directory>"}". ` +
+      `Ask the operator before deleting its published page.`;
+  }
   const lines = [];
   lines.push(`Problem brief "${brief.title}"` + (path ? ` — ${path}` : ""));
   if (url || brief.url) lines.push(`Published at ${url || brief.url}`);
@@ -141,7 +156,8 @@ function hook() {
   for (const p of memoryDir ? pointers(memoryDir) : []) {
     try {
       const brief = JSON.parse(readFileSync(p.brief, "utf8"));
-      parts.push(digest(brief, { path: p.brief, url: p.url }));
+      if (brief.retired) continue;
+      parts.push(digest(brief, { path: p.brief, url: p.url, memoryDir }));
     } catch {
       parts.push(`Problem brief pointer ${p.file} names ${p.brief}, which cannot be read.` +
         (p.url ? ` Recover it from ${p.url} with the problem-brief skill's extract-brief.mjs before raising anything on its subject.` : ""));

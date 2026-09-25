@@ -32,6 +32,10 @@ if (!file || !memoryDir) {
 
 const path = resolve(file);
 const brief = JSON.parse(readFileSync(path, "utf8"));
+if (brief.retired) {
+  console.error(`${file} was retired ${brief.retired}, so it is not registered again. Remove "retired" from it to bring it back.`);
+  process.exit(1);
+}
 const url = opt("--url") ?? brief.url;
 const slug = basename(path).replace(/(\.brief)?\.json$/, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "brief";
 const name = `problem-brief-${slug}`;
