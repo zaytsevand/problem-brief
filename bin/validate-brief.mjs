@@ -17,6 +17,8 @@
  *      listed first, a citation must say what it shows, an option must carry a
  *      price, a closed entry must carry proof, a status must agree with what
  *      the entry records, and every timestamp must agree with the others.
+ *      It also warns when an entry reads like an earlier one, or like a
+ *      question a standing ruling has already answered.
  *
  * Errors are written for whoever has to fix them — a readable path, what is
  * wrong, and what to do about it. An unknown field is matched against the
@@ -369,7 +371,237 @@ function semanticErrors(brief) {
     }
   });
 
-  out.push(...stateErrors(brief), ...bearingErrors(brief), ...referenceErrors(brief), ...enumerationWarnings(brief), ...timestampErrors(brief));
+  out.push(...stateErrors(brief), ...bearingErrors(brief), ...referenceErrors(brief), ...enumerationWarnings(brief), ...timestampErrors(brief),
+    ...rulingErrors(brief), ...repeatWarnings(brief), ...dependencyErrors(brief), ...reversibleErrors(brief),
+    ...estimateWarnings(brief), ...retiredErrors(brief));
+  return out;
+}
+
+/* ── a retired brief ────────────────────────────────────────────────────────
+   Retiring takes a brief out of memory and the hooks. Anything still waiting
+   on the operator then waits unseen. */
+
+function retiredErrors(brief) {
+  const out = [];
+  if (!brief.retired) return out;
+  if (isTimestamp(brief.retired) && isTimestamp(brief.created) && Date.parse(brief.retired) < Date.parse(brief.created)) {
+    out.push({ path: "retired", message: "is earlier than created", hint: "a brief cannot be retired before it was written" });
+  }
+  const live = (brief.decisions ?? []).filter((e) => ["open", "decided"].includes(e?.status ?? "open")).map((e) => e.id);
+  if (live.length) {
+    out.push({ path: "retired", severity: "warning", message: `is set, but ${live.join(", ")} ${live.length === 1 ? "is" : "are"} still live`,
+      hint: "retired, they wait where no session will see them — close or retract them first, or move them to another brief" });
+  }
+  return out;
+}
+
+/* ── dependencies between entries ───────────────────────────────────────────
+   One ruling often settles the ground another stands on. Saying so lets the
+   page rank what waits on the reader by how much each ruling unblocks. */
+
+function dependencyErrors(brief) {
+  const out = [];
+  const entries = (brief.decisions ?? []).filter(Boolean);
+  const byId = new Map(entries.map((e) => [e.id, e]));
+  const st = (e) => e.status ?? "open";
+  entries.forEach((e, i) => {
+    const where = `decisions[${i}] (${e.id})`;
+    for (const id of e.blockedBy ?? []) {
+      const b = byId.get(id);
+      if (id === e.id) {
+        out.push({ path: `${where} → blockedBy`, message: "waits on itself", hint: "drop its own id" });
+      } else if (!b) {
+        out.push({ path: `${where} → blockedBy`, message: `waits on ${id}, which is not an entry on this page`,
+          hint: `entries on this page: ${[...byId.keys()].join(", ")}` });
+      } else if (["open", "decided"].includes(st(e))) {
+        if (st(b) === "superseded") {
+          out.push({ path: `${where} → blockedBy`, severity: "warning", message: `waits on ${id}, which is retracted`,
+            hint: "the ground it waited on went away — drop the dependency, or retract this entry too" });
+        }
+        if (e.bearing === "blocks-goal" && st(b) === "open" && b.bearing === "escalated") {
+          out.push({ path: `${where} → blockedBy`, severity: "warning",
+            message: `blocks the goal and waits on ${id}, which is only escalated`,
+            hint: `whatever this waits on stands in the goal's way too — bracket ${id} as blocks-goal, or drop the dependency` });
+        }
+        if (st(e) === "decided" && st(b) === "open") {
+          out.push({ path: `${where} → blockedBy`, severity: "warning", message: `was ruled while ${id}, which it waits on, is still open`,
+            hint: `either the dependency is not real, or ${id} needs its ruling before this one is carried out` });
+        }
+      }
+    }
+  });
+  // A cycle means neither entry can ever be ruled first.
+  const state = new Map();
+  const visit = (id, trail) => {
+    if (state.get(id) === "done") return;
+    if (state.get(id) === "active") {
+      const loop = trail.slice(trail.indexOf(id)).concat(id);
+      out.push({ path: `decisions (${id})`, message: `waits on itself through ${loop.join(" → ")}`,
+        hint: "one of these must be ruled first — drop the dependency that is not real" });
+      return;
+    }
+    state.set(id, "active");
+    for (const next of byId.get(id)?.blockedBy ?? []) if (byId.has(next) && next !== id) visit(next, [...trail, id]);
+    state.set(id, "done");
+  };
+  for (const e of entries) visit(e.id, []);
+  return out;
+}
+
+/* ── what cannot be undone ──────────────────────────────────────────────────
+   How much the agent may decide alone follows from the cost of being wrong.
+   Something that can be undone may be handled without asking; something that
+   cannot is always the operator's call. */
+
+function reversibleErrors(brief) {
+  const out = [];
+  (brief.mechanical ?? []).forEach((m, i) => {
+    if (m?.reversible === false) {
+      out.push({ path: `mechanical[${i}]`, message: "cannot be undone, so it cannot be handled without asking",
+        hint: "make it an entry awaiting a ruling, with the irreversible option marked reversible: false" });
+    }
+  });
+  (brief.decisions ?? []).forEach((e, i) => {
+    if (!e || !["open", "decided"].includes(e.status ?? "open")) return;
+    const sols = e.solutions ?? [];
+    if (sols.length && sols.every((s) => s?.reversible === undefined)) {
+      out.push({ path: `decisions[${i}] (${e.id}) → solutions`, severity: "warning",
+        message: "says of no option whether it can be undone",
+        hint: "mark each option reversible: true or false — the reader weighs an option that cannot be taken back differently" });
+    }
+  });
+  return out;
+}
+
+/* ── estimates in the wrong currency ────────────────────────────────────────
+   A "two days" figure is a guess at the pace of hand-written code. The work is
+   done by agents, several times faster, so the figure misstates the cost. What
+   the reader pays is attention, review and risk. */
+
+const TIME_ESTIMATE = /\b(\d+(\.\d+)?|an?|one|two|three|four|five|six|seven|eight|nine|ten|half an?|a couple of|a few|several)[\s-]+(minute|hour|day|week|month|sprint)s?\b/i;
+
+function estimateWarnings(brief) {
+  const out = [];
+  (brief.decisions ?? []).forEach((e, i) => {
+    if (!e || !["open", "decided"].includes(e.status ?? "open")) return;
+    (e.solutions ?? []).forEach((s, j) => {
+      const hit = s?.cost?.work?.match(TIME_ESTIMATE);
+      if (hit) {
+        out.push({ path: `decisions[${i}] (${e.id}) → solutions[${j}] → cost → work`, severity: "warning",
+          message: `estimates calendar time ("${hit[0]}")`,
+          hint: "say what the work consists of and what it needs from the operator — review, a decision, access — not how long it would take by hand" });
+      }
+    });
+  });
+  return out;
+}
+
+/* ── standing rulings ──────────────────────────────────────────────────────
+   The brief's memory of what the operator has already said. A ruling is never
+   deleted; one that stops holding points at the ruling that took over, so the
+   chain can always be followed to what holds now. */
+
+function rulingErrors(brief) {
+  const out = [];
+  const rulings = brief.rulings ?? [];
+  const entryIds = new Set((brief.decisions ?? []).map((e) => e?.id));
+  const seen = new Map();
+  rulings.forEach((r, i) => {
+    if (!r) return;
+    const where = `rulings[${i}]${r.id ? ` (${r.id})` : ""}`;
+    if (r.id && seen.has(r.id)) {
+      out.push({ path: where, message: `re-uses the id "${r.id}", already used by rulings[${seen.get(r.id)}]`,
+        hint: "a ruling is cited by its id, so each must be unique and never reassigned — take the next free number" });
+    }
+    if (r.id) seen.set(r.id, i);
+    if (r.replacedBy) {
+      if (r.replacedBy === r.id) {
+        out.push({ path: `${where} → replacedBy`, message: "points at itself", hint: "name the later ruling that took over" });
+      } else if (!rulings.some((x) => x?.id === r.replacedBy)) {
+        out.push({ path: `${where} → replacedBy`, message: `points at ${r.replacedBy}, which is not a ruling on this page`,
+          hint: "record the new ruling first, then point the old one at it" });
+      }
+      if ((r.status ?? "active") === "active") {
+        out.push({ path: where, message: `names ${r.replacedBy} as its replacement but is still marked active`,
+          hint: 'set status to "replaced" — two rulings on the same question cannot both hold' });
+      }
+    }
+    for (const id of r.entries ?? []) {
+      if (!entryIds.has(id)) {
+        out.push({ path: `${where} → entries`, message: `names ${id}, which is not an entry on this page`,
+          hint: "fix the id, or drop it" });
+      }
+    }
+  });
+  (brief.decisions ?? []).forEach((e, i) => {
+    for (const ev of [...(e?.evidence ?? []), ...(e?.resolution?.evidence ?? [])]) {
+      if (ev?.kind === "ruling" && !seen.has(ev.ref)) {
+        out.push({ path: `decisions[${i}]${e.id ? ` (${e.id})` : ""}`, message: `cites the ruling "${ev.ref}", which is not on this page`,
+          hint: "a ruling cited as evidence must be recorded in rulings, with its id as the ref" });
+      }
+    }
+  });
+  return out;
+}
+
+/* ── the same question, asked again ─────────────────────────────────────────
+   In a long session the conversation is summarised, and what the operator
+   already answered drops out of view. The same problem then comes back under a
+   new number, or an answered question is put to the operator again. A cheap
+   word-overlap check cannot prove two items are the same, but it can make the
+   writer look. */
+
+const STOP = new Set(("that this with from have when which there their them they then than what were been into " +
+  "only also does will would should could about after before while where these those other every each more most " +
+  "some such just because being over under again still never always entry question").split(" "));
+
+function words(...texts) {
+  const out = new Set();
+  for (const t of texts) {
+    for (const w of String(t ?? "").toLowerCase().split(/[^a-z0-9]+/)) {
+      if (w.length >= 4 && !STOP.has(w)) out.add(w.replace(/(ing|ed|es|s)$/, ""));
+    }
+  }
+  return out;
+}
+
+function overlap(a, b) {
+  if (!a.size || !b.size) return 0;
+  let shared = 0;
+  for (const w of a) if (b.has(w)) shared++;
+  return shared / Math.min(a.size, b.size);
+}
+
+const SAME_ENTRY = 0.6;
+const ANSWERED = 0.5;
+
+function repeatWarnings(brief) {
+  const out = [];
+  const entries = (brief.decisions ?? []).filter(Boolean);
+  const bag = entries.map((e) => words(e.title, e.short, e.problem));
+  const num = (id) => Number(String(id ?? "").split("-")[1]) || 0;
+  entries.forEach((e, i) => {
+    entries.forEach((f, j) => {
+      if (j === i || num(f.id) >= num(e.id)) return;   // report on the later of the two
+      const score = overlap(bag[i], bag[j]);
+      if (score < SAME_ENTRY) return;
+      out.push({ path: `decisions (${e.id})`, severity: "warning",
+        message: `reads like ${f.id}, which is ${f.status ?? "open"} — ${Math.round(score * 100)}% of the shorter one's key words are shared`,
+        hint: `if it is the same problem, fold the new material into ${f.id} (reopening it if it was closed, and saying what is new) rather than asking it again under a new number` });
+    });
+  });
+  const live = (brief.rulings ?? []).filter((r) => r && (r.status ?? "active") === "active");
+  entries.forEach((e, i) => {
+    if ((e.status ?? "open") !== "open") return;
+    for (const r of live) {
+      if ((r.entries ?? []).includes(e.id)) continue;
+      const score = overlap(bag[i], words(r.about, r.said));
+      if (score < ANSWERED) continue;
+      out.push({ path: `decisions (${e.id})`, severity: "warning",
+        message: `is awaiting a ruling, but may already be answered by ${r.id}: "${r.about}"`,
+        hint: `if ${r.id} answers it, record the ruling on the entry and move it on; if it is genuinely different, add ${e.id} to ${r.id}'s entries only when the ruling bears on it, and say in the entry why the ruling does not settle it` });
+    }
+  });
   return out;
 }
 
@@ -408,7 +640,12 @@ function bearingErrors(brief) {
    Prose cites entries by id, and the page turns each citation into a link. A
    citation to an id that is not on the page is a dead link and, usually, a typo. */
 
-const CITED = /\bQ-\d+\b/g;
+const CITED = /\b[QR]-\d+\b/g;
+/* Ids cited as this brief's own: bare, or under its binding's prefix. An id
+   under another prefix points at another brief and is not checked here. */
+const PREFIXED = /(?:\b([A-Za-z0-9][A-Za-z0-9._#-]*)\/)?\b([QR]-\d+)\b/g;
+const ownCitations = (text, brief) =>
+  [...String(text).matchAll(PREFIXED)].filter((m) => !m[1] || m[1] === brief.binding?.ref).map((m) => m[2]);
 
 /* Three or more entries named in one sentence is a list written as prose: the
    reader has to unpick it, and the page cannot group it. */
@@ -429,16 +666,16 @@ function enumerationWarnings(brief) {
 }
 
 function referenceErrors(brief) {
-  const ids = new Set((brief.decisions ?? []).map((e) => e?.id));
+  const ids = new Set([...(brief.decisions ?? []), ...(brief.rulings ?? [])].map((x) => x?.id));
   const seen = new Set();
   const out = [];
   const walk = (v, path) => {
     if (typeof v === "string") {
-      for (const id of v.match(CITED) ?? []) {
+      for (const id of ownCitations(v, brief)) {
         if (ids.has(id) || seen.has(`${path}|${id}`)) continue;
         seen.add(`${path}|${id}`);
-        out.push({ path, severity: "warning", message: `cites ${id}, which is not an entry on this page`,
-          hint: "fix the id, or add the entry it refers to" });
+        out.push({ path, severity: "warning", message: `cites ${id}, which is not ${id.startsWith("R-") ? "a ruling" : "an entry"} on this page`,
+          hint: `fix the id, or add the ${id.startsWith("R-") ? "ruling" : "entry"} it refers to` });
       }
     } else if (Array.isArray(v)) v.forEach((x, i) => walk(x, `${path}[${i}]`));
     else if (v && typeof v === "object") {
@@ -453,7 +690,7 @@ function referenceErrors(brief) {
   const citedBy = new Map();
   const collect = (v, owner) => {
     if (typeof v === "string") {
-      for (const id of v.match(CITED) ?? []) if (id !== owner) citedBy.set(id, true);
+      for (const id of ownCitations(v, brief)) if (id !== owner) citedBy.set(id, true);
     } else if (Array.isArray(v)) v.forEach((x) => collect(x, owner));
     else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) if (k !== "id") collect(x, owner);
   };
@@ -564,6 +801,7 @@ function timestampErrors(brief) {
   });
   (brief.mechanical ?? []).forEach((m, i) => item(m, `mechanical[${i}]`));
   (brief.outstanding ?? []).forEach((o, i) => item(o, `outstanding[${i}]`));
+  (brief.rulings ?? []).forEach((r, i) => item(r, `rulings[${i}]${r?.id ? ` (${r.id})` : ""}`));
   return out;
 }
 

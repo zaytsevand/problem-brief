@@ -24,9 +24,21 @@
     {
       "version": "2026-09-11T08:30Z",
       "changes": [
-        { "kind": "raised", "text": "Q-1 raised: the reader's proof was built on files we no longer use.", "id": "Q-1" },
-        { "kind": "raised", "text": "Q-2 raised: one parsing failure is handled silently.", "id": "Q-2" },
-        { "kind": "raised", "text": "Q-3 raised: a halfway import hands back with no next step.", "id": "Q-3" }
+        {
+          "kind": "raised",
+          "text": "Q-1 raised: the reader's proof was built on files we no longer use.",
+          "id": "Q-1"
+        },
+        {
+          "kind": "raised",
+          "text": "Q-2 raised: one parsing failure is handled silently.",
+          "id": "Q-2"
+        },
+        {
+          "kind": "raised",
+          "text": "Q-3 raised: a halfway import hands back with no next step.",
+          "id": "Q-3"
+        }
       ]
     }
   ],
@@ -73,9 +85,10 @@
           "id": "rerun-live",
           "label": "Re-take the measurement against the ten live documents before sign-off",
           "recommended": true,
+          "reversible": true,
           "summary": "Point the benchmark at live downloads instead of the saved files, re-run it, and re-write the answer key for the two templates that changed. Sign-off waits for the new number.",
           "cost": {
-            "work": "About a day: half of it re-writing the answer key for the two changed templates, half waiting on the run.",
+            "work": "Re-write the answer key for the two changed templates, then one benchmark run against live downloads. Needs nothing from you until the new number is in.",
             "risk": "The new number may be materially worse, which would itself delay the release. That is the point of taking it.",
             "forecloses": "Nothing."
           },
@@ -89,9 +102,10 @@
           "id": "ship-caveat",
           "label": "Ship on the old number, with it labelled as measured against saved files",
           "recommended": false,
+          "reversible": false,
           "summary": "Leave the measurement alone, but change every place that cites it to say what it was actually taken against, and open a follow-up to re-take it after release.",
           "cost": {
-            "work": "An hour of editing.",
+            "work": "Editing the handful of places that cite the number. Needs your sign-off on releasing without a current measurement.",
             "risk": "We release without knowing the real accuracy. If it is near 74%, roughly one invoice in four is posted wrong, and we find out from the finance team.",
             "forecloses": "Nothing formally, but a follow-up filed after a release tends not to get done."
           }
@@ -100,6 +114,7 @@
           "id": "narrow-claim",
           "label": "Drop the accuracy claim from the sign-off entirely",
           "recommended": false,
+          "reversible": true,
           "summary": "Stop treating the number as a release condition. Sign off on the code review alone and treat accuracy as something we learn in production.",
           "cost": {
             "work": "None.",
@@ -151,9 +166,10 @@
           "id": "name-the-fifth",
           "label": "Give the connection failure its own handler and flag, and make any flag disqualify the run",
           "recommended": true,
+          "reversible": true,
           "summary": "Add the missing handler next to the other four, set a flag the same way, and make the summary refuse to print a headline number when any flag is set.",
           "cost": {
-            "work": "Half a day including the test that proves a dropped connection shows up in the summary.",
+            "work": "One new handler, one flag, a change to the summary, and a test that drops the connection on purpose. A short review.",
             "risk": "Runs that used to look clean will start showing flags. That is the intended effect, but it will make the next few runs look worse.",
             "forecloses": "Nothing."
           }
@@ -162,9 +178,10 @@
           "id": "single-caller",
           "label": "Do the above, and also merge the two copies of the call handling into one",
           "recommended": false,
+          "reversible": false,
           "summary": "Same fix, plus collapse the second, drifted copy into the first so the two cannot disagree again.",
           "cost": {
-            "work": "Two to three days — the two copies have different callers and different return shapes.",
+            "work": "The same fix, plus rewriting both copies' callers onto one return shape. A wider review, of code the review did not look at.",
             "risk": "A wider change than the release needs, touching code the review did not look at.",
             "forecloses": "Nothing, but it is hard to undo once the callers are rewritten."
           }
@@ -224,9 +241,10 @@
           "id": "resume-point",
           "label": "Save the position when handing back, and add one resume action",
           "recommended": true,
+          "reversible": true,
           "summary": "Keep the batch and the position when the run hands back. The dashboard grows one button that reopens the import where it stopped, with the unread field highlighted.",
           "cost": {
-            "work": "Three to four days, most of it in holding a part-finished batch safely across the pause.",
+            "work": "Holding a part-finished batch safely across the pause, which is most of it, plus one resume button on the dashboard.",
             "risk": "A held-open batch is something we currently always release at the end of a run. Holding one has a cost and a timeout to design.",
             "forecloses": "Nothing."
           }
@@ -235,9 +253,10 @@
           "id": "explain-only",
           "label": "Explain the stop clearly, but require a fresh start",
           "recommended": false,
+          "reversible": true,
           "summary": "Do not keep the batch. Tell the person plainly what could not be read and that the import must be started again.",
           "cost": {
-            "work": "A day.",
+            "work": "A clearer stop message. Nothing kept across the pause.",
             "risk": "Honest but frustrating: they redo work the system already did.",
             "forecloses": "Nothing, though it sets the expectation that stopping means losing progress."
           }
@@ -322,6 +341,27 @@
       "created": "2026-09-12T10:05Z",
       "updated": "2026-09-13T14:00Z",
       "state": "in-progress"
+    }
+  ],
+  "rulings": [
+    {
+      "id": "R-1",
+      "created": "2026-09-11T09:10Z",
+      "updated": "2026-09-11T09:10Z",
+      "about": "Should mistakes in the design note's wording be asked about, or just fixed?",
+      "said": "Just fix them and list them. Don't ask me about the design note's wording.",
+      "source": "chat, 2026-09-11"
+    },
+    {
+      "id": "R-2",
+      "created": "2026-09-12T09:15Z",
+      "updated": "2026-09-12T09:15Z",
+      "about": "Is the timeout for a held-open batch part of the resume work, or a separate piece of work?",
+      "said": "Part of the resume work. Twenty minutes is fine to start with.",
+      "source": "chat, 2026-09-12",
+      "entries": [
+        "Q-3"
+      ]
     }
   ]
 }

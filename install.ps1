@@ -14,8 +14,17 @@
 .PARAMETER Dir
   Install into a different skills directory.
 
+.PARAMETER Hook
+  Also add the two hooks to %USERPROFILE%\.claude\settings.json: one puts each
+  brief's rulings back after a session is summarised, one computes the chat
+  summary on every publish.
+
+.PARAMETER ClaudeMd
+  Also append one line to %USERPROFILE%\.claude\CLAUDE.md saying findings,
+  decisions and questions go into a brief by default.
+
 .PARAMETER Uninstall
-  Remove the skill again.
+  Remove the skill again, and the hook.
 
 .EXAMPLE
   .\install.ps1
@@ -28,6 +37,8 @@
 param(
   [switch]$Link,
   [switch]$Uninstall,
+  [switch]$Hook,
+  [switch]$ClaudeMd,
   [string]$Dir
 )
 
@@ -42,6 +53,12 @@ function Write-Ok   ($m) { Write-Host "✓ $m" -ForegroundColor Green }
 function Write-Warn ($m) { Write-Host "! $m" -ForegroundColor Yellow }
 
 if ($Uninstall) {
+  $hookScript = Join-Path $target 'bin\install-hook.mjs'
+  if ((Test-Path $hookScript) -and (Get-Command node -ErrorAction SilentlyContinue)) {
+    & node $hookScript --remove | Out-Null
+    & node (Join-Path $target 'bin\install-claude-md.mjs') --remove | Out-Null
+    Write-Ok 'removed the hooks and the CLAUDE.md line, if they were there'
+  }
   if (Test-Path $target) {
     # Remove-Item on a junction deletes the junction, not the target it points at.
     Remove-Item $target -Recurse -Force
@@ -95,6 +112,21 @@ if ((Test-Path $humanizerPlugin) -or (Test-Path (Join-Path $Dir 'humanizer\SKILL
   Write-Host '    in Claude Code:  /plugin marketplace add blader/humanizer'
   Write-Host '                     /plugin install humanizer@humanizer'
   $missing = $true
+}
+
+# ── the hook that keeps rulings in view ─────────────────────────────────────
+if ($Hook) {
+  & node (Join-Path $target 'bin\install-hook.mjs')
+  Write-Ok 'briefs come back into view at every session start and after every summary'
+} else {
+  Write-Host '  Optional: .\install.ps1 -Hook adds two hooks: one puts each brief''s rulings back'
+  Write-Host '  after a session is summarised, one computes the chat summary on every publish.'
+}
+
+# ── the line in CLAUDE.md ───────────────────────────────────────────────────
+if ($ClaudeMd) {
+  & node (Join-Path $target 'bin\install-claude-md.mjs')
+  Write-Ok 'every session is told a brief is the default channel, hooks or not'
 }
 
 Write-Host ''

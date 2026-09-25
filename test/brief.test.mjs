@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,7 +13,7 @@ const EXAMPLE = join(ROOT, "examples", "example.brief.json");
 const example = () => JSON.parse(readFileSync(EXAMPLE, "utf8"));
 
 const T = "2026-09-15T10:00Z";
-const option = { id: "a", label: "Do it", recommended: true, summary: "Deduplicate on the invoice number before posting.", cost: { work: "An hour." } };
+const option = { id: "a", label: "Do it", recommended: true, reversible: true, summary: "Deduplicate on the invoice number before posting.", cost: { work: "One check before posting, and a test for it." } };
 const entry = (id, extra = {}) => ({
   id, created: T, updated: T, title: `Entry ${id}`,
   problem: "The importer posts invoices twice when retried.", brief: "Duplicate postings reach the ledger and have to be reversed by hand, which nobody notices for days.",
@@ -458,4 +458,479 @@ test("the validator CLI runs from a path with a space in it", () => {
   cpSync(join(ROOT, "schema", "problem-brief.schema.json"), join(dir, "schema", "problem-brief.schema.json"));
   const out = execFileSync("node", [join(dir, "bin", "validate-brief.mjs"), EXAMPLE], { encoding: "utf8" });
   assert.match(out, /is a valid problem brief/);
+});
+
+/* ── answered questions stay answered ──────────────────────────────────── */
+
+const ruling = (id, extra = {}) => ({
+  id, created: T, updated: T, source: "chat, 2026-09-15",
+  about: "Should retried invoices be deduplicated before posting?",
+  said: "Yes. Deduplicate on the invoice number, always.", ...extra,
+});
+const live = { bearing: "blocks-goal", bearingReason: "Posting is the goal." };
+const distinct = (id, title, problem) => entry(id, { ...live, title, problem });
+
+test("standing rulings validate, and a replaced one must name what replaced it", () => {
+  assert.equal(messages(brief([entry("Q-1", live)], { rulings: [ruling("R-1")] })).ok, true);
+  const r = messages(brief([entry("Q-1", live)], { rulings: [ruling("R-1", { status: "replaced" })] }));
+  assert.ok(r.errors.some((m) => m.includes('missing "replacedBy"')));
+});
+
+test("a ruling pointing at another but still active is refused", () => {
+  const r = messages(brief([entry("Q-1", live)], {
+    rulings: [ruling("R-1", { replacedBy: "R-2" }), ruling("R-2", { about: "Something else entirely, about currencies." })],
+  }));
+  assert.ok(r.errors.some((m) => m.includes("still marked active")));
+});
+
+test("ruling ids are unique, and a ruling cited as evidence must exist", () => {
+  const r = messages(brief([entry("Q-1", { ...live, evidence: [{ kind: "ruling", ref: "R-9", note: "The operator said so." }] })],
+    { rulings: [ruling("R-1"), ruling("R-1")] }));
+  assert.ok(r.errors.some((m) => m.includes('re-uses the id "R-1"')));
+  assert.ok(r.errors.some((m) => m.includes('cites the ruling "R-9"')));
+});
+
+test("an entry that reads like an earlier one is flagged on the later one", () => {
+  const r = messages(brief([
+    distinct("Q-1", "Retried invoices are posted twice", "A retried import posts the same invoice to the ledger twice."),
+    distinct("Q-7", "Invoices posted twice after a retry", "When the import is retried the same invoice is posted to the ledger twice."),
+    distinct("Q-8", "The currency column is ignored", "Amounts in euros are read as pounds because the currency column is never parsed."),
+  ]));
+  assert.equal(r.warnings.filter((m) => m.includes("reads like")).length, 1);
+  assert.ok(r.warnings.some((m) => m.startsWith("decisions (Q-7) reads like Q-1")));
+});
+
+test("an open entry a standing ruling already answers is flagged", () => {
+  const q = distinct("Q-4", "Deduplicate retried invoices before posting?", "Retried invoices are posted twice; should they be deduplicated before posting?");
+  const r = messages(brief([q], { rulings: [ruling("R-1")] }));
+  assert.ok(r.warnings.some((m) => m.includes("may already be answered by R-1")));
+  const linked = messages(brief([q], { rulings: [ruling("R-1", { entries: ["Q-4"] })] }));
+  assert.ok(!linked.warnings.some((m) => m.includes("may already be answered")));
+});
+
+test("rulings get their own section and filter, and R- ids link to them", () => {
+  const html = render(brief([entry("Q-1", { ...live, brief: "Settled in principle by R-1, but the mechanism is still open and needs a ruling." })],
+    { rulings: [ruling("R-1")] }));
+  assert.match(html, /data-filter="rulings"/);
+  assert.match(html, /<li id="R-1" data-reveal="rulings">/);
+  assert.match(html, /<a class="qref" href="#R-1"/);
+});
+
+test("the page carries its own data, and extract-brief recovers it exactly", () => {
+  const b = brief([entry("Q-1", { ...live, problem: "A </script> in the text must not end the data block early." })],
+    { rulings: [ruling("R-1")] });
+  const html = render(b);
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  writeFileSync(join(dir, "p.html"), html);
+  const got = JSON.parse(execFileSync("node", [join(ROOT, "bin", "extract-brief.mjs"), join(dir, "p.html")], { encoding: "utf8" }));
+  assert.deepEqual(got, b);
+});
+
+/* ── Claude Code memory and the SessionStart hook ──────────────────────── */
+
+const bin = (name) => join(ROOT, "bin", name);
+const run = (name, args, input) => execFileSync("node", [bin(name), ...args], { encoding: "utf8", input });
+
+test("the digest lists active rulings, live entries and closed ids — and leaves replaced rulings out", () => {
+  const b = brief([entry("Q-1", { ...live, short: "retried invoices" }),
+    entry("Q-2", { status: "superseded", short: "old currency bug" })],
+  { rulings: [ruling("R-1", { status: "replaced", replacedBy: "R-2" }), ruling("R-2", { about: "Which currency do amounts default to?", said: "Pounds, always." })] });
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  writeFileSync(join(dir, "b.json"), JSON.stringify(b));
+  const text = run("brief-context.mjs", [join(dir, "b.json")]);
+  assert.match(text, /R-2 .*Which currency.*→ Pounds, always\./);
+  assert.doesNotMatch(text, /R-1/);
+  assert.match(text, /Q-1 retried invoices — awaiting a ruling, blocks the goal/);
+  assert.match(text, /Closed .*Q-2 old currency bug/);
+});
+
+test("registering a brief writes one pointer and one index line, however often it runs", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const mem = join(dir, "memory");
+  writeFileSync(join(dir, "importer.brief.json"), JSON.stringify(brief([entry("Q-1", live)], { rulings: [ruling("R-1")] })));
+  mkdirSync(mem);
+  writeFileSync(join(mem, "MEMORY.md"), "- [Someone else](other.md) — keep me\n");
+  for (let k = 0; k < 2; k++) run("brief-memory.mjs", [join(dir, "importer.brief.json"), "--memory-dir", mem, "--url", "https://example.test/a"]);
+  const index = readFileSync(join(mem, "MEMORY.md"), "utf8").trim().split("\n");
+  assert.equal(index.length, 2);
+  assert.equal(index[0], "- [Someone else](other.md) — keep me");
+  assert.match(index[1], /\(problem-brief-importer\.md\)/);
+  const pointer = readFileSync(join(mem, "problem-brief-importer.md"), "utf8");
+  assert.match(pointer, /^---\nname: problem-brief-importer\n/);
+  assert.match(pointer, /type: project/);
+});
+
+test("the hook finds the project's briefs through the memory pointers beside the transcript", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const mem = join(dir, "project", "memory");
+  mkdirSync(mem, { recursive: true });
+  writeFileSync(join(dir, "importer.brief.json"), JSON.stringify(brief([entry("Q-1", live)], { rulings: [ruling("R-1")] })));
+  run("brief-memory.mjs", [join(dir, "importer.brief.json"), "--memory-dir", mem]);
+  const out = JSON.parse(run("brief-context.mjs", ["--hook"], JSON.stringify({ transcript_path: join(dir, "project", "s.jsonl"), source: "compact" })));
+  assert.equal(out.hookSpecificOutput.hookEventName, "SessionStart");
+  assert.match(out.hookSpecificOutput.additionalContext, /R-1 .*Deduplicate on the invoice number/);
+});
+
+test("with no brief, the hook still carries the default-channel line; it can be turned off, and never fails", () => {
+  const ctx = (input, env = {}) => execFileSync("node", [bin("brief-context.mjs"), "--hook"], { encoding: "utf8", input, env: { ...process.env, ...env } });
+  const alone = JSON.parse(ctx(JSON.stringify({ transcript_path: "/nowhere/s.jsonl" })));
+  assert.match(alone.hookSpecificOutput.additionalContext, /go into a problem brief .* by default/);
+  assert.doesNotMatch(alone.hookSpecificOutput.additionalContext, /Problem brief "/);
+  assert.equal(ctx(JSON.stringify({ transcript_path: "/nowhere/s.jsonl" }), { PROBLEM_BRIEF_REMINDER: "off" }), "");
+  assert.doesNotThrow(() => JSON.parse(ctx("not json")));
+});
+
+test("installing the hook keeps every other hook, never duplicates, and removes cleanly", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const settings = join(dir, "settings.json");
+  const other = { matcher: "startup", hooks: [{ type: "command", command: "echo hi" }] };
+  writeFileSync(settings, JSON.stringify({ model: "x", hooks: { SessionStart: [other] } }));
+  run("install-hook.mjs", ["--settings", settings]);
+  run("install-hook.mjs", ["--settings", settings]);
+  let s = JSON.parse(readFileSync(settings, "utf8"));
+  assert.equal(s.model, "x");
+  assert.equal(s.hooks.SessionStart.length, 2);
+  assert.deepEqual(s.hooks.SessionStart[0], other);
+  assert.match(s.hooks.SessionStart[1].hooks[0].command, /brief-context\.mjs" --hook$/);
+  run("install-hook.mjs", ["--settings", settings, "--remove"]);
+  s = JSON.parse(readFileSync(settings, "utf8"));
+  assert.deepEqual(s.hooks.SessionStart, [other]);
+});
+
+/* ── what cannot be undone, dependencies, estimates ────────────────────── */
+
+test("a fix that cannot be undone is refused as handled without asking", () => {
+  const r = messages(brief([entry("Q-1", live)], { mechanical: [{ summary: "Dropped the old ledger table.", created: T, updated: T, reversible: false }] }));
+  assert.ok(r.errors.some((m) => m.includes("cannot be handled without asking")));
+});
+
+test("an option that cannot be undone is tagged, and a live entry that marks none is flagged", () => {
+  const html = render(brief([entry("Q-1", { ...live, solutions: [{ ...option, reversible: false }] })]));
+  assert.match(html, /tag-warn">Cannot be undone/);
+  const r = messages(brief([entry("Q-1", { ...live, solutions: [{ ...option, reversible: undefined }] })]));
+  assert.ok(r.warnings.some((m) => m.includes("whether it can be undone")));
+});
+
+test("a work estimate in calendar time is flagged on live entries", () => {
+  const r = messages(brief([entry("Q-1", { ...live, solutions: [{ ...option, cost: { work: "About two days of work." } }] })]));
+  assert.ok(r.warnings.some((m) => m.includes('estimates calendar time ("two days")')));
+});
+
+test("dependencies: unknown ids, self and cycles are refused", () => {
+  const r = messages(brief([
+    distinct("Q-1", "Retried invoices are posted twice", "A retried import posts the same invoice twice."),
+    { ...distinct("Q-2", "The currency column is ignored", "Amounts in euros are read as pounds."), blockedBy: ["Q-3", "Q-2", "Q-9"] },
+    { ...distinct("Q-3", "Supplier names are matched loosely", "Two suppliers with similar names are merged."), blockedBy: ["Q-2"] },
+  ]));
+  assert.ok(r.errors.some((m) => m.includes("waits on itself") && !m.includes("through")));
+  assert.ok(r.errors.some((m) => m.includes("waits on Q-9")));
+  assert.ok(r.errors.some((m) => m.includes("through Q-2 → Q-3 → Q-2") || m.includes("through Q-3 → Q-2 → Q-3")));
+});
+
+test("a goal blocker waiting on an escalated entry is flagged", () => {
+  const r = messages(brief([
+    { ...distinct("Q-1", "Retried invoices are posted twice", "A retried import posts the same invoice twice."), blockedBy: ["Q-2"] },
+    distinct("Q-2", "The currency column is ignored", "Amounts in euros are read as pounds."),
+  ].map((e) => e.id === "Q-2" ? { ...e, bearing: "escalated", bearingReason: "Not on the path." } : e)));
+  assert.ok(r.warnings.some((m) => m.includes("waits on Q-2, which is only escalated")));
+});
+
+test("the page says what each entry waits on and unblocks, and ranks rulings by what they free", () => {
+  const html = render(brief([
+    distinct("Q-1", "Retried invoices are posted twice", "A retried import posts the same invoice twice."),
+    distinct("Q-2", "The currency column is ignored", "Amounts in euros are read as pounds."),
+    { ...distinct("Q-3", "Supplier names are matched loosely", "Two suppliers with similar names are merged."), blockedBy: ["Q-2"] },
+    { ...distinct("Q-4", "Credit notes are posted as invoices", "A credit note is posted as a positive amount."), blockedBy: ["Q-3"] },
+  ]));
+  assert.match(html, /Waits on <a class="qref" href="#Q-2"/);
+  assert.match(html, /Ruling this unblocks <a class="qref" href="#Q-3"/);
+  const waiting = html.slice(html.indexOf("Waiting on you"), html.indexOf("</section>", html.indexOf("Waiting on you")));
+  assert.ok(waiting.indexOf('href="#Q-2"') < waiting.indexOf('href="#Q-1"'), "Q-2 unblocks two, so it comes first");
+  assert.match(waiting, /unblocks 2/);
+});
+
+/* ── the chat summary, computed ────────────────────────────────────────── */
+
+test("the summary lists what moved, new entries first, then what waits on the reader", async () => {
+  const { delta } = await import("../bin/brief-delta.mjs");
+  const before = brief([distinct("Q-1", "Retried invoices are posted twice", "A retried import posts the same invoice twice.")]);
+  const after = brief([
+    { ...before.decisions[0], status: "decided", decision: { chose: "a", date: "2026-09-15" } },
+    { ...distinct("Q-2", "The currency column is ignored", "Amounts in euros are read as pounds."), bearing: "escalated", bearingReason: "Not on the path." },
+  ], { rulings: [ruling("R-1")] });
+  const text = delta(before, after);
+  const lines = text.split("\n");
+  assert.match(lines[0], /^- Q-2 raised \(escalated\)/);
+  assert.match(text, /- Q-1: open → decided \(Do it\)/);
+  assert.match(text, /- R-1 recorded: Should retried invoices/);
+  assert.match(text, /Blocks the goal: nothing\nEscalated, not blocking: Q-2/);
+  assert.match(delta(after, after), /Nothing moved since the last publish/);
+  assert.match(delta(after, brief([after.decisions[1]])), /Q-1 is missing from this version/);
+});
+
+test("the summary stays under 400 words however much moved", async () => {
+  const { delta } = await import("../bin/brief-delta.mjs");
+  const many = Array.from({ length: 120 }, (_, k) => distinct(`Q-${k + 1}`, `Problem number ${k + 1} with a long headline here`, "Something is wrong in a way that needs a ruling soon."));
+  const text = delta(brief([]), brief(many));
+  assert.ok(text.split(/\s+/).length <= 400, `${text.split(/\s+/).length} words`);
+  assert.match(text, /more changes — see the page/);
+});
+
+test("the publish hook summarises against the previous publish, and ignores anything else", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const env = { ...process.env, PROBLEM_BRIEF_HOME: join(dir, "home") };
+  const hookRun = (input) => execFileSync("node", [bin("brief-delta.mjs"), "--hook"], { encoding: "utf8", input: JSON.stringify(input), env });
+  const publish = (b) => {
+    writeFileSync(join(dir, "index.html"), render(b));
+    return hookRun({ tool_name: "Artifact", tool_input: { file_path: "index.html" }, cwd: dir });
+  };
+  const first = JSON.parse(publish(brief([entry("Q-1", live)])));
+  assert.equal(first.hookSpecificOutput.hookEventName, "PostToolUse");
+  assert.match(first.hookSpecificOutput.additionalContext, /First publish: 1 awaiting a ruling/);
+  const second = JSON.parse(publish(brief([entry("Q-1", live)], { rulings: [ruling("R-1")] })));
+  assert.match(second.hookSpecificOutput.additionalContext, /- R-1 recorded/);
+  assert.equal(hookRun({ tool_name: "Artifact", tool_input: { action: "comments", url: "x" }, cwd: dir }), "");
+  assert.equal(hookRun({ tool_name: "Bash", tool_input: {}, cwd: dir }), "");
+});
+
+test("the installer adds both hooks and removes both", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const settings = join(dir, "settings.json");
+  run("install-hook.mjs", ["--settings", settings]);
+  let s = JSON.parse(readFileSync(settings, "utf8"));
+  assert.equal(s.hooks.PostToolUse[0].matcher, "Artifact");
+  assert.match(s.hooks.PostToolUse[0].hooks[0].command, /brief-delta\.mjs" --hook$/);
+  run("install-hook.mjs", ["--settings", settings, "--remove"]);
+  s = JSON.parse(readFileSync(settings, "utf8"));
+  assert.equal(s.hooks, undefined);
+});
+
+/* ── comments and citations get recorded ───────────────────────────────── */
+
+function commentRig() {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const mem = join(dir, "project", "memory");
+  mkdirSync(mem, { recursive: true });
+  const path = join(dir, "importer.brief.json");
+  writeFileSync(path, JSON.stringify(brief([entry("Q-1", { ...live, short: "retried invoices" })], { rulings: [ruling("R-1")] })));
+  run("brief-memory.mjs", [path, "--memory-dir", mem, "--url", "https://claude.ai/artifact/PAGE1"]);
+  const env = { ...process.env, PROBLEM_BRIEF_HOME: join(dir, "home") };
+  const transcript_path = join(dir, "project", "s.jsonl");
+  const hook = (input) => {
+    const out = execFileSync("node", [bin("brief-comments.mjs"), "--hook"], { encoding: "utf8", env, input: JSON.stringify({ transcript_path, ...input }) });
+    return out ? JSON.parse(out).hookSpecificOutput : null;
+  };
+  const cli = (...args) => execFileSync("node", [bin("brief-comments.mjs"), ...args], { encoding: "utf8", env });
+  return { path, hook, cli };
+}
+const THREAD = "98e311d9-6e21-4730-88a3-f46e73610dd4";
+const resolveCall = { hook_event_name: "PreToolUse", tool_name: "ArtifactComments", tool_input: { action: "resolve", url: "https://claude.ai/artifact/PAGE1", thread_id: THREAD } };
+const readCall = { hook_event_name: "PostToolUse", tool_name: "ArtifactComments", tool_input: { action: "read", url: "https://claude.ai/artifact/PAGE1", thread_id: THREAD } };
+
+test("a comment notification for a brief's page points at the thread and the brief's JSON", () => {
+  const { path, hook } = commentRig();
+  const out = hook({ hook_event_name: "UserPromptSubmit",
+    prompt: `<task-notification>\n<task-type>artifact-auto-react</task-type>\nAuto-replied to thread ${THREAD} on artifact https://claude.ai/artifact/PAGE1 — a reply only` });
+  assert.equal(out.hookEventName, "UserPromptSubmit");
+  assert.match(out.additionalContext, /automatic reply is not a record/);
+  assert.ok(out.additionalContext.includes(path) && out.additionalContext.includes(THREAD));
+  assert.equal(hook({ hook_event_name: "UserPromptSubmit", prompt: "<task-type>artifact-auto-react</task-type> https://claude.ai/artifact/OTHER" }), null);
+});
+
+test("a message citing a brief's ids gets their state and the instruction to record", () => {
+  const { hook } = commentRig();
+  const out = hook({ hook_event_name: "UserPromptSubmit", prompt: "Q-1: go with the first option. And R-1 still holds." });
+  assert.match(out.additionalContext, /Q-1 \(retried invoices\): open, blocks the goal/);
+  assert.match(out.additionalContext, /R-1 \(standing ruling, active\)/);
+  assert.equal(hook({ hook_event_name: "UserPromptSubmit", prompt: "Q-9 is not on any brief" }), null);
+});
+
+test("a brief's thread cannot be resolved unread, or before the brief is saved", async () => {
+  const { path, hook, cli } = commentRig();
+  assert.equal(hook(resolveCall).permissionDecision, "deny");
+  assert.match(hook(resolveCall).permissionDecisionReason, /Read this thread first/);
+  assert.match(hook(readCall).additionalContext, /before resolving a thread/);
+  const refused = hook(resolveCall);
+  assert.equal(refused.permissionDecision, "deny");
+  assert.match(refused.permissionDecisionReason, /has not been saved since this thread was read/);
+  await new Promise((r) => setTimeout(r, 20));
+  writeFileSync(path, readFileSync(path, "utf8"));
+  assert.equal(hook(resolveCall), null);
+  const other = { ...resolveCall, tool_input: { ...resolveCall.tool_input, thread_id: "11111111-2222-3333-4444-555555555555" } };
+  assert.equal(hook(other).permissionDecision, "deny");
+  cli("--no-ruling", "https://claude.ai/artifact/PAGE1", "11111111-2222-3333-4444-555555555555", "a typo report");
+  assert.equal(hook(other), null);
+});
+
+test("comment hooks leave other pages, replies and other tools alone", () => {
+  const { hook } = commentRig();
+  assert.equal(hook({ ...resolveCall, tool_input: { ...resolveCall.tool_input, url: "https://claude.ai/artifact/OTHER" } }), null);
+  assert.equal(hook({ ...resolveCall, tool_input: { ...resolveCall.tool_input, action: "reply" } }), null);
+  assert.equal(hook({ ...resolveCall, tool_name: "Bash" }), null);
+});
+
+test("the publish hook remembers which page belongs to which brief", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const env = { ...process.env, PROBLEM_BRIEF_HOME: join(dir, "home") };
+  const b = brief([entry("Q-1", live)]);
+  writeFileSync(join(dir, "index.html"), render(b));
+  execFileSync("node", [bin("brief-delta.mjs"), "--hook"], { encoding: "utf8", env, input: JSON.stringify({
+    tool_name: "Artifact", tool_input: { file_path: "index.html" }, cwd: dir,
+    tool_response: "Published index.html at https://claude.ai/artifact/NEWPAGE (Version 1)" }) });
+  const urls = JSON.parse(readFileSync(join(dir, "home", "published", "urls.json"), "utf8"));
+  assert.equal(urls["https://claude.ai/artifact/NEWPAGE"], b.created);
+});
+
+test("the installer registers the comment hooks too", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const settings = join(dir, "settings.json");
+  run("install-hook.mjs", ["--settings", settings]);
+  const s = JSON.parse(readFileSync(settings, "utf8"));
+  assert.match(s.hooks.UserPromptSubmit[0].hooks[0].command, /brief-comments\.mjs" --hook$/);
+  assert.equal(s.hooks.UserPromptSubmit[0].matcher, undefined);
+  assert.deepEqual(s.hooks.PostToolUse.map((g) => g.matcher), ["Artifact", "ArtifactComments"]);
+  assert.equal(s.hooks.PreToolUse[0].matcher, "ArtifactComments");
+});
+
+/* ── bound to an external item: ids carry its prefix ───────────────────── */
+
+const bound = { binding: { ref: "JOB-42", system: "Jira task", title: "Import supplier invoices", url: "https://jira.example/JOB-42" } };
+
+test("a bound brief shows its ids with the prefix, and says what it works under", () => {
+  const html = render(brief([entry("Q-1", { ...live, short: "retried invoices", brief: "Linked to JOB-42/Q-1 itself and to OTHER-7/Q-1 elsewhere, which is a different brief entirely." })],
+    { ...bound, rulings: [ruling("R-1")] }));
+  assert.match(html, /<a class="qid" href="#Q-1">JOB-42\/Q-1<\/a>/);
+  assert.match(html, /<a class="qid" href="#R-1">JOB-42\/R-1<\/a>/);
+  assert.match(html, /Works under<\/span><a href="https:\/\/jira.example\/JOB-42"[^>]*>JOB-42<\/a> · Jira task — Import supplier invoices/);
+  assert.match(html, /OTHER-7\/Q-1 elsewhere/, "another brief's id is left as written");
+  assert.doesNotMatch(html, /JOB-42\/JOB-42/);
+});
+
+test("an id under another prefix is not flagged as missing; an unknown own one is", () => {
+  const r = messages(brief([entry("Q-1", { ...live, brief: "Depends on OTHER-7/Q-9 on the other brief, and on JOB-42/Q-8 which does not exist here." })], bound));
+  assert.ok(!r.warnings.some((m) => m.includes("OTHER") || m.includes("cites Q-9")));
+  assert.ok(r.warnings.some((m) => m.includes("cites Q-8")));
+});
+
+test("the summary and the session digest cite prefixed ids", async () => {
+  const { delta } = await import("../bin/brief-delta.mjs");
+  const { digest } = await import("../bin/brief-context.mjs");
+  const b = brief([entry("Q-1", { ...live, short: "retried invoices" })], { ...bound, rulings: [ruling("R-1")] });
+  assert.match(delta(brief([], bound), b), /- JOB-42\/Q-1 raised/);
+  assert.match(delta(brief([], bound), b), /Blocks the goal: JOB-42\/Q-1 \(retried invoices\)/);
+  assert.match(digest(b), /Works under JOB-42 \(Jira task\)/);
+  assert.match(digest(b), /- JOB-42\/R-1 /);
+});
+
+test("a prefixed citation finds its own brief; a bare id on two briefs is flagged as ambiguous", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const mem = join(dir, "project", "memory");
+  mkdirSync(mem, { recursive: true });
+  for (const [name, ref] of [["one", "JOB-42"], ["two", "JOB-77"]]) {
+    writeFileSync(join(dir, `${name}.brief.json`), JSON.stringify(brief([entry("Q-1", { ...live, short: `${name} thing` })], { binding: { ref } })));
+    run("brief-memory.mjs", [join(dir, `${name}.brief.json`), "--memory-dir", mem]);
+  }
+  const hook = (prompt) => JSON.parse(execFileSync("node", [bin("brief-comments.mjs"), "--hook"], { encoding: "utf8",
+    input: JSON.stringify({ hook_event_name: "UserPromptSubmit", transcript_path: join(dir, "project", "s.jsonl"), prompt }) }) || "null");
+  const exact = hook("JOB-77/Q-1: go with the first option").hookSpecificOutput.additionalContext;
+  assert.match(exact, /JOB-77\/Q-1 \(two thing\)/);
+  assert.doesNotMatch(exact, /JOB-42/);
+  assert.match(hook("Q-1: go with the first option").hookSpecificOutput.additionalContext, /Q-1 is on more than one brief/);
+});
+
+test("the CLAUDE.md line is added once, keeps everything else, and comes out exactly", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const file = join(dir, "CLAUDE.md");
+  writeFileSync(file, "# Mine\n\nKeep this.\n");
+  run("install-claude-md.mjs", ["--file", file]);
+  run("install-claude-md.mjs", ["--file", file]);
+  const text = readFileSync(file, "utf8");
+  assert.equal(text.match(/<!-- problem-brief -->/g).length, 1);
+  assert.ok(text.startsWith("# Mine\n\nKeep this.\n\n- Findings, open decisions"));
+  run("install-claude-md.mjs", ["--file", file, "--remove"]);
+  assert.equal(readFileSync(file, "utf8"), "# Mine\n\nKeep this.\n");
+});
+
+/* ── retiring a brief ──────────────────────────────────────────────────── */
+
+test("retiring takes a brief out of memory and the hooks, stamps it, and keeps the page", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const mem = join(dir, "project", "memory");
+  mkdirSync(mem, { recursive: true });
+  writeFileSync(join(mem, "MEMORY.md"), "- [Other](other.md) — keep me\n");
+  const env = { ...process.env, PROBLEM_BRIEF_HOME: join(dir, "home") };
+  const node = (script, args, input) => execFileSync("node", [bin(script), ...args], { encoding: "utf8", env, input });
+  const path = join(dir, "old.brief.json");
+  const b = brief([entry("Q-1", { status: "complete", resolution: { date: "2026-09-15", note: "Done and merged." } })]);
+  writeFileSync(path, JSON.stringify(b));
+  node("brief-memory.mjs", [path, "--memory-dir", mem]);
+  writeFileSync(join(dir, "index.html"), render(b));
+  node("brief-delta.mjs", ["--hook"], JSON.stringify({ tool_name: "Artifact", tool_input: { file_path: "index.html" }, cwd: dir,
+    tool_response: "Published at https://claude.ai/artifact/OLDPAGE" }));
+  node("brief-comments.mjs", ["--hook"], JSON.stringify({ hook_event_name: "PostToolUse", tool_name: "ArtifactComments",
+    transcript_path: join(dir, "project", "s.jsonl"), tool_input: { action: "read", url: "https://claude.ai/artifact/OLDPAGE", thread_id: THREAD } }));
+  assert.ok(existsSync(join(dir, "home", "threads.json")));
+
+  const out = node("brief-retire.mjs", [path, "--memory-dir", mem]);
+  assert.match(out, /https:\/\/claude\.ai\/artifact\/OLDPAGE/);
+  assert.match(out, /not deleted — ask the operator/);
+  assert.equal(readFileSync(join(mem, "MEMORY.md"), "utf8"), "- [Other](other.md) — keep me\n");
+  assert.ok(!existsSync(join(mem, "problem-brief-old.md")));
+  assert.ok(!existsSync(join(dir, "home", "published", "urls.json")));
+  assert.ok(!existsSync(join(dir, "home", "threads.json")));
+  const after = JSON.parse(readFileSync(path, "utf8"));
+  assert.match(after.retired, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z$/);
+  assert.equal(after.updated, after.retired);
+  assert.equal(messages(after).ok, true);
+  assert.throws(() => node("brief-memory.mjs", [path, "--memory-dir", mem]), /was retired/);
+});
+
+test("a brief with nothing live gets one line suggesting retirement, not its whole digest", async () => {
+  const { digest } = await import("../bin/brief-context.mjs");
+  const done = brief([entry("Q-1", { status: "complete", resolution: { date: "2026-09-15", note: "Done." } })], { rulings: [ruling("R-1")] });
+  const text = digest(done, { path: "/x/b.json", memoryDir: "/x/memory" });
+  assert.match(text, /nothing live \(1 closed, 1 standing ruling\)/);
+  assert.match(text, /brief-retire\.mjs" "\/x\/b\.json" --memory-dir "\/x\/memory"/);
+  assert.doesNotMatch(text, /Standing rulings/);
+  const busy = brief([entry("Q-1", live)], { outstanding: [] });
+  assert.doesNotMatch(digest(busy), /nothing live/);
+  const work = brief([entry("Q-1", { status: "complete", resolution: { date: "2026-09-15", note: "Done." } })],
+    { outstanding: [{ summary: "Write the migration.", created: T, updated: T }] });
+  assert.doesNotMatch(digest(work), /nothing live/);
+});
+
+test("a retired brief with live entries is flagged", () => {
+  const r = messages(brief([entry("Q-1", live)], { retired: T }));
+  assert.ok(r.warnings.some((m) => m.includes("Q-1 is still live")));
+});
+
+test("a throwaway brief is one line at every session start, with its pages, until retired", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const mem = join(dir, "project", "memory");
+  mkdirSync(mem, { recursive: true });
+  const env = { ...process.env, PROBLEM_BRIEF_HOME: join(dir, "home") };
+  const node = (script, args, input) => execFileSync("node", [bin(script), ...args], { encoding: "utf8", env, input });
+  const path = join(dir, "try.brief.json");
+  const b = brief([entry("Q-1", { ...live, short: "retried invoices" })], { throwaway: true, rulings: [ruling("R-1")] });
+  writeFileSync(path, JSON.stringify(b));
+  node("brief-memory.mjs", [path, "--memory-dir", mem]);
+  const html = render(b);
+  assert.match(html, /Throwaway<\/span>Made to try something out/);
+  writeFileSync(join(dir, "index.html"), html);
+  node("brief-delta.mjs", ["--hook"], JSON.stringify({ tool_name: "Artifact", tool_input: { file_path: "index.html" }, cwd: dir,
+    tool_response: "Published at https://claude.ai/artifact/TRYPAGE" }));
+  const start = () => JSON.parse(node("brief-context.mjs", ["--hook"], JSON.stringify({ transcript_path: join(dir, "project", "s.jsonl") })))
+    .hookSpecificOutput.additionalContext;
+  const text = start();
+  assert.match(text, /Throwaway brief "Test brief" .* is still registered, published at https:\/\/claude\.ai\/artifact\/TRYPAGE/);
+  assert.match(text, /on their yes, delete its page with the Artifact tool's delete action/);
+  assert.doesNotMatch(text, /Standing rulings|Live entries/);
+  assert.match(node("brief-retire.mjs", [path, "--memory-dir", mem]), /throwaway, so its pages are due for deletion too/);
+  assert.doesNotMatch(start(), /Throwaway brief/);
+});
+
+test("the already-fixed section is folded by default, with its count in the heading", () => {
+  const html = render(brief([entry("Q-1", live)], { mechanical: [{ summary: "Fixed a typo in the note.", created: T, updated: T }] }));
+  assert.match(html, /data-block="mechanical">\s*<details class="fold"><summary><h2>Already fixed <span class="fold-n">1<\/span><\/h2><\/summary>/);
+  assert.doesNotMatch(html, /<details class="fold" open>/);
 });

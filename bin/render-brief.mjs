@@ -37,6 +37,11 @@ const esc = (s) => String(s ?? "")
 /* Entries on this page, so a citation in any text can become a link. Set once
    per page, before anything is rendered. */
 let ENTRIES = new Map();
+let RULINGS = new Map();
+/* The external item the brief works under, if any. Ids stay bare in the data
+   and in anchors; they are shown with this prefix, e.g. JOB-42/Q-3. */
+let PREFIX = "";
+const fid = (id) => (PREFIX ? `${PREFIX}/${id}` : id);
 
 /* The words a label should never end on once it has been cut short. */
 const DANGLING = /\s+(?:the|a|an|and|or|of|to|in|on|for|with|that|is|are|was|by)$/i;
@@ -77,12 +82,16 @@ function citations(html) {
       return part;
     }
     if (inTag) return part;
-    return part.replace(/(\()?\b(Q-\d+)\b(?!\s*\()/g, (m, open, id) => {
+    return part.replace(/(\()?(?:\b([A-Za-z0-9][A-Za-z0-9._#-]*)\/)?\b([QR]-\d+)\b(?!\s*\()/g, (m, open, pre, id) => {
+      // An id under another prefix belongs to another brief: leave it as written.
+      if (pre && pre !== PREFIX) return m;
+      const r = RULINGS.get(id);
+      if (r) return `${open ?? ""}<a class="qref" href="#${id}" title="${esc(r.about)}">${fid(id)}</a>`;
       const e = ENTRIES.get(id);
       if (!e) return m;
       const label = !open && !labelled.has(id) ? ` (${esc(e.short ?? derivedLabel(e.title))})` : "";
       labelled.add(id);
-      return `${open ?? ""}<a class="qref" href="#${id}" title="${esc(e.title)}">${id}${label}</a>`;
+      return `${open ?? ""}<a class="qref" href="#${id}" title="${esc(e.title)}">${fid(id)}${label}</a>`;
     });
   }).join("");
 }
@@ -245,7 +254,7 @@ const FILTER_SCRIPT = `
     blocks: 'What blocks the goal', escalated: 'Escalated, not blocking the goal',
     open: 'What needs deciding',
     complete: 'Completed', superseded: 'Retracted',
-    mechanical: 'Fixed without asking', outstanding: 'Outstanding work', all: 'Everything on this page'
+    mechanical: 'Fixed without asking', outstanding: 'Outstanding work', rulings: 'Standing rulings', all: 'Everything on this page'
   };
 
   function has(name){ return buttons.some(function(b){ return b.dataset.filter === name; }); }
@@ -257,6 +266,10 @@ const FILTER_SCRIPT = `
     entries.forEach(function(el){ el.hidden = !shown(el); });
     tocRows.forEach(function(el){ el.hidden = !shown(el); });
     blocks.forEach(function(el){ el.hidden = !(name === 'all' || el.dataset.block === name); });
+    // Picking a folded section on its own is asking to read it: unfold it.
+    blocks.forEach(function(el){
+      var f = el.querySelector('details.fold'); if (f && el.dataset.block === name) f.open = true;
+    });
     // The contents list only earns its place when it lists entries.
     if (tocNav) tocNav.hidden = !(name === 'all' || isState);
     if (tocHead) tocHead.textContent = HEADS[name] || HEADS.all;
@@ -279,8 +292,9 @@ const FILTER_SCRIPT = `
     var id = (location.hash || '').slice(1);
     if (!id) return false;
     var el = document.getElementById(id);
-    if (!el || !el.dataset.state) return false;
-    apply(el.dataset.state === 'decided' ? 'outstanding' : el.dataset.state, false);
+    var to = el && (el.dataset.reveal || (el.dataset.state === 'decided' ? 'outstanding' : el.dataset.state));
+    if (!to) return false;
+    apply(to, false);
     el.scrollIntoView();
     return true;
   }
@@ -341,6 +355,7 @@ function solutions(list) {
     const badge = s.recommended
       ? `<span class="tag tag-rec">Recommended</span>`
       : `<span class="tag tag-alt">Alternative</span>`;
+    const once = s.reversible === false ? `<span class="tag tag-warn">Cannot be undone</span>` : "";
     const cost = [
       ["Work", s.cost.work],
       ["Risk", s.cost.risk],
@@ -350,9 +365,39 @@ function solutions(list) {
     const steps = s.steps?.length
       ? `<ol class="steps">${s.steps.map((x) => `<li>${inline(x)}</li>`).join("")}</ol>` : "";
     return `<article class="sol${s.recommended ? " sol-rec" : ""}">` +
-      `<header><span class="sol-n">${i + 1}</span><h4>${inline(s.label)}</h4>${badge}</header>` +
+      `<header><span class="sol-n">${i + 1}</span><h4>${inline(s.label)}</h4>${badge}${once}</header>` +
       `${prose(s.summary)}${steps}<dl class="cost">${cost}</dl></article>`;
   }).join("");
+}
+
+/* Dependencies between entries. An entry waits only on what is still live;
+   what it unblocks is counted through the whole chain, so the ruling that
+   frees the most work can be put first. */
+const isLive = (e) => ["open", "decided"].includes(e?.status ?? "open");
+function waitsOn(e) {
+  return (e.blockedBy ?? []).filter((id) => isLive(ENTRIES.get(id)));
+}
+function unblocks(id) {
+  const seen = new Set();
+  const walk = (from) => {
+    for (const e of ENTRIES.values()) {
+      if (isLive(e) && e.id !== id && !seen.has(e.id) && (e.blockedBy ?? []).includes(from)) {
+        seen.add(e.id);
+        walk(e.id);
+      }
+    }
+  };
+  walk(id);
+  return [...seen];
+}
+function dependencies(e) {
+  if (!isLive(e)) return "";
+  const waits = waitsOn(e);
+  const direct = [...ENTRIES.values()].filter((x) => isLive(x) && (x.blockedBy ?? []).includes(e.id)).map((x) => x.id);
+  const parts = [];
+  if (waits.length) parts.push(`Waits on ${citations(esc(waits.join(", ")))}`);
+  if (direct.length) parts.push(`${(e.status ?? "open") === "open" ? "Ruling" : "Carrying out"} this unblocks ${citations(esc(direct.join(", ")))}`);
+  return parts.length ? `<p class="deps">${parts.join(" · ")}</p>` : "";
 }
 
 function entry(e, baseDir) {
@@ -410,13 +455,14 @@ function entry(e, baseDir) {
   const bearing = live && e.bearing ? `<p class="bearing">${inline(e.bearingReason)}</p>` : "";
   return `<section class="entry${state !== "open" ? " entry-closed" : ""}" id="${esc(e.id)}" data-state="${g}">
   <header class="entry-head">
-    <a class="qid" href="#${esc(e.id)}">${esc(e.id)}</a>
+    <a class="qid" href="#${esc(e.id)}">${esc(fid(e.id))}</a>
     <h2>${inline(e.title, { refs: false })}</h2>
     ${amendmentsOf(e).length
       ? `<span class="chip chip-${g} chip-amended chip-static">${esc(STATE_LABEL[g])} · amended</span>`
       : `<span class="chip chip-${g} chip-static">${esc(STATE_LABEL[g])}</span>`}${bearingChip}
   </header>
   <p class="stamps">${stamps(e, "raised")}</p>
+  ${dependencies(e)}
   ${bearing}
   ${status}
   <section class="part part-problem"><h3>The problem</h3>${prose(e.problem)}</section>
@@ -740,7 +786,14 @@ details.rolled ul{margin-top:.6em;}
 
 /* tail sections */
 .tail{margin-top:40px;}
-.tail>h2{font-size:1.08rem;margin:0 0 .3em;}
+.tail>h2,.tail .fold>summary h2{font-size:1.08rem;margin:0 0 .3em;}
+.tail .fold>summary{cursor:pointer;list-style:none;display:flex;align-items:baseline;gap:.5em;}
+.tail .fold>summary::-webkit-details-marker{display:none;}
+.tail .fold>summary::before{content:"▸";color:var(--ink-3);font-size:.85em;transition:transform .15s;}
+.tail .fold[open]>summary::before{transform:rotate(90deg);}
+.tail .fold>summary h2{display:inline;}
+.fold-n{font-weight:400;color:var(--ink-3);font-size:.85em;font-variant-numeric:tabular-nums;}
+.tail .fold .lede{color:var(--ink-3);font-size:.9rem;margin:.3em 0 1em;}
 .tail>.lede{color:var(--ink-3);font-size:.9rem;margin:0 0 1em;}
 .tail ul{list-style:none;margin:0;padding:0;}
 .tail li{background:var(--card);border:1px solid var(--line);border-radius:8px;
@@ -748,6 +801,11 @@ details.rolled ul{margin-top:.6em;}
 .tail li .d{color:var(--ink-2);font-size:.9rem;margin-top:.3em;}
 .tail li .b{color:var(--ink-3);font-size:.8rem;margin-top:.35em;
   font-family:ui-sans-serif,system-ui,sans-serif;}
+.tail li.replaced{opacity:.6;}
+.tail li .qid{margin-right:.3em;}
+.tail li .said{margin-top:.35em;color:var(--ink-2);}
+.deps{font-family:ui-sans-serif,system-ui,sans-serif;font-size:.85rem;color:var(--ink-2);margin:-8px 0 14px;}
+.unblocks{font-family:ui-sans-serif,system-ui,sans-serif;font-size:.8em;color:var(--ink-3);}
 .done-mark{color:var(--rec);font-weight:650;margin-right:.4em;}
 
 @media (max-width:640px){
@@ -832,6 +890,8 @@ const THEME_SCRIPT = `
 
 function page(brief, baseDir) {
   ENTRIES = new Map(brief.decisions.map((e) => [e.id, e]));
+  RULINGS = new Map((brief.rulings ?? []).map((r) => [r.id, r]));
+  PREFIX = brief.binding?.ref ?? "";
   const st = (e) => e.status ?? "open";
   /* One flow, ordered by state: what needs you first, then what is merely
      recorded. Nothing is hidden from the document — the filter decides what is
@@ -841,6 +901,8 @@ function page(brief, baseDir) {
   const count = (k) => brief.decisions.filter((e) => group(e) === k).length;
   const mech = brief.mechanical ?? [];
   const out = brief.outstanding ?? [];
+  const rulings = brief.rulings ?? [];
+  const holding = rulings.filter((r) => (r.status ?? "active") === "active");
 
   /* The counts were only ever a summary. They are the controls now: click one
      and the page shows that category alone. The page opens on what needs a
@@ -853,6 +915,7 @@ function page(brief, baseDir) {
     mech.length ? { key: "mechanical", n: mech.length, label: "handled without asking" } : null,
     count("decided") + out.length
       ? { key: "outstanding", n: count("decided") + out.filter((o) => o.state !== "done").length, label: "outstanding work" } : null,
+    rulings.length ? { key: "rulings", n: holding.length, label: "standing rulings" } : null,
   ].filter(Boolean);
 
   const filters = `<nav class="filters" role="group" aria-label="Show one part of the page">` +
@@ -869,9 +932,13 @@ function page(brief, baseDir) {
   const defaultFilter = ["blocks", "open", "escalated"].find((k) => count(k)) ??
     (count("decided") || out.some((o) => o.state !== "done") ? "outstanding" : "all");
 
-  const ref = (e) => `<a class="qref" href="#${esc(e.id)}"><span class="n">${esc(e.id)}</span> ${inline(e.short ?? e.title, { refs: false })}</a>`;
+  const ref = (e) => `<a class="qref" href="#${esc(e.id)}"><span class="n">${esc(fid(e.id))}</span> ${inline(e.short ?? e.title, { refs: false })}</a>`;
   const waitingList = (label, list) => list.length
-    ? `<div class="waiting-row"><h3>${label}</h3><ul>${list.map((e) => `<li>${ref(e)}</li>`).join("")}</ul></div>` : "";
+    ? `<div class="waiting-row"><h3>${label}</h3><ul>${
+      /* The ruling that frees the most other work goes first. */
+      [...list].map((e) => [e, unblocks(e.id).length]).sort((a, b) => b[1] - a[1])
+        .map(([e, n]) => `<li>${ref(e)}${n ? ` <span class="unblocks">unblocks ${n}</span>` : ""}</li>`).join("")
+    }</ul></div>` : "";
   const blockers = brief.decisions.filter((e) => group(e) === "blocks");
   const escalated = brief.decisions.filter((e) => group(e) === "escalated");
   const unbracketed = brief.decisions.filter((e) => group(e) === "open");
@@ -918,20 +985,22 @@ function page(brief, baseDir) {
   };
 
   const tocRow = (e) => `<li data-state="${group(e)}"><a href="#${esc(e.id)}">` +
-    `<span class="n">${esc(e.id)}</span><span>${inline(e.title, { refs: false })}</span>` +
+    `<span class="n">${esc(fid(e.id))}</span><span>${inline(e.title, { refs: false })}</span>` +
     `<span class="done">${esc(STATE_LABEL[group(e)].toLowerCase())}</span></a></li>`;
 
   const toc = `<nav class="toc"><h2 data-toc-head>What needs deciding</h2>` +
     `<ol>${entries.map(tocRow).join("")}</ol>` +
     `<p class="empty" hidden>Nothing in this category.</p></nav>`;
 
+  /* Folded by default: it records what was done without asking, and nothing
+     in it waits on the reader. The count stays visible in the heading. */
   const mechSec = mech.length ? `<section class="tail" data-block="mechanical">
-    <h2>Already fixed</h2>
+    <details class="fold"><summary><h2>Already fixed <span class="fold-n">${mech.length}</span></h2></summary>
     <p class="lede">Unambiguous, no judgement needed, so it was done rather than asked about.</p>
     <ul>${mech.map((m) => `<li><span class="done-mark">✓</span>${inline(m.summary)}` +
       (m.detail ? `<div class="d">${prose(m.detail)}</div>` : "") +
       (m.evidence?.length ? `<div class="b">${m.evidence.map((e) => `<code>${esc(e.ref)}</code>`).join(" · ")}</div>` : "") +
-      `<p class="stamps">${stamps(m)}</p></li>`).join("")}</ul></section>` : "";
+      `<p class="stamps">${stamps(m)}</p></li>`).join("")}</ul></details></section>` : "";
 
   const outSec = out.length ? `<section class="tail" data-block="outstanding">
     <h2>Outstanding work</h2>
@@ -941,12 +1010,39 @@ function page(brief, baseDir) {
       `<div class="b">${outstandingState(o)}</div>` +
       `<p class="stamps">${stamps(o)}</p></li>`).join("")}</ul></section>` : "";
 
+  /* What the operator has already said. Kept on the page, newest first, so the
+     reader can see what they have told us, and so any later session can check
+     a question against it before asking it again. */
+  const rulSec = rulings.length ? `<section class="tail" data-block="rulings">
+    <h2>Standing rulings</h2>
+    <p class="lede">What you have already answered or decided, beyond any one entry. Nothing here is asked again.</p>
+    <ul>${[...rulings].reverse().map((r) => {
+      const gone = (r.status ?? "active") === "replaced";
+      return `<li id="${esc(r.id)}" data-reveal="rulings"${gone ? ' class="replaced"' : ""}>` +
+        `<a class="qid" href="#${esc(r.id)}">${esc(fid(r.id))}</a> <strong>${inline(r.about)}</strong>` +
+        `<div class="said">${prose(r.said)}</div>` +
+        `<div class="b">${gone ? `Replaced by ${citations(esc(r.replacedBy))} · ` : ""}From ${inline(r.source)}` +
+        (r.entries?.length ? ` · bears on ${r.entries.map((id) => citations(esc(id))).join(", ")}` : "") + `</div>` +
+        `<p class="stamps">${stamps(r, "given")}</p></li>`;
+    }).join("")}</ul></section>` : "";
+
+  /* The brief's own data travels inside the page, so a session that has lost
+     the JSON (a new session, or one whose history was summarised) can recover
+     every entry, ruling and stamp from the published page instead of rebuilding
+     them from memory. */
+  const data = `<script type="application/json" id="problem-brief-data">` +
+    JSON.stringify(brief).replace(/</g, "\\u003c") + `</script>`;
+
   return `<title>${esc(brief.title)}</title>
 <style>${CSS}</style>
 <div class="wrap">
   <header class="top">
     <h1>${inline(brief.title)}</h1>
     <p class="subject">${inline(brief.subject)}</p>
+    ${brief.throwaway ? `<p class="goal"><span class="goal-k">Throwaway</span>Made to try something out. It will be deleted once the test is over.</p>` : ""}
+    ${brief.binding ? `<p class="goal"><span class="goal-k">Works under</span>` +
+      (brief.binding.url ? `<a href="${esc(brief.binding.url)}" target="_blank" rel="noopener">${esc(brief.binding.ref)}</a>` : `<code>${esc(brief.binding.ref)}</code>`) +
+      (brief.binding.system ? ` · ${esc(brief.binding.system)}` : "") + (brief.binding.title ? ` — ${inline(brief.binding.title, { refs: false })}` : "") + `</p>` : ""}
     ${brief.goal ? `<p class="goal"><span class="goal-k">Goal</span>${inline(brief.goal)}</p>` : ""}
     <p class="provenance">${provenance}</p>
     ${filters}
@@ -956,7 +1052,9 @@ function page(brief, baseDir) {
   ${entries.map((e) => entry(e, baseDir)).join("\n")}
   ${mechSec}
   ${outSec}
+  ${rulSec}
 </div>
+${data}
 <script>${THEME_SCRIPT}</script>
 <script>var DEFAULT_FILTER = '${defaultFilter}';${FILTER_SCRIPT}</script>
 ${history.length ? `<script>${CHANGES_SCRIPT}</script>` : ""}

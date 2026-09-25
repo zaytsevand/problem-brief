@@ -4,7 +4,9 @@
 #   ./install.sh                 copy into ~/.claude/skills/problem-brief
 #   ./install.sh --link          symlink instead, so a git pull updates the skill
 #   ./install.sh --dir DIR       install into a different skills directory
-#   ./install.sh --uninstall     remove it again
+#   ./install.sh --hook          also add the hooks: restore briefs after a summary, summarise each publish
+#   ./install.sh --claude-md     also add one line to ~/.claude/CLAUDE.md: a brief is the default channel
+#   ./install.sh --uninstall     remove it again (and the hook)
 #
 # POSIX sh on purpose: no bashisms, so it runs under dash, ash and zsh too.
 
@@ -13,14 +15,18 @@ set -eu
 SRC=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 NAME=problem-brief
 MODE=copy
+HOOK=0
+CLAUDE_MD=0
 DEST=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --link)      MODE=link ;;
     --uninstall) MODE=uninstall ;;
+    --hook)      HOOK=1 ;;
+    --claude-md) CLAUDE_MD=1 ;;
     --dir)       shift; DEST=${1:-} ;;
-    -h|--help)   sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)   sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)           echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -48,6 +54,10 @@ warn() { printf '\033[33m!\033[0m %s\n' "$*" >&2; }
 ok()   { printf '\033[32m✓\033[0m %s\n' "$*"; }
 
 if [ "$MODE" = uninstall ]; then
+  if [ -f "$TARGET/bin/install-hook.mjs" ] && command -v node >/dev/null 2>&1; then
+    node "$TARGET/bin/install-hook.mjs" --remove >/dev/null && ok "removed the hooks, if they were there"
+    node "$TARGET/bin/install-claude-md.mjs" --remove >/dev/null && ok "removed the CLAUDE.md line, if it was there"
+  fi
   if [ -e "$TARGET" ] || [ -L "$TARGET" ]; then
     rm -rf "$TARGET"; ok "removed $TARGET"
   else
@@ -97,6 +107,19 @@ else
   say  "    in Claude Code:  /plugin marketplace add blader/humanizer"
   say  "                     /plugin install humanizer@humanizer"
   missing=1
+fi
+
+# ── the hook that keeps rulings in view ────────────────────────────────────
+if [ "$HOOK" -eq 1 ]; then
+  node "$TARGET/bin/install-hook.mjs" && ok "briefs come back into view at every session start and after every summary"
+else
+  say  "  Optional: ./install.sh --hook adds two hooks: one puts each brief's rulings back"
+  say  "  after a session is summarised, one computes the chat summary on every publish."
+fi
+
+# ── the line in CLAUDE.md ─────────────────────────────────────────────────
+if [ "$CLAUDE_MD" -eq 1 ]; then
+  node "$TARGET/bin/install-claude-md.mjs" && ok "every session is told a brief is the default channel, hooks or not"
 fi
 
 say ""

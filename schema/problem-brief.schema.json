@@ -24,6 +24,37 @@
       "minLength": 10,
       "description": "One plain sentence naming what this brief is about and who must act on it."
     },
+    "url": {
+      "type": "string",
+      "description": "Where the brief is published, once it has been. Lets a later session find the page, and recover this file from it, without asking."
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ref"
+      ],
+      "description": "The item in the project's own tracking tool this brief works under: a task, a ticket, a specification, an architecture decision record. Set it when the work is already bound to one (the branch name, the spec being implemented, the task the operator named); never invent one. Every entry and ruling id is then shown and cited with it as a prefix, e.g. JOB-42/Q-3, so ids stay unambiguous across briefs and can be cited in the tracker, commits and records. The ids in this file stay bare (Q-3); only their display changes.",
+      "properties": {
+        "ref": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._#-]{0,40}$",
+          "description": "The external identifier as the project writes it, e.g. JOB-42, spec-017, ADR-0009, problem-brief#13. No slashes."
+        },
+        "system": {
+          "type": "string",
+          "description": "What kind of thing it is, in plain words: 'Jira task', 'GitHub issue', 'speckit spec', 'ADR'."
+        },
+        "title": {
+          "type": "string",
+          "description": "The item's own title, so the reader knows what it is without opening it."
+        },
+        "url": {
+          "type": "string",
+          "description": "A link to the item, where there is one."
+        }
+      }
+    },
     "goal": {
       "type": "string",
       "minLength": 10,
@@ -36,6 +67,15 @@
     "updated": {
       "$ref": "#/$defs/timestamp",
       "description": "When anything on this brief last changed. Never earlier than the updated stamp of any item on it."
+    },
+    "retired": {
+      "$ref": "#/$defs/timestamp",
+      "description": "When the brief was retired: its work finished or abandoned, or it was only ever a test. A retired brief is taken out of Claude's memory and the hooks (bin/brief-retire.mjs does it and sets this stamp), is not registered again, and is kept for the record. Remove the stamp to bring it back."
+    },
+    "throwaway": {
+      "type": "boolean",
+      "default": false,
+      "description": "true for a brief made only to try something out: a test of the skill or its hooks, a layout experiment, a one-off demonstration. The page says so, and every session start lists it — by name and published page — until it is retired. Once the test is over it is cleaned up in full: retired, and its page deleted when the operator agrees."
     },
     "generated": {
       "type": "string",
@@ -96,6 +136,13 @@
       "description": "Agreed work not yet done. Kept apart from the decisions.",
       "items": {
         "$ref": "#/$defs/outstandingItem"
+      }
+    },
+    "rulings": {
+      "type": "array",
+      "description": "Everything the operator has answered, ruled or judged that outlives a single entry: an answer given in chat, a preference, a scope cut, a 'we do not care about X'. The brief's memory. A long session is summarised and loses what was said in it; this list is not. Search it before raising anything. Never deleted — a ruling that no longer holds is marked replaced.",
+      "items": {
+        "$ref": "#/$defs/ruling"
       }
     },
     "diagramTheme": {
@@ -204,7 +251,7 @@
             "superseded"
           ],
           "default": "open",
-          "description": "open — needs your ruling. decided — you chose a way forward, it has not been carried out yet. complete — the chosen way forward has been carried out and the entry is closed; that covers work landing, a question being answered, or scope being cut, whichever the chosen option was. superseded — the problem went away or was overtaken, and nothing was carried out."
+          "description": "open — needs your ruling. decided — you chose a way forward, it has not been carried out yet. complete — the chosen way forward has been carried out and the entry is closed; that covers work landing, a question being answered, or scope being cut, whichever the chosen option was. superseded — the problem went away or was overtaken, and nothing was carried out. An entry answered once is never raised again under a new id: if new evidence reopens it, set the same entry back to open and say what is new."
         },
         "bearing": {
           "type": "string",
@@ -218,6 +265,14 @@
           "type": "string",
           "minLength": 5,
           "description": "One line saying why the entry is, or is not, on the goal's path. Required with bearing."
+        },
+        "blockedBy": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^Q-[0-9]+$"
+          },
+          "description": "Entries that must be ruled before this one can be: its options depend on how those are settled. The page shows, on each of those, which entries its ruling unblocks, and ranks what waits on the reader by how much each ruling unblocks."
         },
         "decision": {
           "type": "object",
@@ -420,13 +475,14 @@
             "run",
             "commit",
             "test",
-            "measurement"
+            "measurement",
+            "ruling"
           ],
           "description": "What sort of thing is being cited."
         },
         "ref": {
           "type": "string",
-          "description": "The citation itself: path:line, a spec path, a commit hash, a run identifier."
+          "description": "The citation itself: path:line, a spec path, a commit hash, a run identifier. For kind=ruling, the ruling's id, e.g. R-3."
         },
         "note": {
           "type": "string",
@@ -604,6 +660,10 @@
           "type": "boolean",
           "default": false
         },
+        "reversible": {
+          "type": "boolean",
+          "description": "Whether carrying this option out can be undone at a cost comparable to doing it. false when it cannot, or undoing costs far more: data deleted or rewritten, a migration run on real data, a message or release sent to people, a public interface published, money spent, a third party told. Say so in cost.forecloses. Leave it out only when the option clearly changes nothing that is hard to take back. An irreversible option is never carried out without the operator's ruling."
+        },
         "summary": {
           "type": "string",
           "minLength": 20,
@@ -618,7 +678,7 @@
           "properties": {
             "work": {
               "type": "string",
-              "description": "How much work, in real terms. Not a t-shirt size on its own."
+              "description": "What doing it consists of: what gets changed, how much of it, and what it needs from the operator — a review, a decision, a migration window, access. Do not estimate calendar time at the pace of hand-written code: the work is done by agents several times faster, and a 'two days' figure misleads the reader about the real cost, which is usually their attention and the risk."
             },
             "risk": {
               "type": "string",
@@ -662,6 +722,11 @@
         },
         "detail": {
           "type": "string"
+        },
+        "reversible": {
+          "type": "boolean",
+          "default": true,
+          "description": "Handled without asking means it can be undone. Anything that cannot be (data rewritten, something sent, something published) is never handled without asking — it is an entry awaiting a ruling. false here is refused."
         },
         "evidence": {
           "type": "array",
@@ -722,6 +787,93 @@
       "type": "string",
       "format": "date-time",
       "description": "A moment with its time zone: YYYY-MM-DDTHH:MM, optional seconds, then Z or an offset. e.g. 2026-09-15T09:40Z or 2026-09-15T10:40+01:00."
+    },
+    "ruling": {
+      "type": "object",
+      "required": [
+        "id",
+        "created",
+        "updated",
+        "about",
+        "said",
+        "source"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^R-[0-9]+$",
+          "description": "Stable citation handle. R-1, R-2, … Never renumber, never reuse."
+        },
+        "created": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the ruling was given. Set once and never changed."
+        },
+        "updated": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When this record last changed — reworded, linked to another entry, or replaced."
+        },
+        "about": {
+          "type": "string",
+          "minLength": 10,
+          "description": "The question it answers, phrased the way it would be asked again. This is what a later session matches a new question against, so name the subject plainly."
+        },
+        "said": {
+          "type": "string",
+          "minLength": 10,
+          "description": "The answer or judgement itself, in the operator's own words where they gave them."
+        },
+        "source": {
+          "type": "string",
+          "minLength": 3,
+          "description": "Where it was given, so it can be traced: 'chat, 2026-09-25', 'comment on Q-4', 'AskUserQuestion round, 2026-09-25', a commit or a document."
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^Q-[0-9]+$"
+          },
+          "description": "The entries this ruling bears on, where there are any."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "replaced"
+          ],
+          "default": "active",
+          "description": "active — still holds. replaced — the operator later said otherwise; kept for the record, with replacedBy naming the ruling that took over."
+        },
+        "replacedBy": {
+          "type": "string",
+          "pattern": "^R-[0-9]+$",
+          "description": "The ruling that took over from this one. Required once status is replaced."
+        },
+        "memory": {
+          "type": "string",
+          "description": "The Claude memory file this ruling was also saved to, when it is about how to work in general (a preference, a standing instruction) rather than about this brief's subject. e.g. feedback-fix-wording-without-asking.md."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "replaced"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "replacedBy"
+            ]
+          }
+        }
+      ]
     }
   }
 }

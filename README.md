@@ -131,6 +131,51 @@ on an entry still marked open, work marked blocked on something already ruled)
 and timestamps that contradict each other. Each run ends with a short chat
 summary of what changed state.
 
+The brief is also the session's memory. Every answer or judgement the operator
+gives is written into it straight away, on the entry it settles or as a
+standing ruling (`R-1`, `R-2`, …) when it reaches further. Nothing is raised
+before it has been checked against every entry and every ruling, and the
+validator warns when an entry looks like an earlier one or like a question
+already answered. Each rendered page carries its own data, so a session that
+has lost the JSON recovers it with `bin/extract-brief.mjs` instead of
+rebuilding it from memory.
+
+It plugs into Claude Code's own memory. `bin/brief-memory.mjs` registers a
+brief as one pointer file in the project's memory directory, listed in
+`MEMORY.md`, so every session knows the brief exists. The optional
+SessionStart hook (`./install.sh --hook`, or `.\install.ps1 -Hook`) follows
+those pointers at startup, resume, clear and after every summary, and puts the
+standing rulings and live entries back in context. That is the moment answers
+used to be lost. The same flag adds a PostToolUse hook on `Artifact`: after
+every publish of a brief it compares the page with the previous publish and
+hands Claude the chat summary, so the summary lists what moved and cannot
+drift into retelling the brief.
+
+A brief whose work is done, or that was only a test, is retired with
+`bin/brief-retire.mjs`: taken out of memory and the hooks, its hook state
+cleared, stamped `retired`, and its published pages listed. The pages are
+never deleted without the operator's say-so.
+
+`./install.sh --claude-md` (`.\install.ps1 -ClaudeMd`) adds one line to
+`~/.claude/CLAUDE.md` making a brief the default channel for findings,
+decisions and questions in every session, whether or not the hooks are
+installed.
+
+A brief can be bound to an item in the project's own tracker (`binding`: a
+task, a spec, an ADR). Its ids are then shown and cited with that prefix,
+`JOB-42/Q-3`, so they stay unambiguous across briefs and can be cited in the
+tracker and in commits.
+
+Comments on a published brief are answered automatically before the session
+sees them, and the notification that wakes it does not carry the comment. The
+comment hooks make sure the session reads the thread and records what it says
+before the thread can be resolved, and a message citing a brief's ids gets the
+cited items' state with a reminder to record the ruling.
+
+Options say whether they can be undone (`reversible`), and only what can be
+undone is ever handled without asking. Entries can wait on each other
+(`blockedBy`), and the page puts first the ruling that frees the most work.
+
 The counts along the top of the page are filters — click one and the page shows
 that category alone. It opens on what blocks the goal, since that is what is
 waiting on the reader. Above the entries, a short summary lists what waits on

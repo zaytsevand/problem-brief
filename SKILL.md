@@ -1,16 +1,20 @@
 ---
 name: problem-brief
 description: >-
-  Use when asked to build, publish, refresh or update an artefact (or brief,
+  Use by default, without being asked, whenever a session has findings, open
+  decisions or questions for the operator to rule on: the brief is the primary
+  channel for them, and chat carries only the summary and the link. Also use
+  when asked to build, publish, refresh or update an artefact (or brief,
   findings report, open-questions page, decisions page) that lists problems,
-  issues, findings, review results or open questions for the operator to rule
-  on — each with a problem statement, explanation and possible solutions. Also
-  use when the same material is delivered as AskUserQuestion instead of a page.
+  issues, findings, review results or open questions — each with a problem
+  statement, explanation and possible solutions — and when the operator answers
+  or comments on one. Also when the same material is delivered as
+  AskUserQuestion instead of a page.
   REQUIRED composition — archify (drawings) and humanizer (prose); see
   Dependencies.
 license: MIT
 metadata:
-  version: "1.1"
+  version: "1.3"
   requires:
     - archify
     - humanizer
@@ -30,6 +34,15 @@ If an entry cannot be understood from the page alone, it is not finished.
 
 ## When to Use
 
+**By default, without being asked.** Whenever the work turns up something the
+operator has to rule on (a finding with more than one way out, an open
+decision, a question), it goes into a brief: into the existing one for that
+subject, or a new one. The brief is the primary channel for those; chat carries
+the short summary of what moved and the link. Waiting to be asked is how the
+habit fades: an instruction given once in chat drops out of attention in a long
+session and is gone after a summary. The SessionStart hook repeats this at
+every start and after every summary.
+
 Triggers, in the operator's own words:
 
 - "group issues by root cause and write an artefact on them"
@@ -45,8 +58,8 @@ Triggers, in the operator's own words:
 Also use it when the ask is `AskUserQuestion` rather than a page — same content
 rules, no page (see **The question variant**).
 
-**Do not use** for a progress update, a completion report, or anything the
-operator has not been asked to decide. Those go in chat.
+**Do not use** for a progress update or a completion report with nothing in it
+to decide. Those go in chat.
 
 ## Dependencies
 
@@ -83,7 +96,10 @@ says *awaiting your ruling* on something ruled on three days ago, or *outstandin
 work* on something merged yesterday, and the reader trusts the chip.
 
 This comes first on every run: a new brief built from an old one, a refresh, or
-folding in comments. Walk the whole file, item by item, nothing skipped:
+folding in comments. **Load the brief's JSON first, never rebuild it from
+memory.** If the file is not at hand, recover it from the published page (see
+**Remember what was already answered**). Then walk the whole file, item by item,
+nothing skipped:
 
 | Item | Ask | Where to look |
 |---|---|---|
@@ -94,6 +110,10 @@ folding in comments. Walk the whole file, item by item, nothing skipped:
 | `open` or `decided` entry | Does its `bearing` still hold against the goal? Re-judge every one whenever the goal changes. | The goal as the operator last stated it |
 | `outstanding` item | Is it done? Is the entry it waited on still awaiting a ruling? | The tree; the entry's own status |
 | `mechanical` item | Is the fix still in place? | The tree |
+| standing ruling | Does it still hold, or did the operator later say otherwise? Then mark it `replaced` and record the new one. | This conversation, comments |
+| this conversation | Did the operator answer, rule or judge anything that is not yet in the file? Record it now. | This conversation, every turn since the last run, not only the last one |
+| the brief itself | Is anything still live, or is its work done? A brief with nothing live and no work left is a candidate for retiring (see **Retiring a brief**). | Its own entries and outstanding list |
+| earlier sessions | Was anything on this subject answered in a session the brief never heard about? | `memory-recall` (memsearch), where installed; the session's summary |
 
 For each item that moves, record why (`decision`, `resolution`, the new
 `state`) and move its `updated` stamp. Only then go on to the facts
@@ -113,6 +133,166 @@ blocked on an entry that has been ruled, a ruling dated after the entry says it
 last changed. It **cannot** see a ruling that lives only in chat or a commit
 that was never recorded. That is what the walk above is for.
 
+## Remember what was already answered
+
+In a long session the conversation gets summarised, and answers given in it
+drop out of view. The same problem then comes back under a new number, a
+question already settled is asked again, and a judgement the operator gave
+three hours ago is ignored. To the operator this is the worst failure the brief
+can have: it tells them that what they said was not heard.
+
+**The JSON is the memory, not the conversation.** Three rules follow from that.
+
+**1. Record an answer the moment it is given.** When the operator answers,
+rules, or states a judgement, write it into the JSON before doing anything
+else, in the same turn. Do not keep it in mind to fold in at the next refresh;
+by then the turn that held it may have been summarised away.
+
+- An answer to an entry goes on that entry: `decision`, the new `status`, its
+  `updated` stamp.
+- Anything that outlives one entry goes in `rulings`: a preference ("don't ask
+  me about wording, just fix it"), a scope cut, a "we do not care about X",
+  an answer to a side question asked in passing. `about` is the question as it
+  would be asked again, which is what a later check matches against. `said` is
+  the answer in the operator's own words.
+- A ruling that stops holding is never edited or deleted. Record the new one
+  and mark the old one `replaced`, with `replacedBy` naming the new one.
+
+**2. Search before you raise.** Before adding any entry, or asking anything in
+`AskUserQuestion`, look for it among every entry, in every state, and every
+active ruling. Where the `memory-recall` skill (memsearch) is installed, also
+search it for the subject: it holds what was said in earlier sessions, including
+answers that never reached the brief. Anything it turns up that the brief lacks
+becomes a ruling, with the session note as its `source`.
+
+| What you find | What to do |
+|---|---|
+| A ruling that answers it | Do not raise it. Apply the ruling. If that leaves an unambiguous fix, make it and list it as `mechanical`. |
+| An entry with the same root cause, any state | Do not raise a new one. Add the new symptom or evidence to that entry. |
+| That entry is closed, and the new evidence really does contradict the ruling or the resolution | Reopen **the same entry**: set it back to `open`, say in the brief what is new since it was ruled, cite the ruling. Never a new number, never the same question with nothing new. |
+| Nothing | Raise it with the next free number. |
+
+The validator backs this up with warnings: an entry whose key words largely
+match an earlier entry's, and an open entry that looks answered by an active
+ruling. Word overlap proves nothing either way, so read both and decide. If a
+ruling does not settle the entry, say why in the entry.
+
+**3. Never lose the file.** A brief that spans sessions lives at a durable path
+beside the work it concerns, not in a session scratchpad. Name the path in the
+chat summary, so it survives when the conversation is summarised. Every
+rendered page also carries its own data, so a lost file can be recovered from
+the published page:
+
+```bash
+# Artifact tool, action: "read", on the brief's URL, saves the page locally; then
+node ~/.claude/skills/problem-brief/bin/extract-brief.mjs page.html brief.json
+```
+
+Rebuilding a brief from memory is how rulings get lost, so never do it. If the
+page predates embedded data, rebuild from the page's text, and record every
+ruling you find there. After the first publish, store the page's address in the
+brief's own `url`, so the next session finds the page without asking.
+
+## Claude's own memory
+
+The brief is the one record of rulings on its subject. Claude Code's memory
+makes sure every session knows it exists and sees what it says. Nothing is
+copied between the two except where noted, because a copy drifts.
+
+**Register the brief** in the project's persistent memory directory, the one
+your system prompt names. Do it on the first publish, and again whenever the
+path, the address or the goal changes:
+
+```bash
+node ~/.claude/skills/problem-brief/bin/brief-memory.mjs brief.json --memory-dir <memory directory>
+```
+
+It writes one ordinary memory file, `problem-brief-<name>.md`, of type
+`project`: where the JSON lives, where it is published, the goal, and the
+instruction to check it before asking anything. It also keeps that file's line
+in `MEMORY.md`, the index loaded into every session. Running it again updates
+both; it never adds a second line. With no memory directory, skip this step.
+
+**The hook puts the rulings back after a summary.** The index tells a session
+that the brief exists, but not what it says. The SessionStart hook,
+`brief-context.mjs --hook`, fires at startup, resume and clear, and straight
+after the conversation is summarised. It follows the pointers and puts every
+active ruling, every live entry and the ids of the closed ones back in context.
+It also always carries one line, whether or not a brief exists yet: findings,
+decisions and questions go into a brief by default.
+
+`./install.sh --hook` (`.\install.ps1 -Hook` on Windows) installs it with the
+others:
+
+| Hook | Script | Does |
+|---|---|---|
+| SessionStart | `brief-context.mjs` | Default-channel line; each registered brief's goal, rulings, live and closed entries. At startup, resume, clear and after every summary. |
+| PostToolUse `Artifact` | `brief-delta.mjs` | After each publish of a brief: the chat summary of what moved. Also notes which page belongs to which brief. |
+| UserPromptSubmit | `brief-comments.mjs` | A comment notification for a brief's page, or a message citing its ids, gets the brief's path, the cited items' state, and the instruction to record the answer now. |
+| PostToolUse `ArtifactComments` | `brief-comments.mjs` | Reading a brief's comments notes when they were read. |
+| PreToolUse `ArtifactComments` | `brief-comments.mjs` | Refuses to resolve a brief's thread until the brief has been saved since it was read, or it is marked `--no-ruling`. |
+
+`./install.sh --claude-md` (`-ClaudeMd`) also appends one line to
+`~/.claude/CLAUDE.md` saying the same thing as the SessionStart line. CLAUDE.md
+loads in every session and survives a summary, hooks or not, and the line is
+marked so it is added once and removed exactly on uninstall.
+
+If `~/.claude/settings.json` does not mention `brief-context.mjs`, tell the
+operator once that the hooks are missing and what they do. Do not add them
+yourself without being asked. To see what a session will be shown:
+
+```bash
+node ~/.claude/skills/problem-brief/bin/brief-context.mjs brief.json
+```
+
+**A ruling about how to work goes to memory as well.** Most rulings are about
+the brief's subject and stay in the brief. Some are about how Claude should
+work: "fix wording without asking", "never propose a new dependency", "I read on
+my phone, keep it short". Those hold beyond this brief, so also save each as a
+`feedback` memory, with its **Why:** and **How to apply:** lines, following your
+memory instructions. Name the file in the ruling's `memory` field, so the two
+can be found from each other. This is the one thing copied, because it has to
+work where the brief is not loaded.
+
+## Retiring a brief
+
+A brief costs something for as long as it stays registered. Every session in
+the project is handed it at startup and after every summary, and the hooks
+keep its snapshot, its page and its comment threads. When its work is
+finished, abandoned, or it was only ever a test, retire it:
+
+```bash
+node ~/.claude/skills/problem-brief/bin/brief-retire.mjs brief.json --memory-dir <memory directory>
+```
+
+That removes its pointer and its line in `MEMORY.md`, clears the hooks' state
+for it, stamps `retired` in the JSON (so it is never registered again by
+mistake), and lists the pages it was published at. The JSON stays: it is the
+record of what was ruled.
+
+- **When to offer it.** The SessionStart hook shows a brief with nothing live
+  and no work left as one line suggesting retirement, instead of its whole
+  digest. Offer it to the operator then; retire without asking only a brief
+  you made as a test, or one they already said is finished.
+- **The published page is theirs to delete.** Deleting a page cannot be undone
+  and breaks its link for everyone, including links they have shared. Retiring
+  never deletes it. Ask, and delete with the `Artifact` tool's `delete` action
+  only on a yes. Say which page it is and that the delete is permanent.
+- **Test and throwaway briefs are cleaned up in full.** Set `"throwaway": true`
+  on any brief made only to try something out: a test of the skill or its
+  hooks, a layout experiment, a demonstration. The page says so, and every
+  session start lists it, with its published pages, until it is retired. Once
+  the test is over, offer the cleanup: retire it, delete its pages once the
+  operator agrees, and remove any temporary hook or file the test added.
+  Nothing does this at the end of a session. A hook cannot delete a page (only
+  Claude can, inside a turn, with the operator confirming), and by the time the
+  session ends there is no turn left, so the cleanup is offered at the next
+  opportunity instead.
+- **Nothing live is left behind.** The validator warns when a retired brief
+  still has open or ruled entries: once retired, no session will be reminded
+  of them. Close or retract them first, or move them to another brief.
+- **To bring one back**, remove `retired` from the JSON and register it again.
+
 ## The entry shape
 
 Every entry, in this order. The order is the deliverable — do not reshuffle it.
@@ -123,13 +303,51 @@ Every entry, in this order. The order is the deliverable — do not reshuffle it
 | **b. Brief explanation** | Why that matters, in the operator's terms. | 2–8 sentences |
 | **c. Evidences** | Cite the verified evidences for the issue, grounded in real artefacts: code lines, documents, prior findings. | 1–4 items |
 | **d. The unwound explanation** | How it actually works today, with a diagram where a diagram helps, and references — file paths with line numbers, commit SHAs, run IDs, spec paths. Then why that is wrong. Where there is no defect, state the target state instead. | as long as it needs |
-| **e. Solutions** | At least one, better two or more. **The first is the recommendation** and is labelled as such. Each carries its cost — work, risk, what it forecloses. | 2+ options |
+| **e. Solutions** | At least one, better two or more. **The first is the recommendation** and is labelled as such. Each carries its cost — work, risk, what it forecloses — and says whether it can be undone. | 2+ options |
 
 Number the entries so they can be cited back at you (`Q-1`, `Q-2`, `Q-3` — not
 invented codes). An id is permanent: on a refresh, an entry keeps the number it
 was given, a resolved one keeps its number and is marked ruled, and a new one
 takes the next free number. Renumbering breaks every reference the operator has
 already made.
+
+**Bound to the project's own tracker.** When the work runs under an item in
+the project's tracking tool (a task or ticket, a specification, an
+architecture decision record), set `binding` to it: its `ref` as the project
+writes it (`JOB-42`, `spec-017`, `ADR-0009`), what kind of thing it is, its
+title and link. Take it from where the work is already bound: the branch name,
+the specification being implemented, the task the operator named. Never invent
+one. Every id is then shown and cited with the prefix, `JOB-42/Q-3` and
+`JOB-42/R-2`, so ids stay unambiguous when a project has several briefs and can
+be cited in the tracker, in commit messages and in decision records. The file
+keeps the ids bare; only how they are shown and cited changes, so adding a
+binding later renumbers nothing. Cite another brief's entry with its own
+prefix; the page leaves it as written.
+
+Where the project records its decisions in that tool (an ADR, a spec's
+decision log), the brief does not replace it: once a ruling is made, record it
+there as well and cite the tool's record as evidence in the entry's
+`resolution`.
+
+**Pricing an option.** `cost.work` says what doing it consists of: what gets
+changed, how much of it, and what it needs from the operator (a review, a
+decision, access, a migration window). It never says "two days". A calendar
+estimate is a guess at the pace of hand-written code, and the work is done by
+agents several times faster, so the figure misstates the cost. What the reader
+actually pays is their attention and the risk. The validator warns on a work
+estimate given in hours, days or weeks.
+
+**Can it be undone?** Mark every option `reversible: true` or `false`. It is
+`false` when carrying it out cannot be undone, or when undoing it costs far
+more than doing it: data deleted or rewritten, a migration run on real data, a
+message or release sent to people, a public interface published, money spent.
+Say what it rules out in `cost.forecloses`. The page tags such an option
+*Cannot be undone*, and the validator warns on a live entry that marks none of
+its options either way.
+
+This is what sets how far you may go alone. Something that can be undone may be
+handled without asking. Something that cannot is always the operator's call,
+however obvious the answer looks.
 
 `schema/problem-brief.schema.json` is the machine-readable form of this table.
 Every field carries a description saying what belongs in it.
@@ -208,7 +426,17 @@ or the dates the item records.
 
 **Not every fix needs an entry.** Something unambiguous, with no judgement in
 it, goes in `mechanical` — handled without asking, listed so you know it was
-done. An entry is for something that needed you.
+done. An entry is for something that needed you. A fix that cannot be undone
+always needs the operator, however unambiguous it is; the validator refuses a
+`mechanical` item marked `reversible: false`.
+
+**One ruling can free others.** When an entry cannot be ruled until another is
+(its options depend on how the other is settled), list that other in the
+entry's `blockedBy`. The page then shows what each entry waits on and what
+ruling it unblocks, and *Waiting on you* puts the ruling that frees the most
+work first. The validator refuses a dependency on an unknown entry and a cycle,
+and warns when a goal blocker waits on something only escalated, since that
+stands in the goal's way too.
 
 ## Grouping
 
@@ -224,8 +452,9 @@ Separate the material by what it demands of the reader:
   but unrelated to the goal being driven now. Visible, never presented as a
   blocker, never asked one at a time in the middle of the work. Mark them
   `"bearing": "escalated"`.
-- **Mechanical** — an unambiguous fix with no judgement in it. **Fix these
-  yourself first**, then list them as already done. Never ask about them.
+- **Mechanical** — an unambiguous fix with no judgement in it, that can be
+  undone. **Fix these yourself first**, then list them as already done. Never
+  ask about them.
 - **Outstanding work** — known, agreed, not yet done. A separate list at the
   end, not mixed into the decisions.
 
@@ -331,7 +560,10 @@ schema cannot state: exactly one recommended option and it must be listed first,
 every citation carries a note, every option carries a price, a closed entry
 carries proof, an id is never reused, outstanding work never waits on an entry
 that does not exist, every status agrees with what its entry records, and every
-timestamp agrees with the others.
+timestamp agrees with the others. Rulings are checked too: ids unique, a
+replaced ruling names what replaced it, a ruling cited as evidence exists. It
+warns when an entry reads like an earlier one, or like a question an active
+ruling already answers.
 
 Errors name the entry, the field, and what to do. Fix them all before rendering;
 the renderer runs the same check and refuses anyway.
@@ -344,9 +576,9 @@ all timestamped.
 Start from it rather than from an empty file.
 
 **Where the files go.** Put the brief JSON, the rendered page and the diagram
-folder together in a working directory — the scratchpad if the brief is
-throwaway, or beside the specification if it belongs to a feature. Keep the
-JSON. The next refresh edits it; it does not start again.
+folder together in a working directory: the scratchpad only if the brief will
+not outlive the session, otherwise beside the specification or the work it
+concerns. Keep the JSON. The next refresh edits it; it does not start again.
 
 ## Diagrams
 
@@ -433,8 +665,26 @@ drop a label — do not fight it by lowering the quality profile.
    (`url:` parameter, or the same local file path within one session). Do not
    mint a second page for the same subject. If you do not have the URL, find it
    with `action: "list"` before publishing anything.
-4. **Read comments before republishing** (`action: "comments"`), fold them in,
-   then resolve the threads you actually addressed.
+4. **Read comments before republishing** (`ArtifactComments`, `action: "read"`),
+   fold them in, then resolve the threads you actually addressed.
+5. **A comment is a ruling until proven otherwise.** A comment sent to Claude
+   is answered automatically, before the session sees it, and the session is
+   then woken by a notification that names the page and the thread but not the
+   comment. The automatic reply is not a record. Read the thread, record what
+   it rules, answers or judges in the brief's JSON (a decision on the entry, or
+   a standing ruling with the thread as its `source`), republish, and only then
+   resolve. With the hooks installed, resolving a brief's thread is refused
+   until the brief has been saved since the thread was read. A thread with
+   nothing to record (a typo report, a question already answered in the
+   reply) is let through by saying why:
+
+   ```bash
+   node ~/.claude/skills/problem-brief/bin/brief-comments.mjs --no-ruling <page link> <thread id> "<why>"
+   ```
+
+   Something said in a comment that is about how to work in general, not about
+   the brief's subject, goes to memory as a `feedback` memory; mark the thread
+   with `--no-ruling` and name the memory in the note.
 
 ## Report back in chat
 
@@ -442,11 +692,27 @@ Every run ends with a short summary in chat: after a publish, after a refresh,
 after an `AskUserQuestion` round. It is the only part the operator is certain
 to read, so it says what **moved**, not what the brief says.
 
+**The summary is computed, not written.** A written one drifts back into
+retelling the brief. With the hooks installed, every `Artifact` publish of a
+brief runs `brief-delta.mjs` as a PostToolUse hook: it compares the page's own
+data with what was published last time and hands you the summary. Post it as
+it stands. Add only the page's link, the path of the brief's JSON, and a few
+words where a line needs them. Without the hook, compute it yourself from the
+previous version (the previous page, or the JSON in git):
+
+```bash
+node ~/.claude/skills/problem-brief/bin/brief-delta.mjs previous.json brief.json
+node ~/.claude/skills/problem-brief/bin/brief-delta.mjs previous-page.html brief.json
+```
+
+What it produces, and what a hand-written one must match when neither is
+possible:
+
 - **Up to 400 words**, as a bulleted list of changes.
 - **The state delta only.** An entry that changed state reads
   `Q-2: open → decided (name the fifth failure)`; a new entry reads
-  `Q-6 raised: one plain line`; handled fixes and outstanding work the same
-  way. Say what changed in content only where it changes the ruling being asked
+  `Q-6 raised: one plain line`; a ruling recorded reads `R-4 recorded: one
+  plain line`; handled fixes and outstanding work the same way. Say what changed in content only where it changes the ruling being asked
   for.
 - **Do not repeat the brief.** No problem statements, no evidence, no options.
   The link carries those.
@@ -456,6 +722,7 @@ to read, so it says what **moved**, not what the brief says.
 - On a first publish there is no earlier state, so list the counts per state
   and those two lines.
 - If nothing moved, say so in one line and do not republish.
+- End with the path of the brief's JSON, so a summarised session can find it.
 
 ## Freshness — the failure that recurs most
 
@@ -477,14 +744,22 @@ compensations and the stores that the original had.
 
 ## The question variant
 
-When asked for `AskUserQuestion` instead of a page, the content rules are
+**`AskUserQuestion` stops everything.** The operator has to drop what they are
+doing to answer it. Use it only when the work cannot go on without the answer
+now, and never to deliver a set of questions the page could hold. A question
+that can wait goes on the page, where the operator answers it in their own time.
+Deciding is not a reason to ask: if the answer can be undone and the brief or
+its rulings settle it, act and list it as handled.
+
+When the operator asks for `AskUserQuestion` instead of a page, the content rules are
 unchanged — plain English, problem first, grouped by root cause, recommended
 option first and labelled `(Recommended)`. Only the page is dropped. The state
-check still comes first, so nothing already ruled on is asked again. Only
+check still comes first, and every question is searched against the entries
+and the rulings, so nothing already answered is asked again. Only
 `blocks-goal` entries are asked; `escalated` ones are listed in the message, not
-asked, so the operator can pull one forward if they choose. Record the
-answers back into the JSON, moving each entry's status and `updated` stamp, and
-end with the chat summary.
+asked, so the operator can pull one forward if they choose. Record each answer
+into the JSON as soon as it comes back, moving each entry's status and
+`updated` stamp, and anything broader as a ruling. End with the chat summary.
 
 ## Common mistakes
 
@@ -517,6 +792,25 @@ end with the chat summary.
 | A new question recorded only in "Waiting on you" | Add a `raised` change with its `id`, so it leads the change list |
 | A change with no `kind` | Give it one, so it lands in its group with its icon; `note` only for the brief as a whole |
 | Keeping `generated` beside `updated` | Delete it; a re-check moves `updated` |
+| Holding an answer in mind to record "at the next refresh" | Write it into the JSON in the turn it was given |
+| Raising a problem that is already an entry, or already ruled on | Search every entry and every active ruling first; add to the existing entry |
+| Re-asking a closed question with nothing new | Only new evidence reopens an entry, and it reopens the same id |
+| A general judgement kept only as an entry's `decision.note` | Record it as a ruling so it applies beyond that entry |
+| Rebuilding a lost brief from memory | Recover it with `extract-brief.mjs` from the published page |
+| A brief no session will ever find again | Register it with `brief-memory.mjs`; set `url` after the first publish |
+| Copying a brief's rulings into memory files | Memory holds the pointer; the brief holds the rulings. Only rulings about how to work are also saved, as `feedback` |
+| Asking something an earlier session already answered | Search `memory-recall` too, where it is installed, and record what it finds |
+| "About two days" in `cost.work` | Say what the work consists of and what it needs from the operator; agents make calendar guesses wrong |
+| An option with no word on whether it can be undone | Mark `reversible`; say what it rules out in `forecloses` |
+| Handling something that cannot be undone without asking | Make it an entry; only what can be undone is handled without asking |
+| Two entries where one cannot be ruled before the other, and nothing says so | `blockedBy` on the one that waits |
+| Reaching for `AskUserQuestion` to collect rulings | The page holds questions; ask only when the work cannot go on without the answer now |
+| Writing the chat summary by hand | Post the one the publish hook computes, or run `brief-delta.mjs` |
+| Taking the automatic reply to a comment as the end of it | Read the thread, record the ruling in the JSON, republish, then resolve |
+| Waiting to be asked before starting a brief | Findings, decisions and questions go into a brief by default |
+| Leaving a finished or test brief registered | Retire it with `brief-retire.mjs`; every session is handed it until then |
+| A test brief not marked as one | `"throwaway": true`, so every session start keeps offering the cleanup until it is done |
+| Deleting a brief's page without asking | Retiring never deletes the page; ask, then use the `Artifact` delete action |
 
 ## Red flags — stop and rewrite
 
@@ -530,6 +824,9 @@ end with the chat summary.
 - An entry the conversation ruled on still reading *awaiting your ruling*.
 - A brief with open entries and no `goal`.
 - "The operator deferred it" recorded as a ruling rather than as `escalated`.
+- "I think they already answered this" — then find the answer and record it,
+  do not ask.
+- The operator saying "I already told you".
 
 ## What is in this skill
 
@@ -537,7 +834,15 @@ end with the chat summary.
 |---|---|
 | `schema/problem-brief.schema.json` | The data contract. Field descriptions say what belongs where. |
 | `bin/render-brief.mjs` | JSON to page. Fixed layout, no dependencies, refuses malformed briefs. |
-| `bin/validate-brief.mjs` | Schema check plus the rules a schema cannot state: recommendations, proof, states, timestamps. |
+| `bin/validate-brief.mjs` | Schema check plus the rules a schema cannot state: recommendations, proof, states, timestamps, rulings, repeated questions. |
+| `bin/extract-brief.mjs` | Recovers the brief's JSON from a rendered or published page. |
+| `bin/brief-memory.mjs` | Registers a brief in Claude Code's memory: one pointer file and its `MEMORY.md` line. |
+| `bin/brief-context.mjs` | Prints what a session must not lose; with `--hook`, the SessionStart hook that restores it after a summary. |
+| `bin/brief-delta.mjs` | The chat summary of what moved between two versions; with `--hook`, the PostToolUse hook that computes it on every publish. |
+| `bin/brief-comments.mjs` | The comment and citation hooks; `--no-ruling` marks a thread as holding nothing to record. |
+| `bin/brief-retire.mjs` | Retires a brief: out of memory and the hooks, stamped `retired`, its pages listed for the operator. |
+| `bin/install-hook.mjs` | Adds or removes all the hooks in `settings.json`; used by the installers. |
+| `bin/install-claude-md.mjs` | Adds or removes the one default-channel line in `CLAUDE.md`; used by the installers. |
 | `examples/example.brief.json` | A complete worked brief — start from this. |
 | `examples/diagrams/*.lifecycle.json` | The archify picture source for the worked example. |
 | `test/brief.test.mjs` | The validator and renderer behaviour, pinned. Run `node --test test/*.test.mjs`. |
