@@ -928,3 +928,9 @@ test("a throwaway brief is one line at every session start, with its pages, unti
   assert.match(node("brief-retire.mjs", [path, "--memory-dir", mem]), /throwaway, so its pages are due for deletion too/);
   assert.doesNotMatch(start(), /Throwaway brief/);
 });
+
+test("the already-fixed section is folded by default, with its count in the heading", () => {
+  const html = render(brief([entry("Q-1", live)], { mechanical: [{ summary: "Fixed a typo in the note.", created: T, updated: T }] }));
+  assert.match(html, /data-block="mechanical">\s*<details class="fold"><summary><h2>Already fixed <span class="fold-n">1<\/span><\/h2><\/summary>/);
+  assert.doesNotMatch(html, /<details class="fold" open>/);
+});

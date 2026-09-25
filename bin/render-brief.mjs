@@ -266,6 +266,10 @@ const FILTER_SCRIPT = `
     entries.forEach(function(el){ el.hidden = !shown(el); });
     tocRows.forEach(function(el){ el.hidden = !shown(el); });
     blocks.forEach(function(el){ el.hidden = !(name === 'all' || el.dataset.block === name); });
+    // Picking a folded section on its own is asking to read it: unfold it.
+    blocks.forEach(function(el){
+      var f = el.querySelector('details.fold'); if (f && el.dataset.block === name) f.open = true;
+    });
     // The contents list only earns its place when it lists entries.
     if (tocNav) tocNav.hidden = !(name === 'all' || isState);
     if (tocHead) tocHead.textContent = HEADS[name] || HEADS.all;
@@ -782,7 +786,14 @@ details.rolled ul{margin-top:.6em;}
 
 /* tail sections */
 .tail{margin-top:40px;}
-.tail>h2{font-size:1.08rem;margin:0 0 .3em;}
+.tail>h2,.tail .fold>summary h2{font-size:1.08rem;margin:0 0 .3em;}
+.tail .fold>summary{cursor:pointer;list-style:none;display:flex;align-items:baseline;gap:.5em;}
+.tail .fold>summary::-webkit-details-marker{display:none;}
+.tail .fold>summary::before{content:"▸";color:var(--ink-3);font-size:.85em;transition:transform .15s;}
+.tail .fold[open]>summary::before{transform:rotate(90deg);}
+.tail .fold>summary h2{display:inline;}
+.fold-n{font-weight:400;color:var(--ink-3);font-size:.85em;font-variant-numeric:tabular-nums;}
+.tail .fold .lede{color:var(--ink-3);font-size:.9rem;margin:.3em 0 1em;}
 .tail>.lede{color:var(--ink-3);font-size:.9rem;margin:0 0 1em;}
 .tail ul{list-style:none;margin:0;padding:0;}
 .tail li{background:var(--card);border:1px solid var(--line);border-radius:8px;
@@ -981,13 +992,15 @@ function page(brief, baseDir) {
     `<ol>${entries.map(tocRow).join("")}</ol>` +
     `<p class="empty" hidden>Nothing in this category.</p></nav>`;
 
+  /* Folded by default: it records what was done without asking, and nothing
+     in it waits on the reader. The count stays visible in the heading. */
   const mechSec = mech.length ? `<section class="tail" data-block="mechanical">
-    <h2>Already fixed</h2>
+    <details class="fold"><summary><h2>Already fixed <span class="fold-n">${mech.length}</span></h2></summary>
     <p class="lede">Unambiguous, no judgement needed, so it was done rather than asked about.</p>
     <ul>${mech.map((m) => `<li><span class="done-mark">✓</span>${inline(m.summary)}` +
       (m.detail ? `<div class="d">${prose(m.detail)}</div>` : "") +
       (m.evidence?.length ? `<div class="b">${m.evidence.map((e) => `<code>${esc(e.ref)}</code>`).join(" · ")}</div>` : "") +
-      `<p class="stamps">${stamps(m)}</p></li>`).join("")}</ul></section>` : "";
+      `<p class="stamps">${stamps(m)}</p></li>`).join("")}</ul></details></section>` : "";
 
   const outSec = out.length ? `<section class="tail" data-block="outstanding">
     <h2>Outstanding work</h2>
