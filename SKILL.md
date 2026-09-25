@@ -14,7 +14,7 @@ description: >-
   Dependencies.
 license: MIT
 metadata:
-  version: "1.2"
+  version: "1.3"
   requires:
     - archify
     - humanizer
