@@ -13,7 +13,7 @@ const EXAMPLE = join(ROOT, "examples", "example.brief.json");
 const example = () => JSON.parse(readFileSync(EXAMPLE, "utf8"));
 
 const T = "2026-09-15T10:00Z";
-const option = { id: "a", label: "Do it", recommended: true, summary: "Deduplicate on the invoice number before posting.", cost: { work: "An hour." } };
+const option = { id: "a", label: "Do it", recommended: true, reversible: true, summary: "Deduplicate on the invoice number before posting.", cost: { work: "One check before posting, and a test for it." } };
 const entry = (id, extra = {}) => ({
   id, created: T, updated: T, title: `Entry ${id}`,
   problem: "The importer posts invoices twice when retried.", brief: "Duplicate postings reach the ledger and have to be reversed by hand, which nobody notices for days.",
@@ -591,4 +591,112 @@ test("installing the hook keeps every other hook, never duplicates, and removes 
   run("install-hook.mjs", ["--settings", settings, "--remove"]);
   s = JSON.parse(readFileSync(settings, "utf8"));
   assert.deepEqual(s.hooks.SessionStart, [other]);
+});
+
+/* ── what cannot be undone, dependencies, estimates ────────────────────── */
+
+test("a fix that cannot be undone is refused as handled without asking", () => {
+  const r = messages(brief([entry("Q-1", live)], { mechanical: [{ summary: "Dropped the old ledger table.", created: T, updated: T, reversible: false }] }));
+  assert.ok(r.errors.some((m) => m.includes("cannot be handled without asking")));
+});
+
+test("an option that cannot be undone is tagged, and a live entry that marks none is flagged", () => {
+  const html = render(brief([entry("Q-1", { ...live, solutions: [{ ...option, reversible: false }] })]));
+  assert.match(html, /tag-warn">Cannot be undone/);
+  const r = messages(brief([entry("Q-1", { ...live, solutions: [{ ...option, reversible: undefined }] })]));
+  assert.ok(r.warnings.some((m) => m.includes("whether it can be undone")));
+});
+
+test("a work estimate in calendar time is flagged on live entries", () => {
+  const r = messages(brief([entry("Q-1", { ...live, solutions: [{ ...option, cost: { work: "About two days of work." } }] })]));
+  assert.ok(r.warnings.some((m) => m.includes('estimates calendar time ("two days")')));
+});
+
+test("dependencies: unknown ids, self and cycles are refused", () => {
+  const r = messages(brief([
+    distinct("Q-1", "Retried invoices are posted twice", "A retried import posts the same invoice twice."),
+    { ...distinct("Q-2", "The currency column is ignored", "Amounts in euros are read as pounds."), blockedBy: ["Q-3", "Q-2", "Q-9"] },
+    { ...distinct("Q-3", "Supplier names are matched loosely", "Two suppliers with similar names are merged."), blockedBy: ["Q-2"] },
+  ]));
+  assert.ok(r.errors.some((m) => m.includes("waits on itself") && !m.includes("through")));
+  assert.ok(r.errors.some((m) => m.includes("waits on Q-9")));
+  assert.ok(r.errors.some((m) => m.includes("through Q-2 → Q-3 → Q-2") || m.includes("through Q-3 → Q-2 → Q-3")));
+});
+
+test("a goal blocker waiting on an escalated entry is flagged", () => {
+  const r = messages(brief([
+    { ...distinct("Q-1", "Retried invoices are posted twice", "A retried import posts the same invoice twice."), blockedBy: ["Q-2"] },
+    distinct("Q-2", "The currency column is ignored", "Amounts in euros are read as pounds."),
+  ].map((e) => e.id === "Q-2" ? { ...e, bearing: "escalated", bearingReason: "Not on the path." } : e)));
+  assert.ok(r.warnings.some((m) => m.includes("waits on Q-2, which is only escalated")));
+});
+
+test("the page says what each entry waits on and unblocks, and ranks rulings by what they free", () => {
+  const html = render(brief([
+    distinct("Q-1", "Retried invoices are posted twice", "A retried import posts the same invoice twice."),
+    distinct("Q-2", "The currency column is ignored", "Amounts in euros are read as pounds."),
+    { ...distinct("Q-3", "Supplier names are matched loosely", "Two suppliers with similar names are merged."), blockedBy: ["Q-2"] },
+    { ...distinct("Q-4", "Credit notes are posted as invoices", "A credit note is posted as a positive amount."), blockedBy: ["Q-3"] },
+  ]));
+  assert.match(html, /Waits on <a class="qref" href="#Q-2"/);
+  assert.match(html, /Ruling this unblocks <a class="qref" href="#Q-3"/);
+  const waiting = html.slice(html.indexOf("Waiting on you"), html.indexOf("</section>", html.indexOf("Waiting on you")));
+  assert.ok(waiting.indexOf('href="#Q-2"') < waiting.indexOf('href="#Q-1"'), "Q-2 unblocks two, so it comes first");
+  assert.match(waiting, /unblocks 2/);
+});
+
+/* ── the chat summary, computed ────────────────────────────────────────── */
+
+test("the summary lists what moved, new entries first, then what waits on the reader", async () => {
+  const { delta } = await import("../bin/brief-delta.mjs");
+  const before = brief([distinct("Q-1", "Retried invoices are posted twice", "A retried import posts the same invoice twice.")]);
+  const after = brief([
+    { ...before.decisions[0], status: "decided", decision: { chose: "a", date: "2026-09-15" } },
+    { ...distinct("Q-2", "The currency column is ignored", "Amounts in euros are read as pounds."), bearing: "escalated", bearingReason: "Not on the path." },
+  ], { rulings: [ruling("R-1")] });
+  const text = delta(before, after);
+  const lines = text.split("\n");
+  assert.match(lines[0], /^- Q-2 raised \(escalated\)/);
+  assert.match(text, /- Q-1: open → decided \(Do it\)/);
+  assert.match(text, /- R-1 recorded: Should retried invoices/);
+  assert.match(text, /Blocks the goal: nothing\nEscalated, not blocking: Q-2/);
+  assert.match(delta(after, after), /Nothing moved since the last publish/);
+  assert.match(delta(after, brief([after.decisions[1]])), /Q-1 is missing from this version/);
+});
+
+test("the summary stays under 400 words however much moved", async () => {
+  const { delta } = await import("../bin/brief-delta.mjs");
+  const many = Array.from({ length: 120 }, (_, k) => distinct(`Q-${k + 1}`, `Problem number ${k + 1} with a long headline here`, "Something is wrong in a way that needs a ruling soon."));
+  const text = delta(brief([]), brief(many));
+  assert.ok(text.split(/\s+/).length <= 400, `${text.split(/\s+/).length} words`);
+  assert.match(text, /more changes — see the page/);
+});
+
+test("the publish hook summarises against the previous publish, and ignores anything else", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const env = { ...process.env, PROBLEM_BRIEF_SNAPSHOTS: join(dir, "snaps") };
+  const hookRun = (input) => execFileSync("node", [bin("brief-delta.mjs"), "--hook"], { encoding: "utf8", input: JSON.stringify(input), env });
+  const publish = (b) => {
+    writeFileSync(join(dir, "index.html"), render(b));
+    return hookRun({ tool_name: "Artifact", tool_input: { file_path: "index.html" }, cwd: dir });
+  };
+  const first = JSON.parse(publish(brief([entry("Q-1", live)])));
+  assert.equal(first.hookSpecificOutput.hookEventName, "PostToolUse");
+  assert.match(first.hookSpecificOutput.additionalContext, /First publish: 1 awaiting a ruling/);
+  const second = JSON.parse(publish(brief([entry("Q-1", live)], { rulings: [ruling("R-1")] })));
+  assert.match(second.hookSpecificOutput.additionalContext, /- R-1 recorded/);
+  assert.equal(hookRun({ tool_name: "Artifact", tool_input: { action: "comments", url: "x" }, cwd: dir }), "");
+  assert.equal(hookRun({ tool_name: "Bash", tool_input: {}, cwd: dir }), "");
+});
+
+test("the installer adds both hooks and removes both", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const settings = join(dir, "settings.json");
+  run("install-hook.mjs", ["--settings", settings]);
+  let s = JSON.parse(readFileSync(settings, "utf8"));
+  assert.equal(s.hooks.PostToolUse[0].matcher, "Artifact");
+  assert.match(s.hooks.PostToolUse[0].hooks[0].command, /brief-delta\.mjs" --hook$/);
+  run("install-hook.mjs", ["--settings", settings, "--remove"]);
+  s = JSON.parse(readFileSync(settings, "utf8"));
+  assert.equal(s.hooks, undefined);
 });

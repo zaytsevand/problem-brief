@@ -230,6 +230,14 @@
           "minLength": 5,
           "description": "One line saying why the entry is, or is not, on the goal's path. Required with bearing."
         },
+        "blockedBy": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^Q-[0-9]+$"
+          },
+          "description": "Entries that must be ruled before this one can be: its options depend on how those are settled. The page shows, on each of those, which entries its ruling unblocks, and ranks what waits on the reader by how much each ruling unblocks."
+        },
         "decision": {
           "type": "object",
           "required": [
@@ -616,6 +624,10 @@
           "type": "boolean",
           "default": false
         },
+        "reversible": {
+          "type": "boolean",
+          "description": "Whether carrying this option out can be undone at a cost comparable to doing it. false when it cannot, or undoing costs far more: data deleted or rewritten, a migration run on real data, a message or release sent to people, a public interface published, money spent, a third party told. Say so in cost.forecloses. Leave it out only when the option clearly changes nothing that is hard to take back. An irreversible option is never carried out without the operator's ruling."
+        },
         "summary": {
           "type": "string",
           "minLength": 20,
@@ -630,7 +642,7 @@
           "properties": {
             "work": {
               "type": "string",
-              "description": "How much work, in real terms. Not a t-shirt size on its own."
+              "description": "What doing it consists of: what gets changed, how much of it, and what it needs from the operator — a review, a decision, a migration window, access. Do not estimate calendar time at the pace of hand-written code: the work is done by agents several times faster, and a 'two days' figure misleads the reader about the real cost, which is usually their attention and the risk."
             },
             "risk": {
               "type": "string",
@@ -674,6 +686,11 @@
         },
         "detail": {
           "type": "string"
+        },
+        "reversible": {
+          "type": "boolean",
+          "default": true,
+          "description": "Handled without asking means it can be undone. Anything that cannot be (data rewritten, something sent, something published) is never handled without asking — it is an entry awaiting a ruling. false here is refused."
         },
         "evidence": {
           "type": "array",

@@ -15,8 +15,9 @@
   Install into a different skills directory.
 
 .PARAMETER Hook
-  Also add the SessionStart hook to %USERPROFILE%\.claude\settings.json, which
-  puts each brief's rulings back in front of a session after it is summarised.
+  Also add the two hooks to %USERPROFILE%\.claude\settings.json: one puts each
+  brief's rulings back after a session is summarised, one computes the chat
+  summary on every publish.
 
 .PARAMETER Uninstall
   Remove the skill again, and the hook.
@@ -112,8 +113,8 @@ if ($Hook) {
   & node (Join-Path $target 'bin\install-hook.mjs')
   Write-Ok 'briefs come back into view at every session start and after every summary'
 } else {
-  Write-Host '  Optional: .\install.ps1 -Hook adds a SessionStart hook that puts each brief''s'
-  Write-Host '  rulings back in front of a session after it has been summarised.'
+  Write-Host '  Optional: .\install.ps1 -Hook adds two hooks: one puts each brief''s rulings back'
+  Write-Host '  after a session is summarised, one computes the chat summary on every publish.'
 }
 
 Write-Host ''

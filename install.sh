@@ -4,7 +4,7 @@
 #   ./install.sh                 copy into ~/.claude/skills/problem-brief
 #   ./install.sh --link          symlink instead, so a git pull updates the skill
 #   ./install.sh --dir DIR       install into a different skills directory
-#   ./install.sh --hook          also add the SessionStart hook that restores briefs after a summary
+#   ./install.sh --hook          also add the hooks: restore briefs after a summary, summarise each publish
 #   ./install.sh --uninstall     remove it again (and the hook)
 #
 # POSIX sh on purpose: no bashisms, so it runs under dash, ash and zsh too.
@@ -109,8 +109,8 @@ fi
 if [ "$HOOK" -eq 1 ]; then
   node "$TARGET/bin/install-hook.mjs" && ok "briefs come back into view at every session start and after every summary"
 else
-  say  "  Optional: ./install.sh --hook adds a SessionStart hook that puts each brief's"
-  say  "  rulings back in front of a session after it has been summarised."
+  say  "  Optional: ./install.sh --hook adds two hooks: one puts each brief's rulings back"
+  say  "  after a session is summarised, one computes the chat summary on every publish."
 fi
 
 say ""

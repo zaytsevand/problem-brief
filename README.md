@@ -146,7 +146,14 @@ brief as one pointer file in the project's memory directory, listed in
 SessionStart hook (`./install.sh --hook`, or `.\install.ps1 -Hook`) follows
 those pointers at startup, resume, clear and after every summary, and puts the
 standing rulings and live entries back in context. That is the moment answers
-used to be lost.
+used to be lost. The same flag adds a PostToolUse hook on `Artifact`: after
+every publish of a brief it compares the page with the previous publish and
+hands Claude the chat summary, so the summary lists what moved and cannot
+drift into retelling the brief.
+
+Options say whether they can be undone (`reversible`), and only what can be
+undone is ever handled without asking. Entries can wait on each other
+(`blockedBy`), and the page puts first the ruling that frees the most work.
 
 The counts along the top of the page are filters — click one and the page shows
 that category alone. It opens on what blocks the goal, since that is what is

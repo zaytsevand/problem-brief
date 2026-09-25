@@ -204,10 +204,11 @@ that the brief exists, but not what it says. The SessionStart hook,
 `brief-context.mjs --hook`, fires at startup, resume and clear, and straight
 after the conversation is summarised. It follows the pointers and puts every
 active ruling, every live entry and the ids of the closed ones back in context.
-It is installed with `./install.sh --hook` (`.\install.ps1 -Hook` on Windows).
-If `~/.claude/settings.json` does not mention `brief-context.mjs`, tell the
-operator once that the hook is missing and what it does. Do not add it
-yourself without being asked. To see what a session will be shown:
+It is installed with `./install.sh --hook` (`.\install.ps1 -Hook` on Windows),
+together with the publish hook that writes the chat summary (see **Report back
+in chat**). If `~/.claude/settings.json` does not mention `brief-context.mjs`,
+tell the operator once that the hooks are missing and what they do. Do not add
+them yourself without being asked. To see what a session will be shown:
 
 ```bash
 node ~/.claude/skills/problem-brief/bin/brief-context.mjs brief.json
@@ -232,13 +233,33 @@ Every entry, in this order. The order is the deliverable — do not reshuffle it
 | **b. Brief explanation** | Why that matters, in the operator's terms. | 2–8 sentences |
 | **c. Evidences** | Cite the verified evidences for the issue, grounded in real artefacts: code lines, documents, prior findings. | 1–4 items |
 | **d. The unwound explanation** | How it actually works today, with a diagram where a diagram helps, and references — file paths with line numbers, commit SHAs, run IDs, spec paths. Then why that is wrong. Where there is no defect, state the target state instead. | as long as it needs |
-| **e. Solutions** | At least one, better two or more. **The first is the recommendation** and is labelled as such. Each carries its cost — work, risk, what it forecloses. | 2+ options |
+| **e. Solutions** | At least one, better two or more. **The first is the recommendation** and is labelled as such. Each carries its cost — work, risk, what it forecloses — and says whether it can be undone. | 2+ options |
 
 Number the entries so they can be cited back at you (`Q-1`, `Q-2`, `Q-3` — not
 invented codes). An id is permanent: on a refresh, an entry keeps the number it
 was given, a resolved one keeps its number and is marked ruled, and a new one
 takes the next free number. Renumbering breaks every reference the operator has
 already made.
+
+**Pricing an option.** `cost.work` says what doing it consists of: what gets
+changed, how much of it, and what it needs from the operator (a review, a
+decision, access, a migration window). It never says "two days". A calendar
+estimate is a guess at the pace of hand-written code, and the work is done by
+agents several times faster, so the figure misstates the cost. What the reader
+actually pays is their attention and the risk. The validator warns on a work
+estimate given in hours, days or weeks.
+
+**Can it be undone?** Mark every option `reversible: true` or `false`. It is
+`false` when carrying it out cannot be undone, or when undoing it costs far
+more than doing it: data deleted or rewritten, a migration run on real data, a
+message or release sent to people, a public interface published, money spent.
+Say what it rules out in `cost.forecloses`. The page tags such an option
+*Cannot be undone*, and the validator warns on a live entry that marks none of
+its options either way.
+
+This is what sets how far you may go alone. Something that can be undone may be
+handled without asking. Something that cannot is always the operator's call,
+however obvious the answer looks.
 
 `schema/problem-brief.schema.json` is the machine-readable form of this table.
 Every field carries a description saying what belongs in it.
@@ -317,7 +338,17 @@ or the dates the item records.
 
 **Not every fix needs an entry.** Something unambiguous, with no judgement in
 it, goes in `mechanical` — handled without asking, listed so you know it was
-done. An entry is for something that needed you.
+done. An entry is for something that needed you. A fix that cannot be undone
+always needs the operator, however unambiguous it is; the validator refuses a
+`mechanical` item marked `reversible: false`.
+
+**One ruling can free others.** When an entry cannot be ruled until another is
+(its options depend on how the other is settled), list that other in the
+entry's `blockedBy`. The page then shows what each entry waits on and what
+ruling it unblocks, and *Waiting on you* puts the ruling that frees the most
+work first. The validator refuses a dependency on an unknown entry and a cycle,
+and warns when a goal blocker waits on something only escalated, since that
+stands in the goal's way too.
 
 ## Grouping
 
@@ -333,8 +364,9 @@ Separate the material by what it demands of the reader:
   but unrelated to the goal being driven now. Visible, never presented as a
   blocker, never asked one at a time in the middle of the work. Mark them
   `"bearing": "escalated"`.
-- **Mechanical** — an unambiguous fix with no judgement in it. **Fix these
-  yourself first**, then list them as already done. Never ask about them.
+- **Mechanical** — an unambiguous fix with no judgement in it, that can be
+  undone. **Fix these yourself first**, then list them as already done. Never
+  ask about them.
 - **Outstanding work** — known, agreed, not yet done. A separate list at the
   end, not mixed into the decisions.
 
@@ -554,6 +586,22 @@ Every run ends with a short summary in chat: after a publish, after a refresh,
 after an `AskUserQuestion` round. It is the only part the operator is certain
 to read, so it says what **moved**, not what the brief says.
 
+**The summary is computed, not written.** A written one drifts back into
+retelling the brief. With the hooks installed, every `Artifact` publish of a
+brief runs `brief-delta.mjs` as a PostToolUse hook: it compares the page's own
+data with what was published last time and hands you the summary. Post it as
+it stands. Add only the page's link, the path of the brief's JSON, and a few
+words where a line needs them. Without the hook, compute it yourself from the
+previous version (the previous page, or the JSON in git):
+
+```bash
+node ~/.claude/skills/problem-brief/bin/brief-delta.mjs previous.json brief.json
+node ~/.claude/skills/problem-brief/bin/brief-delta.mjs previous-page.html brief.json
+```
+
+What it produces, and what a hand-written one must match when neither is
+possible:
+
 - **Up to 400 words**, as a bulleted list of changes.
 - **The state delta only.** An entry that changed state reads
   `Q-2: open → decided (name the fifth failure)`; a new entry reads
@@ -590,7 +638,14 @@ compensations and the stores that the original had.
 
 ## The question variant
 
-When asked for `AskUserQuestion` instead of a page, the content rules are
+**`AskUserQuestion` stops everything.** The operator has to drop what they are
+doing to answer it. Use it only when the work cannot go on without the answer
+now, and never to deliver a set of questions the page could hold. A question
+that can wait goes on the page, where the operator answers it in their own time.
+Deciding is not a reason to ask: if the answer can be undone and the brief or
+its rulings settle it, act and list it as handled.
+
+When the operator asks for `AskUserQuestion` instead of a page, the content rules are
 unchanged — plain English, problem first, grouped by root cause, recommended
 option first and labelled `(Recommended)`. Only the page is dropped. The state
 check still comes first, and every question is searched against the entries
@@ -639,6 +694,12 @@ into the JSON as soon as it comes back, moving each entry's status and
 | A brief no session will ever find again | Register it with `brief-memory.mjs`; set `url` after the first publish |
 | Copying a brief's rulings into memory files | Memory holds the pointer; the brief holds the rulings. Only rulings about how to work are also saved, as `feedback` |
 | Asking something an earlier session already answered | Search `memory-recall` too, where it is installed, and record what it finds |
+| "About two days" in `cost.work` | Say what the work consists of and what it needs from the operator; agents make calendar guesses wrong |
+| An option with no word on whether it can be undone | Mark `reversible`; say what it rules out in `forecloses` |
+| Handling something that cannot be undone without asking | Make it an entry; only what can be undone is handled without asking |
+| Two entries where one cannot be ruled before the other, and nothing says so | `blockedBy` on the one that waits |
+| Reaching for `AskUserQuestion` to collect rulings | The page holds questions; ask only when the work cannot go on without the answer now |
+| Writing the chat summary by hand | Post the one the publish hook computes, or run `brief-delta.mjs` |
 
 ## Red flags — stop and rewrite
 
@@ -666,7 +727,8 @@ into the JSON as soon as it comes back, moving each entry's status and
 | `bin/extract-brief.mjs` | Recovers the brief's JSON from a rendered or published page. |
 | `bin/brief-memory.mjs` | Registers a brief in Claude Code's memory: one pointer file and its `MEMORY.md` line. |
 | `bin/brief-context.mjs` | Prints what a session must not lose; with `--hook`, the SessionStart hook that restores it after a summary. |
-| `bin/install-hook.mjs` | Adds or removes that hook in `settings.json`; used by the installers. |
+| `bin/brief-delta.mjs` | The chat summary of what moved between two versions; with `--hook`, the PostToolUse hook that computes it on every publish. |
+| `bin/install-hook.mjs` | Adds or removes both hooks in `settings.json`; used by the installers. |
 | `examples/example.brief.json` | A complete worked brief — start from this. |
 | `examples/diagrams/*.lifecycle.json` | The archify picture source for the worked example. |
 | `test/brief.test.mjs` | The validator and renderer behaviour, pinned. Run `node --test test/*.test.mjs`. |

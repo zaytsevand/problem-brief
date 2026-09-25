@@ -372,7 +372,109 @@ function semanticErrors(brief) {
   });
 
   out.push(...stateErrors(brief), ...bearingErrors(brief), ...referenceErrors(brief), ...enumerationWarnings(brief), ...timestampErrors(brief),
-    ...rulingErrors(brief), ...repeatWarnings(brief));
+    ...rulingErrors(brief), ...repeatWarnings(brief), ...dependencyErrors(brief), ...reversibleErrors(brief),
+    ...estimateWarnings(brief));
+  return out;
+}
+
+/* ── dependencies between entries ───────────────────────────────────────────
+   One ruling often settles the ground another stands on. Saying so lets the
+   page rank what waits on the reader by how much each ruling unblocks. */
+
+function dependencyErrors(brief) {
+  const out = [];
+  const entries = (brief.decisions ?? []).filter(Boolean);
+  const byId = new Map(entries.map((e) => [e.id, e]));
+  const st = (e) => e.status ?? "open";
+  entries.forEach((e, i) => {
+    const where = `decisions[${i}] (${e.id})`;
+    for (const id of e.blockedBy ?? []) {
+      const b = byId.get(id);
+      if (id === e.id) {
+        out.push({ path: `${where} → blockedBy`, message: "waits on itself", hint: "drop its own id" });
+      } else if (!b) {
+        out.push({ path: `${where} → blockedBy`, message: `waits on ${id}, which is not an entry on this page`,
+          hint: `entries on this page: ${[...byId.keys()].join(", ")}` });
+      } else if (["open", "decided"].includes(st(e))) {
+        if (st(b) === "superseded") {
+          out.push({ path: `${where} → blockedBy`, severity: "warning", message: `waits on ${id}, which is retracted`,
+            hint: "the ground it waited on went away — drop the dependency, or retract this entry too" });
+        }
+        if (e.bearing === "blocks-goal" && st(b) === "open" && b.bearing === "escalated") {
+          out.push({ path: `${where} → blockedBy`, severity: "warning",
+            message: `blocks the goal and waits on ${id}, which is only escalated`,
+            hint: `whatever this waits on stands in the goal's way too — bracket ${id} as blocks-goal, or drop the dependency` });
+        }
+        if (st(e) === "decided" && st(b) === "open") {
+          out.push({ path: `${where} → blockedBy`, severity: "warning", message: `was ruled while ${id}, which it waits on, is still open`,
+            hint: `either the dependency is not real, or ${id} needs its ruling before this one is carried out` });
+        }
+      }
+    }
+  });
+  // A cycle means neither entry can ever be ruled first.
+  const state = new Map();
+  const visit = (id, trail) => {
+    if (state.get(id) === "done") return;
+    if (state.get(id) === "active") {
+      const loop = trail.slice(trail.indexOf(id)).concat(id);
+      out.push({ path: `decisions (${id})`, message: `waits on itself through ${loop.join(" → ")}`,
+        hint: "one of these must be ruled first — drop the dependency that is not real" });
+      return;
+    }
+    state.set(id, "active");
+    for (const next of byId.get(id)?.blockedBy ?? []) if (byId.has(next) && next !== id) visit(next, [...trail, id]);
+    state.set(id, "done");
+  };
+  for (const e of entries) visit(e.id, []);
+  return out;
+}
+
+/* ── what cannot be undone ──────────────────────────────────────────────────
+   How much the agent may decide alone follows from the cost of being wrong.
+   Something that can be undone may be handled without asking; something that
+   cannot is always the operator's call. */
+
+function reversibleErrors(brief) {
+  const out = [];
+  (brief.mechanical ?? []).forEach((m, i) => {
+    if (m?.reversible === false) {
+      out.push({ path: `mechanical[${i}]`, message: "cannot be undone, so it cannot be handled without asking",
+        hint: "make it an entry awaiting a ruling, with the irreversible option marked reversible: false" });
+    }
+  });
+  (brief.decisions ?? []).forEach((e, i) => {
+    if (!e || !["open", "decided"].includes(e.status ?? "open")) return;
+    const sols = e.solutions ?? [];
+    if (sols.length && sols.every((s) => s?.reversible === undefined)) {
+      out.push({ path: `decisions[${i}] (${e.id}) → solutions`, severity: "warning",
+        message: "says of no option whether it can be undone",
+        hint: "mark each option reversible: true or false — the reader weighs an option that cannot be taken back differently" });
+    }
+  });
+  return out;
+}
+
+/* ── estimates in the wrong currency ────────────────────────────────────────
+   A "two days" figure is a guess at the pace of hand-written code. The work is
+   done by agents, several times faster, so the figure misstates the cost. What
+   the reader pays is attention, review and risk. */
+
+const TIME_ESTIMATE = /\b(\d+(\.\d+)?|an?|one|two|three|four|five|six|seven|eight|nine|ten|half an?|a couple of|a few|several)[\s-]+(minute|hour|day|week|month|sprint)s?\b/i;
+
+function estimateWarnings(brief) {
+  const out = [];
+  (brief.decisions ?? []).forEach((e, i) => {
+    if (!e || !["open", "decided"].includes(e.status ?? "open")) return;
+    (e.solutions ?? []).forEach((s, j) => {
+      const hit = s?.cost?.work?.match(TIME_ESTIMATE);
+      if (hit) {
+        out.push({ path: `decisions[${i}] (${e.id}) → solutions[${j}] → cost → work`, severity: "warning",
+          message: `estimates calendar time ("${hit[0]}")`,
+          hint: "say what the work consists of and what it needs from the operator — review, a decision, access — not how long it would take by hand" });
+      }
+    });
+  });
   return out;
 }
 

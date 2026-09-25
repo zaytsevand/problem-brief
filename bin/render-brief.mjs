@@ -345,6 +345,7 @@ function solutions(list) {
     const badge = s.recommended
       ? `<span class="tag tag-rec">Recommended</span>`
       : `<span class="tag tag-alt">Alternative</span>`;
+    const once = s.reversible === false ? `<span class="tag tag-warn">Cannot be undone</span>` : "";
     const cost = [
       ["Work", s.cost.work],
       ["Risk", s.cost.risk],
@@ -354,9 +355,39 @@ function solutions(list) {
     const steps = s.steps?.length
       ? `<ol class="steps">${s.steps.map((x) => `<li>${inline(x)}</li>`).join("")}</ol>` : "";
     return `<article class="sol${s.recommended ? " sol-rec" : ""}">` +
-      `<header><span class="sol-n">${i + 1}</span><h4>${inline(s.label)}</h4>${badge}</header>` +
+      `<header><span class="sol-n">${i + 1}</span><h4>${inline(s.label)}</h4>${badge}${once}</header>` +
       `${prose(s.summary)}${steps}<dl class="cost">${cost}</dl></article>`;
   }).join("");
+}
+
+/* Dependencies between entries. An entry waits only on what is still live;
+   what it unblocks is counted through the whole chain, so the ruling that
+   frees the most work can be put first. */
+const isLive = (e) => ["open", "decided"].includes(e?.status ?? "open");
+function waitsOn(e) {
+  return (e.blockedBy ?? []).filter((id) => isLive(ENTRIES.get(id)));
+}
+function unblocks(id) {
+  const seen = new Set();
+  const walk = (from) => {
+    for (const e of ENTRIES.values()) {
+      if (isLive(e) && e.id !== id && !seen.has(e.id) && (e.blockedBy ?? []).includes(from)) {
+        seen.add(e.id);
+        walk(e.id);
+      }
+    }
+  };
+  walk(id);
+  return [...seen];
+}
+function dependencies(e) {
+  if (!isLive(e)) return "";
+  const waits = waitsOn(e);
+  const direct = [...ENTRIES.values()].filter((x) => isLive(x) && (x.blockedBy ?? []).includes(e.id)).map((x) => x.id);
+  const parts = [];
+  if (waits.length) parts.push(`Waits on ${citations(esc(waits.join(", ")))}`);
+  if (direct.length) parts.push(`${(e.status ?? "open") === "open" ? "Ruling" : "Carrying out"} this unblocks ${citations(esc(direct.join(", ")))}`);
+  return parts.length ? `<p class="deps">${parts.join(" · ")}</p>` : "";
 }
 
 function entry(e, baseDir) {
@@ -421,6 +452,7 @@ function entry(e, baseDir) {
       : `<span class="chip chip-${g} chip-static">${esc(STATE_LABEL[g])}</span>`}${bearingChip}
   </header>
   <p class="stamps">${stamps(e, "raised")}</p>
+  ${dependencies(e)}
   ${bearing}
   ${status}
   <section class="part part-problem"><h3>The problem</h3>${prose(e.problem)}</section>
@@ -755,6 +787,8 @@ details.rolled ul{margin-top:.6em;}
 .tail li.replaced{opacity:.6;}
 .tail li .qid{margin-right:.3em;}
 .tail li .said{margin-top:.35em;color:var(--ink-2);}
+.deps{font-family:ui-sans-serif,system-ui,sans-serif;font-size:.85rem;color:var(--ink-2);margin:-8px 0 14px;}
+.unblocks{font-family:ui-sans-serif,system-ui,sans-serif;font-size:.8em;color:var(--ink-3);}
 .done-mark{color:var(--rec);font-weight:650;margin-right:.4em;}
 
 @media (max-width:640px){
@@ -882,7 +916,11 @@ function page(brief, baseDir) {
 
   const ref = (e) => `<a class="qref" href="#${esc(e.id)}"><span class="n">${esc(e.id)}</span> ${inline(e.short ?? e.title, { refs: false })}</a>`;
   const waitingList = (label, list) => list.length
-    ? `<div class="waiting-row"><h3>${label}</h3><ul>${list.map((e) => `<li>${ref(e)}</li>`).join("")}</ul></div>` : "";
+    ? `<div class="waiting-row"><h3>${label}</h3><ul>${
+      /* The ruling that frees the most other work goes first. */
+      [...list].map((e) => [e, unblocks(e.id).length]).sort((a, b) => b[1] - a[1])
+        .map(([e, n]) => `<li>${ref(e)}${n ? ` <span class="unblocks">unblocks ${n}</span>` : ""}</li>`).join("")
+    }</ul></div>` : "";
   const blockers = brief.decisions.filter((e) => group(e) === "blocks");
   const escalated = brief.decisions.filter((e) => group(e) === "escalated");
   const unbracketed = brief.decisions.filter((e) => group(e) === "open");

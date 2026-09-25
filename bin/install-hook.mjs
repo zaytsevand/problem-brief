@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 /**
- * Add, or remove, the SessionStart hook that puts a project's problem briefs
- * back in front of every new, resumed, cleared or summarised session.
+ * Add, or remove, the problem-brief hooks:
+ *
+ *   SessionStart  brief-context.mjs --hook   puts a project's briefs back in front of
+ *                                            every new, resumed, cleared or summarised session
+ *   PostToolUse   brief-delta.mjs --hook     after each Artifact publish of a brief, hands
+ *                                            Claude the chat summary of what moved
  *
  *   node install-hook.mjs                     add it to ~/.claude/settings.json
  *   node install-hook.mjs --remove            take it out again
@@ -24,9 +28,11 @@ const i = args.indexOf("--settings");
 const settingsPath = i > -1 ? args[i + 1] : join(homedir(), ".claude", "settings.json");
 const remove = args.includes("--remove");
 
-const script = join(dirname(fileURLToPath(import.meta.url)), "brief-context.mjs");
-const MARK = "brief-context.mjs\" --hook";
-const command = `node "${script}" --hook`;
+const here = dirname(fileURLToPath(import.meta.url));
+const HOOKS = [
+  { event: "SessionStart", matcher: "^(startup|resume|clear|compact)$", script: "brief-context.mjs" },
+  { event: "PostToolUse", matcher: "Artifact", script: "brief-delta.mjs" },
+];
 
 let settings = {};
 if (existsSync(settingsPath)) {
@@ -40,18 +46,18 @@ if (existsSync(settingsPath)) {
 }
 
 const hooks = settings.hooks ?? {};
-const ours = (group) => (group?.hooks ?? []).some((h) => String(h.command ?? "").includes(MARK));
-const kept = (hooks.SessionStart ?? []).filter((g) => !ours(g));
-if (!remove) {
-  kept.push({
-    matcher: "^(startup|resume|clear|compact)$",
-    hooks: [{ type: "command", command, timeout: 10 }],
-  });
+for (const h of HOOKS) {
+  const mark = `${h.script}" --hook`;
+  const ours = (group) => (group?.hooks ?? []).some((x) => String(x.command ?? "").includes(mark));
+  const kept = (hooks[h.event] ?? []).filter((g) => !ours(g));
+  if (!remove) {
+    kept.push({ matcher: h.matcher, hooks: [{ type: "command", command: `node "${join(here, h.script)}" --hook`, timeout: 10 }] });
+  }
+  if (kept.length) hooks[h.event] = kept; else delete hooks[h.event];
 }
-if (kept.length) hooks.SessionStart = kept; else delete hooks.SessionStart;
 if (Object.keys(hooks).length) settings.hooks = hooks; else delete settings.hooks;
 
 mkdirSync(dirname(settingsPath), { recursive: true });
 writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf8");
-console.log(remove ? `removed the problem-brief SessionStart hook from ${settingsPath}`
-  : `added the problem-brief SessionStart hook to ${settingsPath}`);
+console.log(remove ? `removed the problem-brief hooks from ${settingsPath}`
+  : `added the problem-brief hooks (${HOOKS.map((h) => h.event).join(", ")}) to ${settingsPath}`);
