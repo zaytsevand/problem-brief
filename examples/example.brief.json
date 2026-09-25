@@ -323,5 +323,26 @@
       "updated": "2026-09-13T14:00Z",
       "state": "in-progress"
     }
+  ],
+  "rulings": [
+    {
+      "id": "R-1",
+      "created": "2026-09-11T09:10Z",
+      "updated": "2026-09-11T09:10Z",
+      "about": "Should mistakes in the design note's wording be asked about, or just fixed?",
+      "said": "Just fix them and list them. Don't ask me about the design note's wording.",
+      "source": "chat, 2026-09-11"
+    },
+    {
+      "id": "R-2",
+      "created": "2026-09-12T09:15Z",
+      "updated": "2026-09-12T09:15Z",
+      "about": "Is the timeout for a held-open batch part of the resume work, or a separate piece of work?",
+      "said": "Part of the resume work. Twenty minutes is fine to start with.",
+      "source": "chat, 2026-09-12",
+      "entries": [
+        "Q-3"
+      ]
+    }
   ]
 }

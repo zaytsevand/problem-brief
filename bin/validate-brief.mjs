@@ -17,6 +17,8 @@
  *      listed first, a citation must say what it shows, an option must carry a
  *      price, a closed entry must carry proof, a status must agree with what
  *      the entry records, and every timestamp must agree with the others.
+ *      It also warns when an entry reads like an earlier one, or like a
+ *      question a standing ruling has already answered.
  *
  * Errors are written for whoever has to fix them — a readable path, what is
  * wrong, and what to do about it. An unknown field is matched against the
@@ -369,7 +371,117 @@ function semanticErrors(brief) {
     }
   });
 
-  out.push(...stateErrors(brief), ...bearingErrors(brief), ...referenceErrors(brief), ...enumerationWarnings(brief), ...timestampErrors(brief));
+  out.push(...stateErrors(brief), ...bearingErrors(brief), ...referenceErrors(brief), ...enumerationWarnings(brief), ...timestampErrors(brief),
+    ...rulingErrors(brief), ...repeatWarnings(brief));
+  return out;
+}
+
+/* ── standing rulings ──────────────────────────────────────────────────────
+   The brief's memory of what the operator has already said. A ruling is never
+   deleted; one that stops holding points at the ruling that took over, so the
+   chain can always be followed to what holds now. */
+
+function rulingErrors(brief) {
+  const out = [];
+  const rulings = brief.rulings ?? [];
+  const entryIds = new Set((brief.decisions ?? []).map((e) => e?.id));
+  const seen = new Map();
+  rulings.forEach((r, i) => {
+    if (!r) return;
+    const where = `rulings[${i}]${r.id ? ` (${r.id})` : ""}`;
+    if (r.id && seen.has(r.id)) {
+      out.push({ path: where, message: `re-uses the id "${r.id}", already used by rulings[${seen.get(r.id)}]`,
+        hint: "a ruling is cited by its id, so each must be unique and never reassigned — take the next free number" });
+    }
+    if (r.id) seen.set(r.id, i);
+    if (r.replacedBy) {
+      if (r.replacedBy === r.id) {
+        out.push({ path: `${where} → replacedBy`, message: "points at itself", hint: "name the later ruling that took over" });
+      } else if (!rulings.some((x) => x?.id === r.replacedBy)) {
+        out.push({ path: `${where} → replacedBy`, message: `points at ${r.replacedBy}, which is not a ruling on this page`,
+          hint: "record the new ruling first, then point the old one at it" });
+      }
+      if ((r.status ?? "active") === "active") {
+        out.push({ path: where, message: `names ${r.replacedBy} as its replacement but is still marked active`,
+          hint: 'set status to "replaced" — two rulings on the same question cannot both hold' });
+      }
+    }
+    for (const id of r.entries ?? []) {
+      if (!entryIds.has(id)) {
+        out.push({ path: `${where} → entries`, message: `names ${id}, which is not an entry on this page`,
+          hint: "fix the id, or drop it" });
+      }
+    }
+  });
+  (brief.decisions ?? []).forEach((e, i) => {
+    for (const ev of [...(e?.evidence ?? []), ...(e?.resolution?.evidence ?? [])]) {
+      if (ev?.kind === "ruling" && !seen.has(ev.ref)) {
+        out.push({ path: `decisions[${i}]${e.id ? ` (${e.id})` : ""}`, message: `cites the ruling "${ev.ref}", which is not on this page`,
+          hint: "a ruling cited as evidence must be recorded in rulings, with its id as the ref" });
+      }
+    }
+  });
+  return out;
+}
+
+/* ── the same question, asked again ─────────────────────────────────────────
+   In a long session the conversation is summarised, and what the operator
+   already answered drops out of view. The same problem then comes back under a
+   new number, or an answered question is put to the operator again. A cheap
+   word-overlap check cannot prove two items are the same, but it can make the
+   writer look. */
+
+const STOP = new Set(("that this with from have when which there their them they then than what were been into " +
+  "only also does will would should could about after before while where these those other every each more most " +
+  "some such just because being over under again still never always entry question").split(" "));
+
+function words(...texts) {
+  const out = new Set();
+  for (const t of texts) {
+    for (const w of String(t ?? "").toLowerCase().split(/[^a-z0-9]+/)) {
+      if (w.length >= 4 && !STOP.has(w)) out.add(w.replace(/(ing|ed|es|s)$/, ""));
+    }
+  }
+  return out;
+}
+
+function overlap(a, b) {
+  if (!a.size || !b.size) return 0;
+  let shared = 0;
+  for (const w of a) if (b.has(w)) shared++;
+  return shared / Math.min(a.size, b.size);
+}
+
+const SAME_ENTRY = 0.6;
+const ANSWERED = 0.5;
+
+function repeatWarnings(brief) {
+  const out = [];
+  const entries = (brief.decisions ?? []).filter(Boolean);
+  const bag = entries.map((e) => words(e.title, e.short, e.problem));
+  const num = (id) => Number(String(id ?? "").split("-")[1]) || 0;
+  entries.forEach((e, i) => {
+    entries.forEach((f, j) => {
+      if (j === i || num(f.id) >= num(e.id)) return;   // report on the later of the two
+      const score = overlap(bag[i], bag[j]);
+      if (score < SAME_ENTRY) return;
+      out.push({ path: `decisions (${e.id})`, severity: "warning",
+        message: `reads like ${f.id}, which is ${f.status ?? "open"} — ${Math.round(score * 100)}% of the shorter one's key words are shared`,
+        hint: `if it is the same problem, fold the new material into ${f.id} (reopening it if it was closed, and saying what is new) rather than asking it again under a new number` });
+    });
+  });
+  const live = (brief.rulings ?? []).filter((r) => r && (r.status ?? "active") === "active");
+  entries.forEach((e, i) => {
+    if ((e.status ?? "open") !== "open") return;
+    for (const r of live) {
+      if ((r.entries ?? []).includes(e.id)) continue;
+      const score = overlap(bag[i], words(r.about, r.said));
+      if (score < ANSWERED) continue;
+      out.push({ path: `decisions (${e.id})`, severity: "warning",
+        message: `is awaiting a ruling, but may already be answered by ${r.id}: "${r.about}"`,
+        hint: `if ${r.id} answers it, record the ruling on the entry and move it on; if it is genuinely different, add ${e.id} to ${r.id}'s entries only when the ruling bears on it, and say in the entry why the ruling does not settle it` });
+    }
+  });
   return out;
 }
 
@@ -408,7 +520,7 @@ function bearingErrors(brief) {
    Prose cites entries by id, and the page turns each citation into a link. A
    citation to an id that is not on the page is a dead link and, usually, a typo. */
 
-const CITED = /\bQ-\d+\b/g;
+const CITED = /\b[QR]-\d+\b/g;
 
 /* Three or more entries named in one sentence is a list written as prose: the
    reader has to unpick it, and the page cannot group it. */
@@ -429,7 +541,7 @@ function enumerationWarnings(brief) {
 }
 
 function referenceErrors(brief) {
-  const ids = new Set((brief.decisions ?? []).map((e) => e?.id));
+  const ids = new Set([...(brief.decisions ?? []), ...(brief.rulings ?? [])].map((x) => x?.id));
   const seen = new Set();
   const out = [];
   const walk = (v, path) => {
@@ -437,8 +549,8 @@ function referenceErrors(brief) {
       for (const id of v.match(CITED) ?? []) {
         if (ids.has(id) || seen.has(`${path}|${id}`)) continue;
         seen.add(`${path}|${id}`);
-        out.push({ path, severity: "warning", message: `cites ${id}, which is not an entry on this page`,
-          hint: "fix the id, or add the entry it refers to" });
+        out.push({ path, severity: "warning", message: `cites ${id}, which is not ${id.startsWith("R-") ? "a ruling" : "an entry"} on this page`,
+          hint: `fix the id, or add the ${id.startsWith("R-") ? "ruling" : "entry"} it refers to` });
       }
     } else if (Array.isArray(v)) v.forEach((x, i) => walk(x, `${path}[${i}]`));
     else if (v && typeof v === "object") {
@@ -564,6 +676,7 @@ function timestampErrors(brief) {
   });
   (brief.mechanical ?? []).forEach((m, i) => item(m, `mechanical[${i}]`));
   (brief.outstanding ?? []).forEach((o, i) => item(o, `outstanding[${i}]`));
+  (brief.rulings ?? []).forEach((r, i) => item(r, `rulings[${i}]${r?.id ? ` (${r.id})` : ""}`));
   return out;
 }
 

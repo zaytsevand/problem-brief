@@ -131,6 +131,23 @@ on an entry still marked open, work marked blocked on something already ruled)
 and timestamps that contradict each other. Each run ends with a short chat
 summary of what changed state.
 
+The brief is also the session's memory. Every answer or judgement the operator
+gives is written into it straight away, on the entry it settles or as a
+standing ruling (`R-1`, `R-2`, …) when it reaches further. Nothing is raised
+before it has been checked against every entry and every ruling, and the
+validator warns when an entry looks like an earlier one or like a question
+already answered. Each rendered page carries its own data, so a session that
+has lost the JSON recovers it with `bin/extract-brief.mjs` instead of
+rebuilding it from memory.
+
+It plugs into Claude Code's own memory. `bin/brief-memory.mjs` registers a
+brief as one pointer file in the project's memory directory, listed in
+`MEMORY.md`, so every session knows the brief exists. The optional
+SessionStart hook (`./install.sh --hook`, or `.\install.ps1 -Hook`) follows
+those pointers at startup, resume, clear and after every summary, and puts the
+standing rulings and live entries back in context. That is the moment answers
+used to be lost.
+
 The counts along the top of the page are filters — click one and the page shows
 that category alone. It opens on what blocks the goal, since that is what is
 waiting on the reader. Above the entries, a short summary lists what waits on

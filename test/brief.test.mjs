@@ -459,3 +459,136 @@ test("the validator CLI runs from a path with a space in it", () => {
   const out = execFileSync("node", [join(dir, "bin", "validate-brief.mjs"), EXAMPLE], { encoding: "utf8" });
   assert.match(out, /is a valid problem brief/);
 });
+
+/* ── answered questions stay answered ──────────────────────────────────── */
+
+const ruling = (id, extra = {}) => ({
+  id, created: T, updated: T, source: "chat, 2026-09-15",
+  about: "Should retried invoices be deduplicated before posting?",
+  said: "Yes. Deduplicate on the invoice number, always.", ...extra,
+});
+const live = { bearing: "blocks-goal", bearingReason: "Posting is the goal." };
+const distinct = (id, title, problem) => entry(id, { ...live, title, problem });
+
+test("standing rulings validate, and a replaced one must name what replaced it", () => {
+  assert.equal(messages(brief([entry("Q-1", live)], { rulings: [ruling("R-1")] })).ok, true);
+  const r = messages(brief([entry("Q-1", live)], { rulings: [ruling("R-1", { status: "replaced" })] }));
+  assert.ok(r.errors.some((m) => m.includes('missing "replacedBy"')));
+});
+
+test("a ruling pointing at another but still active is refused", () => {
+  const r = messages(brief([entry("Q-1", live)], {
+    rulings: [ruling("R-1", { replacedBy: "R-2" }), ruling("R-2", { about: "Something else entirely, about currencies." })],
+  }));
+  assert.ok(r.errors.some((m) => m.includes("still marked active")));
+});
+
+test("ruling ids are unique, and a ruling cited as evidence must exist", () => {
+  const r = messages(brief([entry("Q-1", { ...live, evidence: [{ kind: "ruling", ref: "R-9", note: "The operator said so." }] })],
+    { rulings: [ruling("R-1"), ruling("R-1")] }));
+  assert.ok(r.errors.some((m) => m.includes('re-uses the id "R-1"')));
+  assert.ok(r.errors.some((m) => m.includes('cites the ruling "R-9"')));
+});
+
+test("an entry that reads like an earlier one is flagged on the later one", () => {
+  const r = messages(brief([
+    distinct("Q-1", "Retried invoices are posted twice", "A retried import posts the same invoice to the ledger twice."),
+    distinct("Q-7", "Invoices posted twice after a retry", "When the import is retried the same invoice is posted to the ledger twice."),
+    distinct("Q-8", "The currency column is ignored", "Amounts in euros are read as pounds because the currency column is never parsed."),
+  ]));
+  assert.equal(r.warnings.filter((m) => m.includes("reads like")).length, 1);
+  assert.ok(r.warnings.some((m) => m.startsWith("decisions (Q-7) reads like Q-1")));
+});
+
+test("an open entry a standing ruling already answers is flagged", () => {
+  const q = distinct("Q-4", "Deduplicate retried invoices before posting?", "Retried invoices are posted twice; should they be deduplicated before posting?");
+  const r = messages(brief([q], { rulings: [ruling("R-1")] }));
+  assert.ok(r.warnings.some((m) => m.includes("may already be answered by R-1")));
+  const linked = messages(brief([q], { rulings: [ruling("R-1", { entries: ["Q-4"] })] }));
+  assert.ok(!linked.warnings.some((m) => m.includes("may already be answered")));
+});
+
+test("rulings get their own section and filter, and R- ids link to them", () => {
+  const html = render(brief([entry("Q-1", { ...live, brief: "Settled in principle by R-1, but the mechanism is still open and needs a ruling." })],
+    { rulings: [ruling("R-1")] }));
+  assert.match(html, /data-filter="rulings"/);
+  assert.match(html, /<li id="R-1" data-reveal="rulings">/);
+  assert.match(html, /<a class="qref" href="#R-1"/);
+});
+
+test("the page carries its own data, and extract-brief recovers it exactly", () => {
+  const b = brief([entry("Q-1", { ...live, problem: "A </script> in the text must not end the data block early." })],
+    { rulings: [ruling("R-1")] });
+  const html = render(b);
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  writeFileSync(join(dir, "p.html"), html);
+  const got = JSON.parse(execFileSync("node", [join(ROOT, "bin", "extract-brief.mjs"), join(dir, "p.html")], { encoding: "utf8" }));
+  assert.deepEqual(got, b);
+});
+
+/* ── Claude Code memory and the SessionStart hook ──────────────────────── */
+
+const bin = (name) => join(ROOT, "bin", name);
+const run = (name, args, input) => execFileSync("node", [bin(name), ...args], { encoding: "utf8", input });
+
+test("the digest lists active rulings, live entries and closed ids — and leaves replaced rulings out", () => {
+  const b = brief([entry("Q-1", { ...live, short: "retried invoices" }),
+    entry("Q-2", { status: "superseded", short: "old currency bug" })],
+  { rulings: [ruling("R-1", { status: "replaced", replacedBy: "R-2" }), ruling("R-2", { about: "Which currency do amounts default to?", said: "Pounds, always." })] });
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  writeFileSync(join(dir, "b.json"), JSON.stringify(b));
+  const text = run("brief-context.mjs", [join(dir, "b.json")]);
+  assert.match(text, /R-2 .*Which currency.*→ Pounds, always\./);
+  assert.doesNotMatch(text, /R-1/);
+  assert.match(text, /Q-1 retried invoices — awaiting a ruling, blocks the goal/);
+  assert.match(text, /Closed .*Q-2 old currency bug/);
+});
+
+test("registering a brief writes one pointer and one index line, however often it runs", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const mem = join(dir, "memory");
+  writeFileSync(join(dir, "importer.brief.json"), JSON.stringify(brief([entry("Q-1", live)], { rulings: [ruling("R-1")] })));
+  mkdirSync(mem);
+  writeFileSync(join(mem, "MEMORY.md"), "- [Someone else](other.md) — keep me\n");
+  for (let k = 0; k < 2; k++) run("brief-memory.mjs", [join(dir, "importer.brief.json"), "--memory-dir", mem, "--url", "https://example.test/a"]);
+  const index = readFileSync(join(mem, "MEMORY.md"), "utf8").trim().split("\n");
+  assert.equal(index.length, 2);
+  assert.equal(index[0], "- [Someone else](other.md) — keep me");
+  assert.match(index[1], /\(problem-brief-importer\.md\)/);
+  const pointer = readFileSync(join(mem, "problem-brief-importer.md"), "utf8");
+  assert.match(pointer, /^---\nname: problem-brief-importer\n/);
+  assert.match(pointer, /type: project/);
+});
+
+test("the hook finds the project's briefs through the memory pointers beside the transcript", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const mem = join(dir, "project", "memory");
+  mkdirSync(mem, { recursive: true });
+  writeFileSync(join(dir, "importer.brief.json"), JSON.stringify(brief([entry("Q-1", live)], { rulings: [ruling("R-1")] })));
+  run("brief-memory.mjs", [join(dir, "importer.brief.json"), "--memory-dir", mem]);
+  const out = JSON.parse(run("brief-context.mjs", ["--hook"], JSON.stringify({ transcript_path: join(dir, "project", "s.jsonl"), source: "compact" })));
+  assert.equal(out.hookSpecificOutput.hookEventName, "SessionStart");
+  assert.match(out.hookSpecificOutput.additionalContext, /R-1 .*Deduplicate on the invoice number/);
+});
+
+test("the hook is silent when there is nothing to say, and never fails", () => {
+  assert.equal(run("brief-context.mjs", ["--hook"], JSON.stringify({ transcript_path: "/nowhere/s.jsonl" })), "");
+  assert.equal(run("brief-context.mjs", ["--hook"], "not json"), "");
+});
+
+test("installing the hook keeps every other hook, never duplicates, and removes cleanly", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const settings = join(dir, "settings.json");
+  const other = { matcher: "startup", hooks: [{ type: "command", command: "echo hi" }] };
+  writeFileSync(settings, JSON.stringify({ model: "x", hooks: { SessionStart: [other] } }));
+  run("install-hook.mjs", ["--settings", settings]);
+  run("install-hook.mjs", ["--settings", settings]);
+  let s = JSON.parse(readFileSync(settings, "utf8"));
+  assert.equal(s.model, "x");
+  assert.equal(s.hooks.SessionStart.length, 2);
+  assert.deepEqual(s.hooks.SessionStart[0], other);
+  assert.match(s.hooks.SessionStart[1].hooks[0].command, /brief-context\.mjs" --hook$/);
+  run("install-hook.mjs", ["--settings", settings, "--remove"]);
+  s = JSON.parse(readFileSync(settings, "utf8"));
+  assert.deepEqual(s.hooks.SessionStart, [other]);
+});

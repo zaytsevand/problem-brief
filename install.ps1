@@ -14,8 +14,12 @@
 .PARAMETER Dir
   Install into a different skills directory.
 
+.PARAMETER Hook
+  Also add the SessionStart hook to %USERPROFILE%\.claude\settings.json, which
+  puts each brief's rulings back in front of a session after it is summarised.
+
 .PARAMETER Uninstall
-  Remove the skill again.
+  Remove the skill again, and the hook.
 
 .EXAMPLE
   .\install.ps1
@@ -28,6 +32,7 @@
 param(
   [switch]$Link,
   [switch]$Uninstall,
+  [switch]$Hook,
   [string]$Dir
 )
 
@@ -42,6 +47,11 @@ function Write-Ok   ($m) { Write-Host "✓ $m" -ForegroundColor Green }
 function Write-Warn ($m) { Write-Host "! $m" -ForegroundColor Yellow }
 
 if ($Uninstall) {
+  $hookScript = Join-Path $target 'bin\install-hook.mjs'
+  if ((Test-Path $hookScript) -and (Get-Command node -ErrorAction SilentlyContinue)) {
+    & node $hookScript --remove | Out-Null
+    Write-Ok 'removed the SessionStart hook, if it was there'
+  }
   if (Test-Path $target) {
     # Remove-Item on a junction deletes the junction, not the target it points at.
     Remove-Item $target -Recurse -Force
@@ -95,6 +105,15 @@ if ((Test-Path $humanizerPlugin) -or (Test-Path (Join-Path $Dir 'humanizer\SKILL
   Write-Host '    in Claude Code:  /plugin marketplace add blader/humanizer'
   Write-Host '                     /plugin install humanizer@humanizer'
   $missing = $true
+}
+
+# ── the hook that keeps rulings in view ─────────────────────────────────────
+if ($Hook) {
+  & node (Join-Path $target 'bin\install-hook.mjs')
+  Write-Ok 'briefs come back into view at every session start and after every summary'
+} else {
+  Write-Host '  Optional: .\install.ps1 -Hook adds a SessionStart hook that puts each brief''s'
+  Write-Host '  rulings back in front of a session after it has been summarised.'
 }
 
 Write-Host ''

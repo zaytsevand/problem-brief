@@ -37,6 +37,7 @@ const esc = (s) => String(s ?? "")
 /* Entries on this page, so a citation in any text can become a link. Set once
    per page, before anything is rendered. */
 let ENTRIES = new Map();
+let RULINGS = new Map();
 
 /* The words a label should never end on once it has been cut short. */
 const DANGLING = /\s+(?:the|a|an|and|or|of|to|in|on|for|with|that|is|are|was|by)$/i;
@@ -77,7 +78,9 @@ function citations(html) {
       return part;
     }
     if (inTag) return part;
-    return part.replace(/(\()?\b(Q-\d+)\b(?!\s*\()/g, (m, open, id) => {
+    return part.replace(/(\()?\b([QR]-\d+)\b(?!\s*\()/g, (m, open, id) => {
+      const r = RULINGS.get(id);
+      if (r) return `${open ?? ""}<a class="qref" href="#${id}" title="${esc(r.about)}">${id}</a>`;
       const e = ENTRIES.get(id);
       if (!e) return m;
       const label = !open && !labelled.has(id) ? ` (${esc(e.short ?? derivedLabel(e.title))})` : "";
@@ -245,7 +248,7 @@ const FILTER_SCRIPT = `
     blocks: 'What blocks the goal', escalated: 'Escalated, not blocking the goal',
     open: 'What needs deciding',
     complete: 'Completed', superseded: 'Retracted',
-    mechanical: 'Fixed without asking', outstanding: 'Outstanding work', all: 'Everything on this page'
+    mechanical: 'Fixed without asking', outstanding: 'Outstanding work', rulings: 'Standing rulings', all: 'Everything on this page'
   };
 
   function has(name){ return buttons.some(function(b){ return b.dataset.filter === name; }); }
@@ -279,8 +282,9 @@ const FILTER_SCRIPT = `
     var id = (location.hash || '').slice(1);
     if (!id) return false;
     var el = document.getElementById(id);
-    if (!el || !el.dataset.state) return false;
-    apply(el.dataset.state === 'decided' ? 'outstanding' : el.dataset.state, false);
+    var to = el && (el.dataset.reveal || (el.dataset.state === 'decided' ? 'outstanding' : el.dataset.state));
+    if (!to) return false;
+    apply(to, false);
     el.scrollIntoView();
     return true;
   }
@@ -748,6 +752,9 @@ details.rolled ul{margin-top:.6em;}
 .tail li .d{color:var(--ink-2);font-size:.9rem;margin-top:.3em;}
 .tail li .b{color:var(--ink-3);font-size:.8rem;margin-top:.35em;
   font-family:ui-sans-serif,system-ui,sans-serif;}
+.tail li.replaced{opacity:.6;}
+.tail li .qid{margin-right:.3em;}
+.tail li .said{margin-top:.35em;color:var(--ink-2);}
 .done-mark{color:var(--rec);font-weight:650;margin-right:.4em;}
 
 @media (max-width:640px){
@@ -832,6 +839,7 @@ const THEME_SCRIPT = `
 
 function page(brief, baseDir) {
   ENTRIES = new Map(brief.decisions.map((e) => [e.id, e]));
+  RULINGS = new Map((brief.rulings ?? []).map((r) => [r.id, r]));
   const st = (e) => e.status ?? "open";
   /* One flow, ordered by state: what needs you first, then what is merely
      recorded. Nothing is hidden from the document — the filter decides what is
@@ -841,6 +849,8 @@ function page(brief, baseDir) {
   const count = (k) => brief.decisions.filter((e) => group(e) === k).length;
   const mech = brief.mechanical ?? [];
   const out = brief.outstanding ?? [];
+  const rulings = brief.rulings ?? [];
+  const holding = rulings.filter((r) => (r.status ?? "active") === "active");
 
   /* The counts were only ever a summary. They are the controls now: click one
      and the page shows that category alone. The page opens on what needs a
@@ -853,6 +863,7 @@ function page(brief, baseDir) {
     mech.length ? { key: "mechanical", n: mech.length, label: "handled without asking" } : null,
     count("decided") + out.length
       ? { key: "outstanding", n: count("decided") + out.filter((o) => o.state !== "done").length, label: "outstanding work" } : null,
+    rulings.length ? { key: "rulings", n: holding.length, label: "standing rulings" } : null,
   ].filter(Boolean);
 
   const filters = `<nav class="filters" role="group" aria-label="Show one part of the page">` +
@@ -941,6 +952,29 @@ function page(brief, baseDir) {
       `<div class="b">${outstandingState(o)}</div>` +
       `<p class="stamps">${stamps(o)}</p></li>`).join("")}</ul></section>` : "";
 
+  /* What the operator has already said. Kept on the page, newest first, so the
+     reader can see what they have told us, and so any later session can check
+     a question against it before asking it again. */
+  const rulSec = rulings.length ? `<section class="tail" data-block="rulings">
+    <h2>Standing rulings</h2>
+    <p class="lede">What you have already answered or decided, beyond any one entry. Nothing here is asked again.</p>
+    <ul>${[...rulings].reverse().map((r) => {
+      const gone = (r.status ?? "active") === "replaced";
+      return `<li id="${esc(r.id)}" data-reveal="rulings"${gone ? ' class="replaced"' : ""}>` +
+        `<a class="qid" href="#${esc(r.id)}">${esc(r.id)}</a> <strong>${inline(r.about)}</strong>` +
+        `<div class="said">${prose(r.said)}</div>` +
+        `<div class="b">${gone ? `Replaced by ${citations(esc(r.replacedBy))} · ` : ""}From ${inline(r.source)}` +
+        (r.entries?.length ? ` · bears on ${r.entries.map((id) => citations(esc(id))).join(", ")}` : "") + `</div>` +
+        `<p class="stamps">${stamps(r, "given")}</p></li>`;
+    }).join("")}</ul></section>` : "";
+
+  /* The brief's own data travels inside the page, so a session that has lost
+     the JSON (a new session, or one whose history was summarised) can recover
+     every entry, ruling and stamp from the published page instead of rebuilding
+     them from memory. */
+  const data = `<script type="application/json" id="problem-brief-data">` +
+    JSON.stringify(brief).replace(/</g, "\\u003c") + `</script>`;
+
   return `<title>${esc(brief.title)}</title>
 <style>${CSS}</style>
 <div class="wrap">
@@ -956,7 +990,9 @@ function page(brief, baseDir) {
   ${entries.map((e) => entry(e, baseDir)).join("\n")}
   ${mechSec}
   ${outSec}
+  ${rulSec}
 </div>
+${data}
 <script>${THEME_SCRIPT}</script>
 <script>var DEFAULT_FILTER = '${defaultFilter}';${FILTER_SCRIPT}</script>
 ${history.length ? `<script>${CHANGES_SCRIPT}</script>` : ""}

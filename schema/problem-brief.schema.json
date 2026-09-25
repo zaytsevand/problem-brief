@@ -24,6 +24,10 @@
       "minLength": 10,
       "description": "One plain sentence naming what this brief is about and who must act on it."
     },
+    "url": {
+      "type": "string",
+      "description": "Where the brief is published, once it has been. Lets a later session find the page, and recover this file from it, without asking."
+    },
     "goal": {
       "type": "string",
       "minLength": 10,
@@ -96,6 +100,13 @@
       "description": "Agreed work not yet done. Kept apart from the decisions.",
       "items": {
         "$ref": "#/$defs/outstandingItem"
+      }
+    },
+    "rulings": {
+      "type": "array",
+      "description": "Everything the operator has answered, ruled or judged that outlives a single entry: an answer given in chat, a preference, a scope cut, a 'we do not care about X'. The brief's memory. A long session is summarised and loses what was said in it; this list is not. Search it before raising anything. Never deleted — a ruling that no longer holds is marked replaced.",
+      "items": {
+        "$ref": "#/$defs/ruling"
       }
     },
     "diagramTheme": {
@@ -204,7 +215,7 @@
             "superseded"
           ],
           "default": "open",
-          "description": "open — needs your ruling. decided — you chose a way forward, it has not been carried out yet. complete — the chosen way forward has been carried out and the entry is closed; that covers work landing, a question being answered, or scope being cut, whichever the chosen option was. superseded — the problem went away or was overtaken, and nothing was carried out."
+          "description": "open — needs your ruling. decided — you chose a way forward, it has not been carried out yet. complete — the chosen way forward has been carried out and the entry is closed; that covers work landing, a question being answered, or scope being cut, whichever the chosen option was. superseded — the problem went away or was overtaken, and nothing was carried out. An entry answered once is never raised again under a new id: if new evidence reopens it, set the same entry back to open and say what is new."
         },
         "bearing": {
           "type": "string",
@@ -420,13 +431,14 @@
             "run",
             "commit",
             "test",
-            "measurement"
+            "measurement",
+            "ruling"
           ],
           "description": "What sort of thing is being cited."
         },
         "ref": {
           "type": "string",
-          "description": "The citation itself: path:line, a spec path, a commit hash, a run identifier."
+          "description": "The citation itself: path:line, a spec path, a commit hash, a run identifier. For kind=ruling, the ruling's id, e.g. R-3."
         },
         "note": {
           "type": "string",
@@ -722,6 +734,93 @@
       "type": "string",
       "format": "date-time",
       "description": "A moment with its time zone: YYYY-MM-DDTHH:MM, optional seconds, then Z or an offset. e.g. 2026-09-15T09:40Z or 2026-09-15T10:40+01:00."
+    },
+    "ruling": {
+      "type": "object",
+      "required": [
+        "id",
+        "created",
+        "updated",
+        "about",
+        "said",
+        "source"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^R-[0-9]+$",
+          "description": "Stable citation handle. R-1, R-2, … Never renumber, never reuse."
+        },
+        "created": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the ruling was given. Set once and never changed."
+        },
+        "updated": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When this record last changed — reworded, linked to another entry, or replaced."
+        },
+        "about": {
+          "type": "string",
+          "minLength": 10,
+          "description": "The question it answers, phrased the way it would be asked again. This is what a later session matches a new question against, so name the subject plainly."
+        },
+        "said": {
+          "type": "string",
+          "minLength": 10,
+          "description": "The answer or judgement itself, in the operator's own words where they gave them."
+        },
+        "source": {
+          "type": "string",
+          "minLength": 3,
+          "description": "Where it was given, so it can be traced: 'chat, 2026-09-25', 'comment on Q-4', 'AskUserQuestion round, 2026-09-25', a commit or a document."
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^Q-[0-9]+$"
+          },
+          "description": "The entries this ruling bears on, where there are any."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "replaced"
+          ],
+          "default": "active",
+          "description": "active — still holds. replaced — the operator later said otherwise; kept for the record, with replacedBy naming the ruling that took over."
+        },
+        "replacedBy": {
+          "type": "string",
+          "pattern": "^R-[0-9]+$",
+          "description": "The ruling that took over from this one. Required once status is replaced."
+        },
+        "memory": {
+          "type": "string",
+          "description": "The Claude memory file this ruling was also saved to, when it is about how to work in general (a preference, a standing instruction) rather than about this brief's subject. e.g. feedback-fix-wording-without-asking.md."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "replaced"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "replacedBy"
+            ]
+          }
+        }
+      ]
     }
   }
 }
