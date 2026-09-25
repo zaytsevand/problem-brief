@@ -903,3 +903,28 @@ test("a retired brief with live entries is flagged", () => {
   const r = messages(brief([entry("Q-1", live)], { retired: T }));
   assert.ok(r.warnings.some((m) => m.includes("Q-1 is still live")));
 });
+
+test("a throwaway brief is one line at every session start, with its pages, until retired", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const mem = join(dir, "project", "memory");
+  mkdirSync(mem, { recursive: true });
+  const env = { ...process.env, PROBLEM_BRIEF_HOME: join(dir, "home") };
+  const node = (script, args, input) => execFileSync("node", [bin(script), ...args], { encoding: "utf8", env, input });
+  const path = join(dir, "try.brief.json");
+  const b = brief([entry("Q-1", { ...live, short: "retried invoices" })], { throwaway: true, rulings: [ruling("R-1")] });
+  writeFileSync(path, JSON.stringify(b));
+  node("brief-memory.mjs", [path, "--memory-dir", mem]);
+  const html = render(b);
+  assert.match(html, /Throwaway<\/span>Made to try something out/);
+  writeFileSync(join(dir, "index.html"), html);
+  node("brief-delta.mjs", ["--hook"], JSON.stringify({ tool_name: "Artifact", tool_input: { file_path: "index.html" }, cwd: dir,
+    tool_response: "Published at https://claude.ai/artifact/TRYPAGE" }));
+  const start = () => JSON.parse(node("brief-context.mjs", ["--hook"], JSON.stringify({ transcript_path: join(dir, "project", "s.jsonl") })))
+    .hookSpecificOutput.additionalContext;
+  const text = start();
+  assert.match(text, /Throwaway brief "Test brief" .* is still registered, published at https:\/\/claude\.ai\/artifact\/TRYPAGE/);
+  assert.match(text, /on their yes, delete its page with the Artifact tool's delete action/);
+  assert.doesNotMatch(text, /Standing rulings|Live entries/);
+  assert.match(node("brief-retire.mjs", [path, "--memory-dir", mem]), /throwaway, so its pages are due for deletion too/);
+  assert.doesNotMatch(start(), /Throwaway brief/);
+});

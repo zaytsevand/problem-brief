@@ -1026,6 +1026,7 @@ function page(brief, baseDir) {
   <header class="top">
     <h1>${inline(brief.title)}</h1>
     <p class="subject">${inline(brief.subject)}</p>
+    ${brief.throwaway ? `<p class="goal"><span class="goal-k">Throwaway</span>Made to try something out. It will be deleted once the test is over.</p>` : ""}
     ${brief.binding ? `<p class="goal"><span class="goal-k">Works under</span>` +
       (brief.binding.url ? `<a href="${esc(brief.binding.url)}" target="_blank" rel="noopener">${esc(brief.binding.ref)}</a>` : `<code>${esc(brief.binding.ref)}</code>`) +
       (brief.binding.system ? ` · ${esc(brief.binding.system)}` : "") + (brief.binding.title ? ` — ${inline(brief.binding.title, { refs: false })}` : "") + `</p>` : ""}

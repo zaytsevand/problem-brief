@@ -61,7 +61,17 @@ export const finished = (brief) =>
   !(brief.decisions ?? []).some((e) => ["open", "decided"].includes(e.status ?? "open")) &&
   !(brief.outstanding ?? []).some((o) => (o.state ?? "not-started") !== "done");
 
-export function digest(brief, { path, url, memoryDir } = {}) {
+export function digest(brief, { path, url, memoryDir, pages = [] } = {}) {
+  /* A throwaway brief is never worth its full digest. What a session needs to
+     know is that it is still around, and where it is published, so the
+     cleanup is offered until it is done. */
+  if (brief.throwaway) {
+    const where = [...new Set([url, brief.url, ...pages].filter(Boolean))];
+    return `Throwaway brief "${brief.title}"${path ? ` — ${path}` : ""} is still registered` +
+      (where.length ? `, published at ${where.join(", ")}` : "") + `. If the test it was made for is over, offer the operator ` +
+      `to clean it up: retire it (node "${RETIRE}" "${path ?? "<brief.json>"}" --memory-dir "${memoryDir ?? "<memory directory>"}") ` +
+      `and, on their yes, delete ${where.length === 1 ? "its page" : "its pages"} with the Artifact tool's delete action.`;
+  }
   if (finished(brief)) {
     const rulings = (brief.rulings ?? []).filter((r) => (r.status ?? "active") === "active").length;
     return `Problem brief "${brief.title}"${path ? ` — ${path}` : ""}: nothing live (${(brief.decisions ?? []).length} closed, ` +
@@ -153,11 +163,14 @@ function hook() {
   const memoryDir = memoryDirOf(input);
 
   const parts = process.env.PROBLEM_BRIEF_REMINDER === "off" ? [] : [REMINDER];
+  let published = {};
+  try { published = JSON.parse(readFileSync(join(stateHome(), "published", "urls.json"), "utf8")); } catch { /* none yet */ }
   for (const p of memoryDir ? pointers(memoryDir) : []) {
     try {
       const brief = JSON.parse(readFileSync(p.brief, "utf8"));
       if (brief.retired) continue;
-      parts.push(digest(brief, { path: p.brief, url: p.url, memoryDir }));
+      const pages = Object.keys(published).filter((u) => published[u] === brief.created);
+      parts.push(digest(brief, { path: p.brief, url: p.url, memoryDir, pages }));
     } catch {
       parts.push(`Problem brief pointer ${p.file} names ${p.brief}, which cannot be read.` +
         (p.url ? ` Recover it from ${p.url} with the problem-brief skill's extract-brief.mjs before raising anything on its subject.` : ""));

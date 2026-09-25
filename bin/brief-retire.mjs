@@ -94,6 +94,8 @@ console.log(`retired "${brief.title}"`);
 for (const d of done) console.log(`  ${d}`);
 if (live.length) console.log(`  ! ${live.join(", ")} still live — nothing will remind a session of ${live.length === 1 ? "it" : "them"} now`);
 if (pages.size) {
-  console.log("  published at (not deleted — ask the operator, then use the Artifact tool's delete action):");
+  console.log(brief.throwaway
+    ? "  throwaway, so its pages are due for deletion too — ask the operator, then use the Artifact tool's delete action:"
+    : "  published at (not deleted — ask the operator, then use the Artifact tool's delete action):");
   for (const u of pages) console.log(`    ${u}`);
 }

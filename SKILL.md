@@ -278,11 +278,16 @@ record of what was ruled.
   and breaks its link for everyone, including links they have shared. Retiring
   never deletes it. Ask, and delete with the `Artifact` tool's `delete` action
   only on a yes. Say which page it is and that the delete is permanent.
-- **Test and throwaway briefs are cleaned up in full.** Test briefs, pages
-  published to try something out, and briefs from an abandoned approach get
-  retired as soon as the test is over, with their pages deleted once the
-  operator agrees. Also remove any temporary hook or file the test added.
-  Leaving them registered means every later session is handed them.
+- **Test and throwaway briefs are cleaned up in full.** Set `"throwaway": true`
+  on any brief made only to try something out: a test of the skill or its
+  hooks, a layout experiment, a demonstration. The page says so, and every
+  session start lists it, with its published pages, until it is retired. Once
+  the test is over, offer the cleanup: retire it, delete its pages once the
+  operator agrees, and remove any temporary hook or file the test added.
+  Nothing does this at the end of a session. A hook cannot delete a page (only
+  Claude can, inside a turn, with the operator confirming), and by the time the
+  session ends there is no turn left, so the cleanup is offered at the next
+  opportunity instead.
 - **Nothing live is left behind.** The validator warns when a retired brief
   still has open or ruled entries: once retired, no session will be reminded
   of them. Close or retract them first, or move them to another brief.
@@ -804,6 +809,7 @@ into the JSON as soon as it comes back, moving each entry's status and
 | Taking the automatic reply to a comment as the end of it | Read the thread, record the ruling in the JSON, republish, then resolve |
 | Waiting to be asked before starting a brief | Findings, decisions and questions go into a brief by default |
 | Leaving a finished or test brief registered | Retire it with `brief-retire.mjs`; every session is handed it until then |
+| A test brief not marked as one | `"throwaway": true`, so every session start keeps offering the cleanup until it is done |
 | Deleting a brief's page without asking | Retiring never deletes the page; ask, then use the `Artifact` delete action |
 
 ## Red flags — stop and rewrite

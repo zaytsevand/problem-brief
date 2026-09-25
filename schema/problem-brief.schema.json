@@ -72,6 +72,11 @@
       "$ref": "#/$defs/timestamp",
       "description": "When the brief was retired: its work finished or abandoned, or it was only ever a test. A retired brief is taken out of Claude's memory and the hooks (bin/brief-retire.mjs does it and sets this stamp), is not registered again, and is kept for the record. Remove the stamp to bring it back."
     },
+    "throwaway": {
+      "type": "boolean",
+      "default": false,
+      "description": "true for a brief made only to try something out: a test of the skill or its hooks, a layout experiment, a one-off demonstration. The page says so, and every session start lists it — by name and published page — until it is retired. Once the test is over it is cleaned up in full: retired, and its page deleted when the operator agrees."
+    },
     "generated": {
       "type": "string",
       "format": "date",
