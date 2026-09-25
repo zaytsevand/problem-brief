@@ -231,6 +231,11 @@ others:
 | PostToolUse `ArtifactComments` | `brief-comments.mjs` | Reading a brief's comments notes when they were read. |
 | PreToolUse `ArtifactComments` | `brief-comments.mjs` | Refuses to resolve a brief's thread until the brief has been saved since it was read, or it is marked `--no-ruling`. |
 
+`./install.sh --claude-md` (`-ClaudeMd`) also appends one line to
+`~/.claude/CLAUDE.md` saying the same thing as the SessionStart line. CLAUDE.md
+loads in every session and survives a summary, hooks or not, and the line is
+marked so it is added once and removed exactly on uninstall.
+
 If `~/.claude/settings.json` does not mention `brief-context.mjs`, tell the
 operator once that the hooks are missing and what they do. Do not add them
 yourself without being asked. To see what a session will be shown:
@@ -793,6 +798,7 @@ into the JSON as soon as it comes back, moving each entry's status and
 | `bin/brief-delta.mjs` | The chat summary of what moved between two versions; with `--hook`, the PostToolUse hook that computes it on every publish. |
 | `bin/brief-comments.mjs` | The comment and citation hooks; `--no-ruling` marks a thread as holding nothing to record. |
 | `bin/install-hook.mjs` | Adds or removes all the hooks in `settings.json`; used by the installers. |
+| `bin/install-claude-md.mjs` | Adds or removes the one default-channel line in `CLAUDE.md`; used by the installers. |
 | `examples/example.brief.json` | A complete worked brief — start from this. |
 | `examples/diagrams/*.lifecycle.json` | The archify picture source for the worked example. |
 | `test/brief.test.mjs` | The validator and renderer behaviour, pinned. Run `node --test test/*.test.mjs`. |

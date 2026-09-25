@@ -837,3 +837,16 @@ test("a prefixed citation finds its own brief; a bare id on two briefs is flagge
   assert.doesNotMatch(exact, /JOB-42/);
   assert.match(hook("Q-1: go with the first option").hookSpecificOutput.additionalContext, /Q-1 is on more than one brief/);
 });
+
+test("the CLAUDE.md line is added once, keeps everything else, and comes out exactly", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const file = join(dir, "CLAUDE.md");
+  writeFileSync(file, "# Mine\n\nKeep this.\n");
+  run("install-claude-md.mjs", ["--file", file]);
+  run("install-claude-md.mjs", ["--file", file]);
+  const text = readFileSync(file, "utf8");
+  assert.equal(text.match(/<!-- problem-brief -->/g).length, 1);
+  assert.ok(text.startsWith("# Mine\n\nKeep this.\n\n- Findings, open decisions"));
+  run("install-claude-md.mjs", ["--file", file, "--remove"]);
+  assert.equal(readFileSync(file, "utf8"), "# Mine\n\nKeep this.\n");
+});

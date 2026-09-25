@@ -151,6 +151,11 @@ every publish of a brief it compares the page with the previous publish and
 hands Claude the chat summary, so the summary lists what moved and cannot
 drift into retelling the brief.
 
+`./install.sh --claude-md` (`.\install.ps1 -ClaudeMd`) adds one line to
+`~/.claude/CLAUDE.md` making a brief the default channel for findings,
+decisions and questions in every session, whether or not the hooks are
+installed.
+
 A brief can be bound to an item in the project's own tracker (`binding`: a
 task, a spec, an ADR). Its ids are then shown and cited with that prefix,
 `JOB-42/Q-3`, so they stay unambiguous across briefs and can be cited in the

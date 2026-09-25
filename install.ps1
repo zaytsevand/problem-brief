@@ -19,6 +19,10 @@
   brief's rulings back after a session is summarised, one computes the chat
   summary on every publish.
 
+.PARAMETER ClaudeMd
+  Also append one line to %USERPROFILE%\.claude\CLAUDE.md saying findings,
+  decisions and questions go into a brief by default.
+
 .PARAMETER Uninstall
   Remove the skill again, and the hook.
 
@@ -34,6 +38,7 @@ param(
   [switch]$Link,
   [switch]$Uninstall,
   [switch]$Hook,
+  [switch]$ClaudeMd,
   [string]$Dir
 )
 
@@ -51,7 +56,8 @@ if ($Uninstall) {
   $hookScript = Join-Path $target 'bin\install-hook.mjs'
   if ((Test-Path $hookScript) -and (Get-Command node -ErrorAction SilentlyContinue)) {
     & node $hookScript --remove | Out-Null
-    Write-Ok 'removed the SessionStart hook, if it was there'
+    & node (Join-Path $target 'bin\install-claude-md.mjs') --remove | Out-Null
+    Write-Ok 'removed the hooks and the CLAUDE.md line, if they were there'
   }
   if (Test-Path $target) {
     # Remove-Item on a junction deletes the junction, not the target it points at.
@@ -115,6 +121,12 @@ if ($Hook) {
 } else {
   Write-Host '  Optional: .\install.ps1 -Hook adds two hooks: one puts each brief''s rulings back'
   Write-Host '  after a session is summarised, one computes the chat summary on every publish.'
+}
+
+# ── the line in CLAUDE.md ───────────────────────────────────────────────────
+if ($ClaudeMd) {
+  & node (Join-Path $target 'bin\install-claude-md.mjs')
+  Write-Ok 'every session is told a brief is the default channel, hooks or not'
 }
 
 Write-Host ''
