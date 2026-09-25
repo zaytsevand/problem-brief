@@ -571,9 +571,13 @@ test("the hook finds the project's briefs through the memory pointers beside the
   assert.match(out.hookSpecificOutput.additionalContext, /R-1 .*Deduplicate on the invoice number/);
 });
 
-test("the hook is silent when there is nothing to say, and never fails", () => {
-  assert.equal(run("brief-context.mjs", ["--hook"], JSON.stringify({ transcript_path: "/nowhere/s.jsonl" })), "");
-  assert.equal(run("brief-context.mjs", ["--hook"], "not json"), "");
+test("with no brief, the hook still carries the default-channel line; it can be turned off, and never fails", () => {
+  const ctx = (input, env = {}) => execFileSync("node", [bin("brief-context.mjs"), "--hook"], { encoding: "utf8", input, env: { ...process.env, ...env } });
+  const alone = JSON.parse(ctx(JSON.stringify({ transcript_path: "/nowhere/s.jsonl" })));
+  assert.match(alone.hookSpecificOutput.additionalContext, /go into a problem brief .* by default/);
+  assert.doesNotMatch(alone.hookSpecificOutput.additionalContext, /Problem brief "/);
+  assert.equal(ctx(JSON.stringify({ transcript_path: "/nowhere/s.jsonl" }), { PROBLEM_BRIEF_REMINDER: "off" }), "");
+  assert.doesNotThrow(() => JSON.parse(ctx("not json")));
 });
 
 test("installing the hook keeps every other hook, never duplicates, and removes cleanly", () => {
@@ -674,7 +678,7 @@ test("the summary stays under 400 words however much moved", async () => {
 
 test("the publish hook summarises against the previous publish, and ignores anything else", () => {
   const dir = mkdtempSync(join(tmpdir(), "brief-"));
-  const env = { ...process.env, PROBLEM_BRIEF_SNAPSHOTS: join(dir, "snaps") };
+  const env = { ...process.env, PROBLEM_BRIEF_HOME: join(dir, "home") };
   const hookRun = (input) => execFileSync("node", [bin("brief-delta.mjs"), "--hook"], { encoding: "utf8", input: JSON.stringify(input), env });
   const publish = (b) => {
     writeFileSync(join(dir, "index.html"), render(b));
@@ -699,4 +703,137 @@ test("the installer adds both hooks and removes both", () => {
   run("install-hook.mjs", ["--settings", settings, "--remove"]);
   s = JSON.parse(readFileSync(settings, "utf8"));
   assert.equal(s.hooks, undefined);
+});
+
+/* ── comments and citations get recorded ───────────────────────────────── */
+
+function commentRig() {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const mem = join(dir, "project", "memory");
+  mkdirSync(mem, { recursive: true });
+  const path = join(dir, "importer.brief.json");
+  writeFileSync(path, JSON.stringify(brief([entry("Q-1", { ...live, short: "retried invoices" })], { rulings: [ruling("R-1")] })));
+  run("brief-memory.mjs", [path, "--memory-dir", mem, "--url", "https://claude.ai/artifact/PAGE1"]);
+  const env = { ...process.env, PROBLEM_BRIEF_HOME: join(dir, "home") };
+  const transcript_path = join(dir, "project", "s.jsonl");
+  const hook = (input) => {
+    const out = execFileSync("node", [bin("brief-comments.mjs"), "--hook"], { encoding: "utf8", env, input: JSON.stringify({ transcript_path, ...input }) });
+    return out ? JSON.parse(out).hookSpecificOutput : null;
+  };
+  const cli = (...args) => execFileSync("node", [bin("brief-comments.mjs"), ...args], { encoding: "utf8", env });
+  return { path, hook, cli };
+}
+const THREAD = "98e311d9-6e21-4730-88a3-f46e73610dd4";
+const resolveCall = { hook_event_name: "PreToolUse", tool_name: "ArtifactComments", tool_input: { action: "resolve", url: "https://claude.ai/artifact/PAGE1", thread_id: THREAD } };
+const readCall = { hook_event_name: "PostToolUse", tool_name: "ArtifactComments", tool_input: { action: "read", url: "https://claude.ai/artifact/PAGE1", thread_id: THREAD } };
+
+test("a comment notification for a brief's page points at the thread and the brief's JSON", () => {
+  const { path, hook } = commentRig();
+  const out = hook({ hook_event_name: "UserPromptSubmit",
+    prompt: `<task-notification>\n<task-type>artifact-auto-react</task-type>\nAuto-replied to thread ${THREAD} on artifact https://claude.ai/artifact/PAGE1 — a reply only` });
+  assert.equal(out.hookEventName, "UserPromptSubmit");
+  assert.match(out.additionalContext, /automatic reply is not a record/);
+  assert.ok(out.additionalContext.includes(path) && out.additionalContext.includes(THREAD));
+  assert.equal(hook({ hook_event_name: "UserPromptSubmit", prompt: "<task-type>artifact-auto-react</task-type> https://claude.ai/artifact/OTHER" }), null);
+});
+
+test("a message citing a brief's ids gets their state and the instruction to record", () => {
+  const { hook } = commentRig();
+  const out = hook({ hook_event_name: "UserPromptSubmit", prompt: "Q-1: go with the first option. And R-1 still holds." });
+  assert.match(out.additionalContext, /Q-1 \(retried invoices\): open, blocks the goal/);
+  assert.match(out.additionalContext, /R-1 \(standing ruling, active\)/);
+  assert.equal(hook({ hook_event_name: "UserPromptSubmit", prompt: "Q-9 is not on any brief" }), null);
+});
+
+test("a brief's thread cannot be resolved unread, or before the brief is saved", async () => {
+  const { path, hook, cli } = commentRig();
+  assert.equal(hook(resolveCall).permissionDecision, "deny");
+  assert.match(hook(resolveCall).permissionDecisionReason, /Read this thread first/);
+  assert.match(hook(readCall).additionalContext, /before resolving a thread/);
+  const refused = hook(resolveCall);
+  assert.equal(refused.permissionDecision, "deny");
+  assert.match(refused.permissionDecisionReason, /has not been saved since this thread was read/);
+  await new Promise((r) => setTimeout(r, 20));
+  writeFileSync(path, readFileSync(path, "utf8"));
+  assert.equal(hook(resolveCall), null);
+  const other = { ...resolveCall, tool_input: { ...resolveCall.tool_input, thread_id: "11111111-2222-3333-4444-555555555555" } };
+  assert.equal(hook(other).permissionDecision, "deny");
+  cli("--no-ruling", "https://claude.ai/artifact/PAGE1", "11111111-2222-3333-4444-555555555555", "a typo report");
+  assert.equal(hook(other), null);
+});
+
+test("comment hooks leave other pages, replies and other tools alone", () => {
+  const { hook } = commentRig();
+  assert.equal(hook({ ...resolveCall, tool_input: { ...resolveCall.tool_input, url: "https://claude.ai/artifact/OTHER" } }), null);
+  assert.equal(hook({ ...resolveCall, tool_input: { ...resolveCall.tool_input, action: "reply" } }), null);
+  assert.equal(hook({ ...resolveCall, tool_name: "Bash" }), null);
+});
+
+test("the publish hook remembers which page belongs to which brief", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const env = { ...process.env, PROBLEM_BRIEF_HOME: join(dir, "home") };
+  const b = brief([entry("Q-1", live)]);
+  writeFileSync(join(dir, "index.html"), render(b));
+  execFileSync("node", [bin("brief-delta.mjs"), "--hook"], { encoding: "utf8", env, input: JSON.stringify({
+    tool_name: "Artifact", tool_input: { file_path: "index.html" }, cwd: dir,
+    tool_response: "Published index.html at https://claude.ai/artifact/NEWPAGE (Version 1)" }) });
+  const urls = JSON.parse(readFileSync(join(dir, "home", "published", "urls.json"), "utf8"));
+  assert.equal(urls["https://claude.ai/artifact/NEWPAGE"], b.created);
+});
+
+test("the installer registers the comment hooks too", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const settings = join(dir, "settings.json");
+  run("install-hook.mjs", ["--settings", settings]);
+  const s = JSON.parse(readFileSync(settings, "utf8"));
+  assert.match(s.hooks.UserPromptSubmit[0].hooks[0].command, /brief-comments\.mjs" --hook$/);
+  assert.equal(s.hooks.UserPromptSubmit[0].matcher, undefined);
+  assert.deepEqual(s.hooks.PostToolUse.map((g) => g.matcher), ["Artifact", "ArtifactComments"]);
+  assert.equal(s.hooks.PreToolUse[0].matcher, "ArtifactComments");
+});
+
+/* ── bound to an external item: ids carry its prefix ───────────────────── */
+
+const bound = { binding: { ref: "JOB-42", system: "Jira task", title: "Import supplier invoices", url: "https://jira.example/JOB-42" } };
+
+test("a bound brief shows its ids with the prefix, and says what it works under", () => {
+  const html = render(brief([entry("Q-1", { ...live, short: "retried invoices", brief: "Linked to JOB-42/Q-1 itself and to OTHER-7/Q-1 elsewhere, which is a different brief entirely." })],
+    { ...bound, rulings: [ruling("R-1")] }));
+  assert.match(html, /<a class="qid" href="#Q-1">JOB-42\/Q-1<\/a>/);
+  assert.match(html, /<a class="qid" href="#R-1">JOB-42\/R-1<\/a>/);
+  assert.match(html, /Works under<\/span><a href="https:\/\/jira.example\/JOB-42"[^>]*>JOB-42<\/a> · Jira task — Import supplier invoices/);
+  assert.match(html, /OTHER-7\/Q-1 elsewhere/, "another brief's id is left as written");
+  assert.doesNotMatch(html, /JOB-42\/JOB-42/);
+});
+
+test("an id under another prefix is not flagged as missing; an unknown own one is", () => {
+  const r = messages(brief([entry("Q-1", { ...live, brief: "Depends on OTHER-7/Q-9 on the other brief, and on JOB-42/Q-8 which does not exist here." })], bound));
+  assert.ok(!r.warnings.some((m) => m.includes("OTHER") || m.includes("cites Q-9")));
+  assert.ok(r.warnings.some((m) => m.includes("cites Q-8")));
+});
+
+test("the summary and the session digest cite prefixed ids", async () => {
+  const { delta } = await import("../bin/brief-delta.mjs");
+  const { digest } = await import("../bin/brief-context.mjs");
+  const b = brief([entry("Q-1", { ...live, short: "retried invoices" })], { ...bound, rulings: [ruling("R-1")] });
+  assert.match(delta(brief([], bound), b), /- JOB-42\/Q-1 raised/);
+  assert.match(delta(brief([], bound), b), /Blocks the goal: JOB-42\/Q-1 \(retried invoices\)/);
+  assert.match(digest(b), /Works under JOB-42 \(Jira task\)/);
+  assert.match(digest(b), /- JOB-42\/R-1 /);
+});
+
+test("a prefixed citation finds its own brief; a bare id on two briefs is flagged as ambiguous", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const mem = join(dir, "project", "memory");
+  mkdirSync(mem, { recursive: true });
+  for (const [name, ref] of [["one", "JOB-42"], ["two", "JOB-77"]]) {
+    writeFileSync(join(dir, `${name}.brief.json`), JSON.stringify(brief([entry("Q-1", { ...live, short: `${name} thing` })], { binding: { ref } })));
+    run("brief-memory.mjs", [join(dir, `${name}.brief.json`), "--memory-dir", mem]);
+  }
+  const hook = (prompt) => JSON.parse(execFileSync("node", [bin("brief-comments.mjs"), "--hook"], { encoding: "utf8",
+    input: JSON.stringify({ hook_event_name: "UserPromptSubmit", transcript_path: join(dir, "project", "s.jsonl"), prompt }) }) || "null");
+  const exact = hook("JOB-77/Q-1: go with the first option").hookSpecificOutput.additionalContext;
+  assert.match(exact, /JOB-77\/Q-1 \(two thing\)/);
+  assert.doesNotMatch(exact, /JOB-42/);
+  assert.match(hook("Q-1: go with the first option").hookSpecificOutput.additionalContext, /Q-1 is on more than one brief/);
 });

@@ -623,6 +623,11 @@ function bearingErrors(brief) {
    citation to an id that is not on the page is a dead link and, usually, a typo. */
 
 const CITED = /\b[QR]-\d+\b/g;
+/* Ids cited as this brief's own: bare, or under its binding's prefix. An id
+   under another prefix points at another brief and is not checked here. */
+const PREFIXED = /(?:\b([A-Za-z0-9][A-Za-z0-9._#-]*)\/)?\b([QR]-\d+)\b/g;
+const ownCitations = (text, brief) =>
+  [...String(text).matchAll(PREFIXED)].filter((m) => !m[1] || m[1] === brief.binding?.ref).map((m) => m[2]);
 
 /* Three or more entries named in one sentence is a list written as prose: the
    reader has to unpick it, and the page cannot group it. */
@@ -648,7 +653,7 @@ function referenceErrors(brief) {
   const out = [];
   const walk = (v, path) => {
     if (typeof v === "string") {
-      for (const id of v.match(CITED) ?? []) {
+      for (const id of ownCitations(v, brief)) {
         if (ids.has(id) || seen.has(`${path}|${id}`)) continue;
         seen.add(`${path}|${id}`);
         out.push({ path, severity: "warning", message: `cites ${id}, which is not ${id.startsWith("R-") ? "a ruling" : "an entry"} on this page`,
@@ -667,7 +672,7 @@ function referenceErrors(brief) {
   const citedBy = new Map();
   const collect = (v, owner) => {
     if (typeof v === "string") {
-      for (const id of v.match(CITED) ?? []) if (id !== owner) citedBy.set(id, true);
+      for (const id of ownCitations(v, brief)) if (id !== owner) citedBy.set(id, true);
     } else if (Array.isArray(v)) v.forEach((x) => collect(x, owner));
     else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) if (k !== "id") collect(x, owner);
   };

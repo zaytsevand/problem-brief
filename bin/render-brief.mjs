@@ -38,6 +38,10 @@ const esc = (s) => String(s ?? "")
    per page, before anything is rendered. */
 let ENTRIES = new Map();
 let RULINGS = new Map();
+/* The external item the brief works under, if any. Ids stay bare in the data
+   and in anchors; they are shown with this prefix, e.g. JOB-42/Q-3. */
+let PREFIX = "";
+const fid = (id) => (PREFIX ? `${PREFIX}/${id}` : id);
 
 /* The words a label should never end on once it has been cut short. */
 const DANGLING = /\s+(?:the|a|an|and|or|of|to|in|on|for|with|that|is|are|was|by)$/i;
@@ -78,14 +82,16 @@ function citations(html) {
       return part;
     }
     if (inTag) return part;
-    return part.replace(/(\()?\b([QR]-\d+)\b(?!\s*\()/g, (m, open, id) => {
+    return part.replace(/(\()?(?:\b([A-Za-z0-9][A-Za-z0-9._#-]*)\/)?\b([QR]-\d+)\b(?!\s*\()/g, (m, open, pre, id) => {
+      // An id under another prefix belongs to another brief: leave it as written.
+      if (pre && pre !== PREFIX) return m;
       const r = RULINGS.get(id);
-      if (r) return `${open ?? ""}<a class="qref" href="#${id}" title="${esc(r.about)}">${id}</a>`;
+      if (r) return `${open ?? ""}<a class="qref" href="#${id}" title="${esc(r.about)}">${fid(id)}</a>`;
       const e = ENTRIES.get(id);
       if (!e) return m;
       const label = !open && !labelled.has(id) ? ` (${esc(e.short ?? derivedLabel(e.title))})` : "";
       labelled.add(id);
-      return `${open ?? ""}<a class="qref" href="#${id}" title="${esc(e.title)}">${id}${label}</a>`;
+      return `${open ?? ""}<a class="qref" href="#${id}" title="${esc(e.title)}">${fid(id)}${label}</a>`;
     });
   }).join("");
 }
@@ -445,7 +451,7 @@ function entry(e, baseDir) {
   const bearing = live && e.bearing ? `<p class="bearing">${inline(e.bearingReason)}</p>` : "";
   return `<section class="entry${state !== "open" ? " entry-closed" : ""}" id="${esc(e.id)}" data-state="${g}">
   <header class="entry-head">
-    <a class="qid" href="#${esc(e.id)}">${esc(e.id)}</a>
+    <a class="qid" href="#${esc(e.id)}">${esc(fid(e.id))}</a>
     <h2>${inline(e.title, { refs: false })}</h2>
     ${amendmentsOf(e).length
       ? `<span class="chip chip-${g} chip-amended chip-static">${esc(STATE_LABEL[g])} · amended</span>`
@@ -874,6 +880,7 @@ const THEME_SCRIPT = `
 function page(brief, baseDir) {
   ENTRIES = new Map(brief.decisions.map((e) => [e.id, e]));
   RULINGS = new Map((brief.rulings ?? []).map((r) => [r.id, r]));
+  PREFIX = brief.binding?.ref ?? "";
   const st = (e) => e.status ?? "open";
   /* One flow, ordered by state: what needs you first, then what is merely
      recorded. Nothing is hidden from the document — the filter decides what is
@@ -914,7 +921,7 @@ function page(brief, baseDir) {
   const defaultFilter = ["blocks", "open", "escalated"].find((k) => count(k)) ??
     (count("decided") || out.some((o) => o.state !== "done") ? "outstanding" : "all");
 
-  const ref = (e) => `<a class="qref" href="#${esc(e.id)}"><span class="n">${esc(e.id)}</span> ${inline(e.short ?? e.title, { refs: false })}</a>`;
+  const ref = (e) => `<a class="qref" href="#${esc(e.id)}"><span class="n">${esc(fid(e.id))}</span> ${inline(e.short ?? e.title, { refs: false })}</a>`;
   const waitingList = (label, list) => list.length
     ? `<div class="waiting-row"><h3>${label}</h3><ul>${
       /* The ruling that frees the most other work goes first. */
@@ -967,7 +974,7 @@ function page(brief, baseDir) {
   };
 
   const tocRow = (e) => `<li data-state="${group(e)}"><a href="#${esc(e.id)}">` +
-    `<span class="n">${esc(e.id)}</span><span>${inline(e.title, { refs: false })}</span>` +
+    `<span class="n">${esc(fid(e.id))}</span><span>${inline(e.title, { refs: false })}</span>` +
     `<span class="done">${esc(STATE_LABEL[group(e)].toLowerCase())}</span></a></li>`;
 
   const toc = `<nav class="toc"><h2 data-toc-head>What needs deciding</h2>` +
@@ -999,7 +1006,7 @@ function page(brief, baseDir) {
     <ul>${[...rulings].reverse().map((r) => {
       const gone = (r.status ?? "active") === "replaced";
       return `<li id="${esc(r.id)}" data-reveal="rulings"${gone ? ' class="replaced"' : ""}>` +
-        `<a class="qid" href="#${esc(r.id)}">${esc(r.id)}</a> <strong>${inline(r.about)}</strong>` +
+        `<a class="qid" href="#${esc(r.id)}">${esc(fid(r.id))}</a> <strong>${inline(r.about)}</strong>` +
         `<div class="said">${prose(r.said)}</div>` +
         `<div class="b">${gone ? `Replaced by ${citations(esc(r.replacedBy))} · ` : ""}From ${inline(r.source)}` +
         (r.entries?.length ? ` · bears on ${r.entries.map((id) => citations(esc(id))).join(", ")}` : "") + `</div>` +
@@ -1019,6 +1026,9 @@ function page(brief, baseDir) {
   <header class="top">
     <h1>${inline(brief.title)}</h1>
     <p class="subject">${inline(brief.subject)}</p>
+    ${brief.binding ? `<p class="goal"><span class="goal-k">Works under</span>` +
+      (brief.binding.url ? `<a href="${esc(brief.binding.url)}" target="_blank" rel="noopener">${esc(brief.binding.ref)}</a>` : `<code>${esc(brief.binding.ref)}</code>`) +
+      (brief.binding.system ? ` · ${esc(brief.binding.system)}` : "") + (brief.binding.title ? ` — ${inline(brief.binding.title, { refs: false })}` : "") + `</p>` : ""}
     ${brief.goal ? `<p class="goal"><span class="goal-k">Goal</span>${inline(brief.goal)}</p>` : ""}
     <p class="provenance">${provenance}</p>
     ${filters}

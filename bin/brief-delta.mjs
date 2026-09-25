@@ -22,9 +22,9 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { stateHome } from "./brief-context.mjs";
 
 const MAX_WORDS = 400;
 
@@ -36,13 +36,16 @@ const st = (e) => e?.status ?? "open";
 const label = (e) => clip(e.short ?? e.title, 60);
 const STATE = { open: "open", decided: "decided", complete: "complete", superseded: "retracted" };
 const BEARING = { "blocks-goal": "blocks the goal", escalated: "escalated" };
+/* An id as the reader cites it: under the brief's binding, when it has one. */
+export const fullId = (brief, id) => (brief?.binding?.ref ? `${brief.binding.ref}/${id}` : id);
 
 function closingLines(brief) {
+  const F = (id) => fullId(brief, id);
   const live = (brief.decisions ?? []).filter((e) => st(e) === "open");
   /* Past a dozen, the ids alone say enough; the page carries the labels. */
   const named = (list) => list.length > 12
-    ? `${list.slice(0, 12).map((e) => e.id).join(", ")} and ${list.length - 12} more`
-    : list.map((e) => `${e.id} (${label(e)})`).join(", ");
+    ? `${list.slice(0, 12).map((e) => F(e.id)).join(", ")} and ${list.length - 12} more`
+    : list.map((e) => `${F(e.id)} (${label(e)})`).join(", ");
   const of = (bearing) => live.filter((e) => e.bearing === bearing);
   const loose = live.filter((e) => !e.bearing);
   return [
@@ -54,6 +57,7 @@ function closingLines(brief) {
 
 export function delta(prev, next) {
   const lines = [];
+  const F = (id) => fullId(next, id);
   if (!prev) {
     const n = (k) => (next.decisions ?? []).filter((e) => st(e) === k).length;
     const counts = [["open", "awaiting a ruling"], ["decided", "ruled, not yet carried out"],
@@ -70,7 +74,7 @@ export function delta(prev, next) {
   for (const e of next.decisions ?? []) {
     const p = before.get(e.id);
     if (!p) {
-      raised.push(`${e.id} raised${e.bearing && st(e) === "open" ? ` (${BEARING[e.bearing]})` : ""}: ${label(e)}`);
+      raised.push(`${F(e.id)} raised${e.bearing && st(e) === "open" ? ` (${BEARING[e.bearing]})` : ""}: ${label(e)}`);
       continue;
     }
     before.delete(e.id);
@@ -78,20 +82,20 @@ export function delta(prev, next) {
       const chose = st(e) === "decided" && e.decision?.chose
         ? ` (${clip((e.solutions ?? []).find((s) => s.id === e.decision.chose)?.label ?? e.decision.chose, 70)})` : "";
       const verb = st(e) === "open" && ["complete", "superseded", "decided"].includes(st(p)) ? " — reopened" : "";
-      lines.push(`${e.id}: ${STATE[st(p)]} → ${STATE[st(e)]}${chose}${verb} — ${label(e)}`);
+      lines.push(`${F(e.id)}: ${STATE[st(p)]} → ${STATE[st(e)]}${chose}${verb} — ${label(e)}`);
     } else if (st(e) === "open" && p.bearing !== e.bearing && e.bearing) {
-      lines.push(`${e.id}: ${BEARING[p.bearing] ?? "unbracketed"} → ${BEARING[e.bearing]} — ${label(e)}`);
+      lines.push(`${F(e.id)}: ${BEARING[p.bearing] ?? "unbracketed"} → ${BEARING[e.bearing]} — ${label(e)}`);
     }
   }
   for (const id of before.keys()) {
-    lines.push(`${id} is missing from this version — entries are never deleted; restore it and retract it instead`);
+    lines.push(`${F(id)} is missing from this version — entries are never deleted; restore it and retract it instead`);
   }
 
   const oldRulings = new Map((prev.rulings ?? []).map((r) => [r.id, r]));
   for (const r of next.rulings ?? []) {
     const p = oldRulings.get(r.id);
-    if (!p) lines.push(`${r.id} recorded: ${clip(r.about, 70)} → ${clip(r.said, 70)}`);
-    else if ((p.status ?? "active") !== (r.status ?? "active") && r.replacedBy) lines.push(`${r.id} replaced by ${r.replacedBy}`);
+    if (!p) lines.push(`${F(r.id)} recorded: ${clip(r.about, 70)} → ${clip(r.said, 70)}`);
+    else if ((p.status ?? "active") !== (r.status ?? "active") && r.replacedBy) lines.push(`${F(r.id)} replaced by ${F(r.replacedBy)}`);
   }
 
   const oldMech = new Set((prev.mechanical ?? []).map((m) => m.summary));
@@ -130,7 +134,6 @@ function finish(lines, brief) {
 
 /* ── the hook ────────────────────────────────────────────────────────────── */
 
-const SNAPSHOTS = join(homedir(), ".claude", "problem-brief", "published");
 
 export function embedded(html) {
   const m = html.match(/<script type="application\/json" id="problem-brief-data">([\s\S]*?)<\/script>/);
@@ -147,13 +150,24 @@ function hook() {
   const brief = embedded(readFileSync(resolve(input.cwd ?? ".", t.file_path), "utf8"));
   if (!brief?.created) return;
 
-  const dir = process.env.PROBLEM_BRIEF_SNAPSHOTS || SNAPSHOTS;
+  const dir = join(stateHome(), "published");
   const key = createHash("sha1").update(String(brief.created)).digest("hex").slice(0, 16);
   const snap = join(dir, `${key}.json`);
   const prev = existsSync(snap) ? JSON.parse(readFileSync(snap, "utf8")) : null;
   const text = delta(prev, brief);
   mkdirSync(dir, { recursive: true });
   writeFileSync(snap, JSON.stringify(brief), "utf8");
+
+  /* A comment notification names the page, not the brief. Remember which page
+     belongs to which brief, so the comment hooks can find the brief's JSON. */
+  const url = t.url ?? JSON.stringify(input.tool_response ?? "").match(/https:\/\/claude\.ai\/(?:code\/)?artifact\/[A-Za-z0-9_-]+/)?.[0];
+  if (url) {
+    const index = join(dir, "urls.json");
+    let urls = {};
+    try { urls = JSON.parse(readFileSync(index, "utf8")); } catch { /* first one */ }
+    urls[url] = brief.created;
+    writeFileSync(index, JSON.stringify(urls, null, 2), "utf8");
+  }
 
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {

@@ -22,12 +22,26 @@
  */
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const MAX_RULINGS = 30;
 const MAX_TEXT = 220;
 const MAX_CHARS = 9000;
+
+/* Where the hooks keep what they learn between calls: snapshots of each
+   published brief, which page belongs to which brief, which comment threads
+   were read. */
+export const stateHome = () => process.env.PROBLEM_BRIEF_HOME || join(homedir(), ".claude", "problem-brief");
+
+/* The one line every session gets, whether or not a brief exists yet. An
+   instruction given once in chat fades in a long session and is gone after a
+   summary; this comes back at every start and after every summary. */
+export const REMINDER = "problem-brief: findings, open decisions and questions for the operator go into a problem brief " +
+  "(the problem-brief skill) by default, not only when the operator asks for one. Chat carries the short summary of " +
+  "what moved and the link. Record every answer or judgement in the brief in the turn it is given, including answers " +
+  "given in comments on the published page. AskUserQuestion only when the work cannot go on without the answer now.";
 
 const clip = (s, n = MAX_TEXT) => {
   const t = String(s ?? "").replace(/\s+/g, " ").trim();
@@ -43,6 +57,8 @@ export function digest(brief, { path, url } = {}) {
   const lines = [];
   lines.push(`Problem brief "${brief.title}"` + (path ? ` — ${path}` : ""));
   if (url || brief.url) lines.push(`Published at ${url || brief.url}`);
+  if (brief.binding) lines.push(`Works under ${brief.binding.ref}${brief.binding.system ? ` (${brief.binding.system})` : ""}` +
+    `${brief.binding.title ? `: ${clip(brief.binding.title, 100)}` : ""}. Cite its ids as ${brief.binding.ref}/Q-n and ${brief.binding.ref}/R-n.`);
   if (brief.goal) lines.push(`Goal: ${clip(brief.goal)}`);
   lines.push("Before raising a problem or asking a question on this subject, check it against the rulings and " +
     "entries below. Record any new answer in the brief's JSON in the same turn it is given.");
@@ -51,7 +67,7 @@ export function digest(brief, { path, url } = {}) {
   if (rulings.length) {
     lines.push("", "Standing rulings (already answered — do not ask again):");
     for (const r of rulings.slice(-MAX_RULINGS).reverse()) {
-      lines.push(`- ${r.id} (${String(r.created).slice(0, 10)}) ${clip(r.about, 140)} → ${clip(r.said)}`);
+      lines.push(`- ${(brief.binding?.ref ? `${brief.binding.ref}/${r.id}` : r.id)} (${String(r.created).slice(0, 10)}) ${clip(r.about, 140)} → ${clip(r.said)}`);
     }
     if (rulings.length > MAX_RULINGS) lines.push(`- …and ${rulings.length - MAX_RULINGS} older rulings in the file`);
   }
@@ -65,21 +81,21 @@ export function digest(brief, { path, url } = {}) {
       const chose = st === "decided"
         ? `ruled "${clip((e.solutions ?? []).find((s) => s.id === e.decision?.chose)?.label ?? e.decision?.chose, 80)}", not yet carried out`
         : `awaiting a ruling, ${LIVE_LABEL[e.bearing] ?? "not yet bracketed"}`;
-      lines.push(`- ${e.id} ${clip(e.short ?? e.title, 90)} — ${chose}`);
+      lines.push(`- ${(brief.binding?.ref ? `${brief.binding.ref}/${e.id}` : e.id)} ${clip(e.short ?? e.title, 90)} — ${chose}`);
     }
   }
 
   const closed = entries.filter((e) => ["complete", "superseded"].includes(e.status));
   if (closed.length) {
     lines.push("", "Closed (settled — reopen the same id only on new evidence, never raise again): " +
-      closed.map((e) => `${e.id} ${clip(e.short ?? e.title, 50)}`).join("; "));
+      closed.map((e) => `${(brief.binding?.ref ? `${brief.binding.ref}/${e.id}` : e.id)} ${clip(e.short ?? e.title, 50)}`).join("; "));
   }
   return lines.join("\n");
 }
 
 /* Pointer files are ordinary Claude Code memory files whose metadata names a
    brief. Read just enough of the frontmatter to find it. */
-function pointers(memoryDir) {
+export function pointers(memoryDir) {
   if (!existsSync(memoryDir)) return [];
   return readdirSync(memoryDir)
     .filter((f) => f.startsWith("problem-brief-") && f.endsWith(".md"))
@@ -96,14 +112,33 @@ function pointers(memoryDir) {
     .filter((p) => p.brief);
 }
 
+export const memoryDirOf = (input) => input?.transcript_path ? join(dirname(input.transcript_path), "memory") : null;
+
+/* Every brief registered for this project, loaded, with where it lives and the
+   addresses it is known to be published at. */
+export function briefsFor(memoryDir) {
+  if (!memoryDir) return [];
+  let urls = {};
+  try { urls = JSON.parse(readFileSync(join(stateHome(), "published", "urls.json"), "utf8")); } catch { /* none yet */ }
+  const out = [];
+  for (const p of pointers(memoryDir)) {
+    try {
+      const brief = JSON.parse(readFileSync(p.brief, "utf8"));
+      const known = new Set([p.url, brief.url].filter(Boolean));
+      for (const [u, created] of Object.entries(urls)) if (created === brief.created) known.add(u);
+      out.push({ path: p.brief, brief, urls: known });
+    } catch { /* unreadable briefs are reported by the SessionStart hook */ }
+  }
+  return out;
+}
+
 function hook() {
   let input = {};
   try { input = JSON.parse(readFileSync(0, "utf8") || "{}"); } catch { /* no input */ }
-  const memoryDir = input.transcript_path ? join(dirname(input.transcript_path), "memory") : null;
-  if (!memoryDir) return;
+  const memoryDir = memoryDirOf(input);
 
-  const parts = [];
-  for (const p of pointers(memoryDir)) {
+  const parts = process.env.PROBLEM_BRIEF_REMINDER === "off" ? [] : [REMINDER];
+  for (const p of memoryDir ? pointers(memoryDir) : []) {
     try {
       const brief = JSON.parse(readFileSync(p.brief, "utf8"));
       parts.push(digest(brief, { path: p.brief, url: p.url }));

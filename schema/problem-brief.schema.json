@@ -28,6 +28,33 @@
       "type": "string",
       "description": "Where the brief is published, once it has been. Lets a later session find the page, and recover this file from it, without asking."
     },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ref"
+      ],
+      "description": "The item in the project's own tracking tool this brief works under: a task, a ticket, a specification, an architecture decision record. Set it when the work is already bound to one (the branch name, the spec being implemented, the task the operator named); never invent one. Every entry and ruling id is then shown and cited with it as a prefix, e.g. JOB-42/Q-3, so ids stay unambiguous across briefs and can be cited in the tracker, commits and records. The ids in this file stay bare (Q-3); only their display changes.",
+      "properties": {
+        "ref": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._#-]{0,40}$",
+          "description": "The external identifier as the project writes it, e.g. JOB-42, spec-017, ADR-0009, problem-brief#13. No slashes."
+        },
+        "system": {
+          "type": "string",
+          "description": "What kind of thing it is, in plain words: 'Jira task', 'GitHub issue', 'speckit spec', 'ADR'."
+        },
+        "title": {
+          "type": "string",
+          "description": "The item's own title, so the reader knows what it is without opening it."
+        },
+        "url": {
+          "type": "string",
+          "description": "A link to the item, where there is one."
+        }
+      }
+    },
     "goal": {
       "type": "string",
       "minLength": 10,

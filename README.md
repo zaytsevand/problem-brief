@@ -151,6 +151,17 @@ every publish of a brief it compares the page with the previous publish and
 hands Claude the chat summary, so the summary lists what moved and cannot
 drift into retelling the brief.
 
+A brief can be bound to an item in the project's own tracker (`binding`: a
+task, a spec, an ADR). Its ids are then shown and cited with that prefix,
+`JOB-42/Q-3`, so they stay unambiguous across briefs and can be cited in the
+tracker and in commits.
+
+Comments on a published brief are answered automatically before the session
+sees them, and the notification that wakes it does not carry the comment. The
+comment hooks make sure the session reads the thread and records what it says
+before the thread can be resolved, and a message citing a brief's ids gets the
+cited items' state with a reminder to record the ruling.
+
 Options say whether they can be undone (`reversible`), and only what can be
 undone is ever handled without asking. Entries can wait on each other
 (`blockedBy`), and the page puts first the ruling that frees the most work.

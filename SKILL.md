@@ -1,11 +1,15 @@
 ---
 name: problem-brief
 description: >-
-  Use when asked to build, publish, refresh or update an artefact (or brief,
+  Use by default, without being asked, whenever a session has findings, open
+  decisions or questions for the operator to rule on: the brief is the primary
+  channel for them, and chat carries only the summary and the link. Also use
+  when asked to build, publish, refresh or update an artefact (or brief,
   findings report, open-questions page, decisions page) that lists problems,
-  issues, findings, review results or open questions for the operator to rule
-  on — each with a problem statement, explanation and possible solutions. Also
-  use when the same material is delivered as AskUserQuestion instead of a page.
+  issues, findings, review results or open questions — each with a problem
+  statement, explanation and possible solutions — and when the operator answers
+  or comments on one. Also when the same material is delivered as
+  AskUserQuestion instead of a page.
   REQUIRED composition — archify (drawings) and humanizer (prose); see
   Dependencies.
 license: MIT
@@ -30,6 +34,15 @@ If an entry cannot be understood from the page alone, it is not finished.
 
 ## When to Use
 
+**By default, without being asked.** Whenever the work turns up something the
+operator has to rule on (a finding with more than one way out, an open
+decision, a question), it goes into a brief: into the existing one for that
+subject, or a new one. The brief is the primary channel for those; chat carries
+the short summary of what moved and the link. Waiting to be asked is how the
+habit fades: an instruction given once in chat drops out of attention in a long
+session and is gone after a summary. The SessionStart hook repeats this at
+every start and after every summary.
+
 Triggers, in the operator's own words:
 
 - "group issues by root cause and write an artefact on them"
@@ -45,8 +58,8 @@ Triggers, in the operator's own words:
 Also use it when the ask is `AskUserQuestion` rather than a page — same content
 rules, no page (see **The question variant**).
 
-**Do not use** for a progress update, a completion report, or anything the
-operator has not been asked to decide. Those go in chat.
+**Do not use** for a progress update or a completion report with nothing in it
+to decide. Those go in chat.
 
 ## Dependencies
 
@@ -204,11 +217,23 @@ that the brief exists, but not what it says. The SessionStart hook,
 `brief-context.mjs --hook`, fires at startup, resume and clear, and straight
 after the conversation is summarised. It follows the pointers and puts every
 active ruling, every live entry and the ids of the closed ones back in context.
-It is installed with `./install.sh --hook` (`.\install.ps1 -Hook` on Windows),
-together with the publish hook that writes the chat summary (see **Report back
-in chat**). If `~/.claude/settings.json` does not mention `brief-context.mjs`,
-tell the operator once that the hooks are missing and what they do. Do not add
-them yourself without being asked. To see what a session will be shown:
+It also always carries one line, whether or not a brief exists yet: findings,
+decisions and questions go into a brief by default.
+
+`./install.sh --hook` (`.\install.ps1 -Hook` on Windows) installs it with the
+others:
+
+| Hook | Script | Does |
+|---|---|---|
+| SessionStart | `brief-context.mjs` | Default-channel line; each registered brief's goal, rulings, live and closed entries. At startup, resume, clear and after every summary. |
+| PostToolUse `Artifact` | `brief-delta.mjs` | After each publish of a brief: the chat summary of what moved. Also notes which page belongs to which brief. |
+| UserPromptSubmit | `brief-comments.mjs` | A comment notification for a brief's page, or a message citing its ids, gets the brief's path, the cited items' state, and the instruction to record the answer now. |
+| PostToolUse `ArtifactComments` | `brief-comments.mjs` | Reading a brief's comments notes when they were read. |
+| PreToolUse `ArtifactComments` | `brief-comments.mjs` | Refuses to resolve a brief's thread until the brief has been saved since it was read, or it is marked `--no-ruling`. |
+
+If `~/.claude/settings.json` does not mention `brief-context.mjs`, tell the
+operator once that the hooks are missing and what they do. Do not add them
+yourself without being asked. To see what a session will be shown:
 
 ```bash
 node ~/.claude/skills/problem-brief/bin/brief-context.mjs brief.json
@@ -240,6 +265,24 @@ invented codes). An id is permanent: on a refresh, an entry keeps the number it
 was given, a resolved one keeps its number and is marked ruled, and a new one
 takes the next free number. Renumbering breaks every reference the operator has
 already made.
+
+**Bound to the project's own tracker.** When the work runs under an item in
+the project's tracking tool (a task or ticket, a specification, an
+architecture decision record), set `binding` to it: its `ref` as the project
+writes it (`JOB-42`, `spec-017`, `ADR-0009`), what kind of thing it is, its
+title and link. Take it from where the work is already bound: the branch name,
+the specification being implemented, the task the operator named. Never invent
+one. Every id is then shown and cited with the prefix, `JOB-42/Q-3` and
+`JOB-42/R-2`, so ids stay unambiguous when a project has several briefs and can
+be cited in the tracker, in commit messages and in decision records. The file
+keeps the ids bare; only how they are shown and cited changes, so adding a
+binding later renumbers nothing. Cite another brief's entry with its own
+prefix; the page leaves it as written.
+
+Where the project records its decisions in that tool (an ADR, a spec's
+decision log), the brief does not replace it: once a ruling is made, record it
+there as well and cite the tool's record as evidence in the entry's
+`resolution`.
 
 **Pricing an option.** `cost.work` says what doing it consists of: what gets
 changed, how much of it, and what it needs from the operator (a review, a
@@ -577,8 +620,26 @@ drop a label — do not fight it by lowering the quality profile.
    (`url:` parameter, or the same local file path within one session). Do not
    mint a second page for the same subject. If you do not have the URL, find it
    with `action: "list"` before publishing anything.
-4. **Read comments before republishing** (`action: "comments"`), fold them in,
-   then resolve the threads you actually addressed.
+4. **Read comments before republishing** (`ArtifactComments`, `action: "read"`),
+   fold them in, then resolve the threads you actually addressed.
+5. **A comment is a ruling until proven otherwise.** A comment sent to Claude
+   is answered automatically, before the session sees it, and the session is
+   then woken by a notification that names the page and the thread but not the
+   comment. The automatic reply is not a record. Read the thread, record what
+   it rules, answers or judges in the brief's JSON (a decision on the entry, or
+   a standing ruling with the thread as its `source`), republish, and only then
+   resolve. With the hooks installed, resolving a brief's thread is refused
+   until the brief has been saved since the thread was read. A thread with
+   nothing to record (a typo report, a question already answered in the
+   reply) is let through by saying why:
+
+   ```bash
+   node ~/.claude/skills/problem-brief/bin/brief-comments.mjs --no-ruling <page link> <thread id> "<why>"
+   ```
+
+   Something said in a comment that is about how to work in general, not about
+   the brief's subject, goes to memory as a `feedback` memory; mark the thread
+   with `--no-ruling` and name the memory in the note.
 
 ## Report back in chat
 
@@ -700,6 +761,8 @@ into the JSON as soon as it comes back, moving each entry's status and
 | Two entries where one cannot be ruled before the other, and nothing says so | `blockedBy` on the one that waits |
 | Reaching for `AskUserQuestion` to collect rulings | The page holds questions; ask only when the work cannot go on without the answer now |
 | Writing the chat summary by hand | Post the one the publish hook computes, or run `brief-delta.mjs` |
+| Taking the automatic reply to a comment as the end of it | Read the thread, record the ruling in the JSON, republish, then resolve |
+| Waiting to be asked before starting a brief | Findings, decisions and questions go into a brief by default |
 
 ## Red flags — stop and rewrite
 
@@ -728,7 +791,8 @@ into the JSON as soon as it comes back, moving each entry's status and
 | `bin/brief-memory.mjs` | Registers a brief in Claude Code's memory: one pointer file and its `MEMORY.md` line. |
 | `bin/brief-context.mjs` | Prints what a session must not lose; with `--hook`, the SessionStart hook that restores it after a summary. |
 | `bin/brief-delta.mjs` | The chat summary of what moved between two versions; with `--hook`, the PostToolUse hook that computes it on every publish. |
-| `bin/install-hook.mjs` | Adds or removes both hooks in `settings.json`; used by the installers. |
+| `bin/brief-comments.mjs` | The comment and citation hooks; `--no-ruling` marks a thread as holding nothing to record. |
+| `bin/install-hook.mjs` | Adds or removes all the hooks in `settings.json`; used by the installers. |
 | `examples/example.brief.json` | A complete worked brief — start from this. |
 | `examples/diagrams/*.lifecycle.json` | The archify picture source for the worked example. |
 | `test/brief.test.mjs` | The validator and renderer behaviour, pinned. Run `node --test test/*.test.mjs`. |

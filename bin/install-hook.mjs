@@ -6,6 +6,9 @@
  *                                            every new, resumed, cleared or summarised session
  *   PostToolUse   brief-delta.mjs --hook     after each Artifact publish of a brief, hands
  *                                            Claude the chat summary of what moved
+ *   UserPromptSubmit,                        a comment on a brief's page, or a message citing
+ *   Pre/PostToolUse brief-comments.mjs       its ids, gets recorded; a brief's comment thread
+ *     (ArtifactComments) --hook              cannot be resolved until it has been
  *
  *   node install-hook.mjs                     add it to ~/.claude/settings.json
  *   node install-hook.mjs --remove            take it out again
@@ -32,6 +35,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const HOOKS = [
   { event: "SessionStart", matcher: "^(startup|resume|clear|compact)$", script: "brief-context.mjs" },
   { event: "PostToolUse", matcher: "Artifact", script: "brief-delta.mjs" },
+  { event: "UserPromptSubmit", script: "brief-comments.mjs" },
+  { event: "PostToolUse", matcher: "ArtifactComments", script: "brief-comments.mjs" },
+  { event: "PreToolUse", matcher: "ArtifactComments", script: "brief-comments.mjs" },
 ];
 
 let settings = {};
@@ -51,7 +57,8 @@ for (const h of HOOKS) {
   const ours = (group) => (group?.hooks ?? []).some((x) => String(x.command ?? "").includes(mark));
   const kept = (hooks[h.event] ?? []).filter((g) => !ours(g));
   if (!remove) {
-    kept.push({ matcher: h.matcher, hooks: [{ type: "command", command: `node "${join(here, h.script)}" --hook`, timeout: 10 }] });
+    kept.push({ ...(h.matcher ? { matcher: h.matcher } : {}),
+      hooks: [{ type: "command", command: `node "${join(here, h.script)}" --hook`, timeout: 10 }] });
   }
   if (kept.length) hooks[h.event] = kept; else delete hooks[h.event];
 }
@@ -60,4 +67,4 @@ if (Object.keys(hooks).length) settings.hooks = hooks; else delete settings.hook
 mkdirSync(dirname(settingsPath), { recursive: true });
 writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf8");
 console.log(remove ? `removed the problem-brief hooks from ${settingsPath}`
-  : `added the problem-brief hooks (${HOOKS.map((h) => h.event).join(", ")}) to ${settingsPath}`);
+  : `added the problem-brief hooks (${[...new Set(HOOKS.map((h) => h.event))].join(", ")}) to ${settingsPath}`);
