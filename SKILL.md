@@ -1,17 +1,18 @@
 ---
 name: problem-brief
 description: >-
-  Use by default, without being asked, whenever a session has findings, open
-  decisions or questions for the operator to rule on: the brief is the primary
-  channel for them, and chat carries only the summary and the link. Also use
-  when asked to build, publish, refresh or update an artefact (or brief,
-  findings report, open-questions page, decisions page) that lists problems,
-  issues, findings, review results or open questions — each with a problem
-  statement, explanation and possible solutions — and when the operator answers
-  or comments on one. Also when the same material is delivered as
-  AskUserQuestion instead of a page.
-  REQUIRED composition — archify (drawings) and humanizer (prose); see
-  Dependencies.
+  Publishes and maintains a problem brief: a page of findings, open decisions and
+  questions for the operator, each with the problem, evidence and a recommended way out,
+  kept as JSON that records every ruling so nothing is asked twice. Use by default,
+  without being asked, whenever work turns up something the operator must decide (a
+  finding with more than one way out, a risk, an open question, a choice between
+  options), even mid-task and even when the operator only asked for an investigation.
+  Also use when asked to build, publish, refresh or update a brief, findings report,
+  open-questions or decisions page; when the operator answers, rules on or comments on
+  anything a brief holds, in chat or in a comment on the page; when questions would
+  otherwise go out through AskUserQuestion; and when retiring a brief whose work is
+  done. Not for a progress, status or completion report with nothing to decide, for
+  running a chorus review, or for converting chorus records to the shared schema.
 license: MIT
 metadata:
   version: "1.4"
