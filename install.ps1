@@ -93,7 +93,7 @@ if ($Link) {
   Write-Ok "linked $target -> $src"
 } else {
   New-Item -ItemType Directory -Force -Path $target | Out-Null
-  foreach ($item in @('SKILL.md', 'bin', 'schema', 'examples', 'plugin')) {
+  foreach ($item in @('SKILL.md', 'reference', 'bin', 'schema', 'examples', 'plugin')) {
     $from = Join-Path $src $item
     if (Test-Path $from) { Copy-Item $from -Destination $target -Recurse -Force }
   }
