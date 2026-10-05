@@ -173,6 +173,26 @@ becomes a ruling, with the session note as its `source`.
 | Nothing, and the fix is easy and can be undone | Do not raise it. Carry it out and list it as `mechanical` (see *A reversible fix never blocks the goal*). |
 | Nothing | Raise it with the next free number. |
 
+**Triage the class before the instance.** Matching the exact subject is not
+enough. Ask what *class* of question this is (for example "may the applicant's
+own data rest in their own store", "is a release reversible") and search for
+that class, because the operator often ruled the class several times on other
+subjects and will not accept it being raised again. Run the search from every
+source at hand, in this order, before writing the entry:
+
+1. The brief's own rulings and entries, every state.
+2. The project's persistent memory (`MEMORY.md` and the files it points to),
+   including the other briefs registered there: a ruling on a sibling brief binds.
+3. The project's recall index where one exists (in a speckit project:
+   speckit memsearch and its extensions, e.g. `/speckit-memory-recall`), plus
+   the governing documents it names (constitution, architecture notes).
+4. Earlier sessions, through the `memory-recall` skill.
+
+Record in the entry which sources were searched and what they returned, even
+when nothing matched. A class that is already ruled is not raised: apply the
+ruling, cite it, and list any resulting fix as `mechanical`. Only a new value
+choice, or evidence that contradicts the standing ruling, becomes an entry.
+
 The validator backs this up with warnings: an entry whose key words largely
 match an earlier entry's, and an open entry that looks answered by an active
 ruling. Word overlap proves nothing either way, so read both and decide. If a
