@@ -3,6 +3,9 @@ import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
 import type { BriefView, Entry, Evidence, Group, Option } from '../types'
 
+import { judgeTurn } from './turn'
+import type { Stamps } from './turn'
+
 const PANE = 'brief-sidebar'
 const TITLE = 'Open questions'
 // openBrief holds a slug, '' for "the first of this session's", or NONE once the person folded everything.
@@ -22,7 +25,6 @@ const upkeep = atom(
 // A bare file name counts too: a command run from inside the briefs folder names only the file.
 const BRIEF_PATH = /([A-Za-z0-9._-]+)\.brief\.json/g
 const WRITES_FILE = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
-const SHELL_WRITE = /(^|[^>])>[^>&]|\bmv\b|\bsponge\b|\btee\b|\bnode\b|\bpython3?\b/
 const SHELL_WORK = /\bgit (commit|push|merge)\b|\bgh pr (create|merge|edit)\b/
 
 // The published page's order of attention and its own words for each group.
@@ -250,9 +252,23 @@ async function upkeepNote($: EngineInterface): Promise<string | null> {
   return lines.join('\n')
 }
 
+function stampsOf(list: readonly BriefView[]): Stamps {
+  return Object.fromEntries(list.map(b => [b.slug, b.updated ?? '']))
+}
+
 export const register: Register = on => {
-  let wroteBrief = false
+  let stampsAtStart: Stamps = {}
+  let named = new Set<string>()
   let didWork = false
+
+  on('turn.start', async ($, e, next) => {
+    await reload($).catch(() => undefined)
+    stampsAtStart = stampsOf(await read($, briefs))
+    named = new Set()
+    didWork = false
+
+    return next(e)
+  })
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -281,11 +297,10 @@ export const register: Register = on => {
     const command = isShell ? String((e as unknown as Raw).command ?? '') : ''
 
     try {
-      const writes = WRITES_FILE.has(e.tool) || (isShell && SHELL_WRITE.test(command))
-      // Only a write makes a brief this session's: reading one to look at it does not.
-      if (touched.length > 0 && writes) {
+      touched.forEach(slug => named.add(slug))
+      // A file tool aimed at a brief is a certain write; a shell command waits for the stamp check at turn end.
+      if (touched.length > 0 && WRITES_FILE.has(e.tool)) {
         await update($, inPlay, l => [...new Set([...l, ...touched])])
-        wroteBrief = true
       } else if (touched.length === 0 && (WRITES_FILE.has(e.tool) || (isShell && SHELL_WORK.test(command)))) {
         didWork = true
       }
@@ -300,13 +315,17 @@ export const register: Register = on => {
   })
 
   on('turn.complete', async ($, e, next) => {
-    if (wroteBrief) {
+    await reload($).catch(() => undefined)
+    const verdict = judgeTurn(stampsAtStart, stampsOf(await read($, briefs)), named, await ownSlugs($))
+    if (verdict.claimed.length > 0) {
+      await update($, inPlay, l => [...new Set([...l, ...verdict.claimed])])
+    }
+    if (verdict.wrote) {
       const now = await $.clock.now()
       await update($, upkeep, () => ({ turnsWithWork: 0, lastWriteAt: now }))
     } else if (didWork) {
       await update($, upkeep, u => ({ ...u, turnsWithWork: u.turnsWithWork + 1 }))
     }
-    wroteBrief = false
     didWork = false
     await refreshStatus($)
 
