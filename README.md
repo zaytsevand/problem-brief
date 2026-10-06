@@ -50,6 +50,24 @@ Both install into your skills directory (`~/.claude/skills` on macOS and Linux,
 one composes are present, and take `--uninstall` / `-Uninstall` to reverse.
 Needs Node 18 or newer for the renderer; nothing else, and no npm install.
 
+### The sidebar
+
+`./install.sh --sidebar` (`.\install.ps1 -Sidebar`) also loads a Claude Code
+plugin in every session, from the next one on. It shows the open questions of
+the session's own briefs in a pane beside the conversation, each in full with
+its options, and a reply box under each that sends your answer to the model with
+the instruction to record it in the brief. Briefs from other sessions stay
+folded at the bottom. The plugin also reminds the model, on every message, to
+keep the briefs it works on up to date.
+
+A brief counts as the session's own when the session writes it, when you reply
+in it from the pane, or when it is named after the session
+(`session-<first 8 characters of the session id>.brief.json`), which makes a
+safe place to try it out. The installer adds the plugin's folder to
+`CLAUDE_CODE_PLUGIN_DIRS` in the `env` block of `~/.claude/settings.json`;
+`--uninstall` takes it out again. The plugin lives in `plugin/brief-sidebar`,
+with its tests: `claude plugin test plugin/brief-sidebar`.
+
 ## Dependencies
 
 | Skill | Does what here | Without it |

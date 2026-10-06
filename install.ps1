@@ -23,6 +23,10 @@
   Also append one line to %USERPROFILE%\.claude\CLAUDE.md saying findings,
   decisions and questions go into a brief by default.
 
+.PARAMETER Sidebar
+  Also load the brief sidebar plugin in every session: the open questions of
+  the session's briefs beside the conversation, each with a reply box.
+
 .PARAMETER Uninstall
   Remove the skill again, and the hook.
 
@@ -39,6 +43,7 @@ param(
   [switch]$Uninstall,
   [switch]$Hook,
   [switch]$ClaudeMd,
+  [switch]$Sidebar,
   [string]$Dir
 )
 
@@ -57,7 +62,9 @@ if ($Uninstall) {
   if ((Test-Path $hookScript) -and (Get-Command node -ErrorAction SilentlyContinue)) {
     & node $hookScript --remove | Out-Null
     & node (Join-Path $target 'bin\install-claude-md.mjs') --remove | Out-Null
-    Write-Ok 'removed the hooks and the CLAUDE.md line, if they were there'
+    $sidebarScript = Join-Path $target 'bin\install-sidebar.mjs'
+    if (Test-Path $sidebarScript) { & node $sidebarScript --remove | Out-Null }
+    Write-Ok 'removed the hooks, the CLAUDE.md line and the sidebar, if they were there'
   }
   if (Test-Path $target) {
     # Remove-Item on a junction deletes the junction, not the target it points at.
@@ -86,7 +93,7 @@ if ($Link) {
   Write-Ok "linked $target -> $src"
 } else {
   New-Item -ItemType Directory -Force -Path $target | Out-Null
-  foreach ($item in @('SKILL.md', 'bin', 'schema', 'examples')) {
+  foreach ($item in @('SKILL.md', 'bin', 'schema', 'examples', 'plugin')) {
     $from = Join-Path $src $item
     if (Test-Path $from) { Copy-Item $from -Destination $target -Recurse -Force }
   }
@@ -127,6 +134,12 @@ if ($Hook) {
 if ($ClaudeMd) {
   & node (Join-Path $target 'bin\install-claude-md.mjs')
   Write-Ok 'every session is told a brief is the default channel, hooks or not'
+}
+
+# ── the sidebar ─────────────────────────────────────────────────────────────
+if ($Sidebar) {
+  & node (Join-Path $target 'bin\install-sidebar.mjs')
+  Write-Ok 'the brief sidebar loads in every session from the next one'
 }
 
 Write-Host ''
