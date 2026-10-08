@@ -83,14 +83,14 @@
       "solutions": [
         {
           "id": "rerun-live",
-          "label": "Re-take the measurement against the ten live documents before sign-off",
+          "label": "Hold the announced release until the measurement is re-taken on live documents",
           "recommended": true,
-          "reversible": true,
-          "summary": "Point the benchmark at live downloads instead of the saved files, re-run it, and re-write the answer key for the two templates that changed. Sign-off waits for the new number.",
+          "reversible": false,
+          "summary": "Point the benchmark at live downloads instead of the saved files, re-run it, and re-write the answer key for the two templates that changed. Sign-off, and the release date the finance team was given, wait for the new number.",
           "cost": {
-            "work": "Re-write the answer key for the two changed templates, then one benchmark run against live downloads. Needs nothing from you until the new number is in.",
-            "risk": "The new number may be materially worse, which would itself delay the release. That is the point of taking it.",
-            "forecloses": "Nothing."
+            "work": "Re-write the answer key for the two changed templates, then one benchmark run against live downloads. Needs your word to move the release date.",
+            "risk": "The new number may be materially worse, which would itself delay the release further. That is the point of taking it.",
+            "forecloses": "The release date already given to the finance team: holding it means telling them it moves, which cannot be taken back."
           },
           "steps": [
             "Re-write the answer key for the two suppliers whose templates changed.",

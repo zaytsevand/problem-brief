@@ -469,6 +469,13 @@ function reversibleErrors(brief) {
         message: "says of no option whether it can be undone",
         hint: "mark each option reversible: true or false — the reader weighs an option that cannot be taken back differently" });
     }
+    const rec = sols.find((s) => s?.recommended);
+    if ((e.status ?? "open") === "open" && e.bearing === "blocks-goal" && rec?.reversible === true) {
+      out.push({ path: `decisions[${i}] (${e.id})`, severity: "warning",
+        message: "blocks the goal while waiting on an option that can be undone",
+        hint: "a reversible fix should not block the goal: carry it out and list it under handled without asking (mechanical), " +
+          "saying what was done, why it was safe unasked and how to undo it. Leave it waiting only if it is costly or reverses a ruling" });
+    }
   });
   return out;
 }
