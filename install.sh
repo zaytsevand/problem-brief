@@ -87,7 +87,7 @@ if [ "$MODE" = link ]; then
   ok "linked $TARGET -> $SRC"
 else
   mkdir -p "$TARGET"
-  for item in SKILL.md bin schema examples plugin; do
+  for item in SKILL.md reference bin schema examples plugin; do
     [ -e "$SRC/$item" ] && cp -R "$SRC/$item" "$TARGET/"
   done
   ok "installed $TARGET"
