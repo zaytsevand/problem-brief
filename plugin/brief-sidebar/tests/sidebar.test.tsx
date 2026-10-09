@@ -159,3 +159,16 @@ test('an answered question leaves the pane when its brief is edited by bare file
     brief.decisions[0]!.status = before
   }
 })
+
+test('an entry with no status field counts as open, as the page renders it', async ($, on) => {
+  seedDisk(on)
+  const q = (FILES[PATH] as { decisions: { status?: string }[] }).decisions[0]!
+  const before = q.status
+  delete q.status
+  await $.tool.call({ tool: 'Edit', file_path: PATH, old_string: 'a', new_string: 'b' })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Button', text: /Should the job retry/ })).toBeDefined()
+  await ui.unmount()
+  q.status = before
+})

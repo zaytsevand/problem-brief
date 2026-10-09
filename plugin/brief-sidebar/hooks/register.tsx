@@ -112,7 +112,7 @@ function toBrief(slug: string, path: string, raw: Raw): BriefView {
   const waiting = list(raw.outstanding).filter(o => o.state !== 'done')
   const raised = new Set(list(raw.changes).filter(c => c.kind === 'raised').map(c => str(c.id)))
   const open = entries
-    .filter(d => d.status === 'open')
+    .filter(d => (d.status ?? 'open') === 'open')
     .map(d => {
       const id = str(d.id)
       return toEntry(d, waiting.filter(o => o.blockedBy === id).length, raised.has(id))
