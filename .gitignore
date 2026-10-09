@@ -6,3 +6,6 @@ out/
 node_modules/
 .DS_Store
 .worktrees/
+
+# Types the engine writes beside a loaded plugin
+plugin/*/.claude-plugin/types/

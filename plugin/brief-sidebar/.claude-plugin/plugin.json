@@ -1,0 +1,11 @@
+{
+  "name": "brief-sidebar",
+  "version": "0.1.0",
+  "description": "Sidebar of the problem briefs' open questions, with a comment box under each that sends your note to the model; nudges the model to keep the brief up to date",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Andrey Zaytsev"
+  },
+  "repository": "https://github.com/zaytsevand/problem-brief",
+  "license": "MIT"
+}

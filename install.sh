@@ -6,6 +6,7 @@
 #   ./install.sh --dir DIR       install into a different skills directory
 #   ./install.sh --hook          also add the hooks: restore briefs after a summary, summarise each publish
 #   ./install.sh --claude-md     also add one line to ~/.claude/CLAUDE.md: a brief is the default channel
+#   ./install.sh --sidebar       also load the brief sidebar plugin in every session
 #   ./install.sh --uninstall     remove it again (and the hook)
 #
 # POSIX sh on purpose: no bashisms, so it runs under dash, ash and zsh too.
@@ -17,6 +18,7 @@ NAME=problem-brief
 MODE=copy
 HOOK=0
 CLAUDE_MD=0
+SIDEBAR=0
 DEST=""
 
 while [ $# -gt 0 ]; do
@@ -25,8 +27,9 @@ while [ $# -gt 0 ]; do
     --uninstall) MODE=uninstall ;;
     --hook)      HOOK=1 ;;
     --claude-md) CLAUDE_MD=1 ;;
+    --sidebar)   SIDEBAR=1 ;;
     --dir)       shift; DEST=${1:-} ;;
-    -h|--help)   sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)   sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)           echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -57,6 +60,7 @@ if [ "$MODE" = uninstall ]; then
   if [ -f "$TARGET/bin/install-hook.mjs" ] && command -v node >/dev/null 2>&1; then
     node "$TARGET/bin/install-hook.mjs" --remove >/dev/null && ok "removed the hooks, if they were there"
     node "$TARGET/bin/install-claude-md.mjs" --remove >/dev/null && ok "removed the CLAUDE.md line, if it was there"
+    [ -f "$TARGET/bin/install-sidebar.mjs" ] && node "$TARGET/bin/install-sidebar.mjs" --remove >/dev/null && ok "removed the brief sidebar, if it was there"
   fi
   if [ -e "$TARGET" ] || [ -L "$TARGET" ]; then
     rm -rf "$TARGET"; ok "removed $TARGET"
@@ -83,7 +87,7 @@ if [ "$MODE" = link ]; then
   ok "linked $TARGET -> $SRC"
 else
   mkdir -p "$TARGET"
-  for item in SKILL.md bin schema examples; do
+  for item in SKILL.md bin schema examples plugin; do
     [ -e "$SRC/$item" ] && cp -R "$SRC/$item" "$TARGET/"
   done
   ok "installed $TARGET"
@@ -120,6 +124,11 @@ fi
 # ── the line in CLAUDE.md ─────────────────────────────────────────────────
 if [ "$CLAUDE_MD" -eq 1 ]; then
   node "$TARGET/bin/install-claude-md.mjs" && ok "every session is told a brief is the default channel, hooks or not"
+fi
+
+# ── the sidebar ────────────────────────────────────────────────────────────
+if [ "$SIDEBAR" -eq 1 ]; then
+  node "$TARGET/bin/install-sidebar.mjs" && ok "the brief sidebar loads in every session from the next one"
 fi
 
 say ""
