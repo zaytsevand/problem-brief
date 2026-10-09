@@ -611,6 +611,17 @@ test("an option that cannot be undone is tagged, and a live entry that marks non
   assert.ok(r.warnings.some((m) => m.includes("whether it can be undone")));
 });
 
+test("an open goal blocker whose recommended option can be undone is flagged to be handled without asking", () => {
+  const flag = (b) => validateBrief(b).warnings.filter((w) => w.message.includes("waiting on an option that can be undone"));
+  const hit = flag(brief([entry("Q-1", live)]));
+  assert.equal(hit.length, 1);
+  assert.equal(hit[0].path, "decisions[0] (Q-1)");
+  assert.match(hit[0].hint, /handled without asking/);
+  assert.deepEqual(flag(brief([entry("Q-1", { ...live, solutions: [{ ...option, reversible: false }] })])), []);
+  assert.deepEqual(flag(brief([entry("Q-1", { bearing: "escalated", bearingReason: "Worth a look." })])), []);
+  assert.deepEqual(flag(brief([entry("Q-1", { ...live, status: "decided", ruling: { chose: "a", by: "operator", at: T } })])), []);
+});
+
 test("a work estimate in calendar time is flagged on live entries", () => {
   const r = messages(brief([entry("Q-1", { ...live, solutions: [{ ...option, cost: { work: "About two days of work." } }] })]));
   assert.ok(r.warnings.some((m) => m.includes('estimates calendar time ("two days")')));

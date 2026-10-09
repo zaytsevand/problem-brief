@@ -14,7 +14,7 @@ description: >-
   Dependencies.
 license: MIT
 metadata:
-  version: "1.3"
+  version: "1.4"
   requires:
     - archify
     - humanizer
@@ -170,6 +170,7 @@ becomes a ruling, with the session note as its `source`.
 | A ruling that answers it | Do not raise it. Apply the ruling. If that leaves an unambiguous fix, make it and list it as `mechanical`. |
 | An entry with the same root cause, any state | Do not raise a new one. Add the new symptom or evidence to that entry. |
 | That entry is closed, and the new evidence really does contradict the ruling or the resolution | Reopen **the same entry**: set it back to `open`, say in the brief what is new since it was ruled, cite the ruling. Never a new number, never the same question with nothing new. |
+| Nothing, and the fix is easy and can be undone | Do not raise it. Carry it out and list it as `mechanical` (see *A reversible fix never blocks the goal*). |
 | Nothing | Raise it with the next free number. |
 
 The validator backs this up with warnings: an entry whose key words largely
@@ -430,6 +431,18 @@ done. An entry is for something that needed you. A fix that cannot be undone
 always needs the operator, however unambiguous it is; the validator refuses a
 `mechanical` item marked `reversible: false`.
 
+**A reversible fix never blocks the goal.** The operator's ruling: "An easy fix
+blocks the goal. Don't block on reversible changes. Evaluate and put them into
+'ruled without asking' category." When an entry would block the goal, or would
+sit waiting on the operator, and its recommended option can be undone, is small
+work and forecloses nothing, do not wait for a ruling. Evaluate the option, carry
+it out, and list it in `mechanical`: what was done, why it was safe to do
+unasked, and how to undo it. Only an option that cannot be undone, is costly, or
+reverses a ruling still waits. Never change a ruling unasked, but when a ruled
+option cannot be carried out at all (a platform limit, say), take its reversible
+fallback and record that you did. The validator warns on an `open` goal blocker
+whose recommended option is `reversible: true`.
+
 **One ruling can free others.** When an entry cannot be ruled until another is
 (its options depend on how the other is settled), list that other in the
 entry's `blockedBy`. The page then shows what each entry waits on and what
@@ -454,7 +467,8 @@ Separate the material by what it demands of the reader:
   `"bearing": "escalated"`.
 - **Mechanical** — an unambiguous fix with no judgement in it, that can be
   undone. **Fix these yourself first**, then list them as already done. Never
-  ask about them.
+  ask about them. An easy, reversible fix that would block the goal is one of
+  these, not a blocker.
 - **Outstanding work** — known, agreed, not yet done. A separate list at the
   end, not mixed into the decisions.
 
