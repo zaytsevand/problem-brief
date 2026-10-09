@@ -28,6 +28,7 @@ node ~/.claude/skills/archify/bin/archify.mjs render lifecycle q3.lifecycle.json
 - The drawing is carried inside the page by default (works everywhere). `"embed": "file"`
   references a companion instead — only where the publisher can carry companions; the
   renderer prints what to publish. A drawing that cannot be carried becomes a visible note.
+- Render archify drawings in presentation mode, in their own frame, centred and scaled to the column.
 - Never flatten to a still image; it throws away zoom, paths and lenses.
 - Leave `height` alone; the renderer reads the drawing's `viewBox`. Keep `meta.viewBox`
   tight — shrink until archify complains, then back one step.

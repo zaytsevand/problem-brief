@@ -89,6 +89,7 @@ reversible") and search for that class, not just the exact subject:
 | A ruling that answers it — even if the step now feels risky | Do not ask. Apply it, cite the ruling id in what you report, list any resulting fix as `mechanical`. |
 | An entry with the same root cause, any state | Add the new evidence to that entry. No new number. |
 | That entry is closed and the new evidence really contradicts its ruling | Reopen **the same id**, say what is new, cite the ruling. |
+| Nothing, and the fix is easy and can be undone | Do not raise it. Carry it out and list it as `mechanical`. |
 | Nothing | Raise it with the next free number; record which sources you searched. |
 
 A ruled risk feeling uncomfortable is not new evidence. New evidence is a fact the
@@ -161,6 +162,10 @@ falling back to mermaid.
    (`blocks-goal` / `escalated`) and `bearingReason`. Recommended option first, every
    option priced and marked `reversible`. Fix unambiguous reversible things yourself and
    list them as `mechanical`; anything irreversible is always the operator's call.
+   A reversible, small fix that would block the goal is not a blocker: do it, list it as
+   `mechanical` with how to undo it. Never change a ruling unasked; if a ruled option cannot
+   be carried out at all, take its reversible fallback and record that you did. The
+   validator warns on an `open` goal blocker whose recommended option is `reversible: true`.
 3. Validate, then render:
 
    ```bash
