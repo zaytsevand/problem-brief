@@ -50,7 +50,34 @@ Both install into your skills directory (`~/.claude/skills` on macOS and Linux,
 one composes are present, and take `--uninstall` / `-Uninstall` to reverse.
 Needs Node 18 or newer for the renderer; nothing else, and no npm install.
 
-### The sidebar
+### The sidebar (a Claude Code mod)
+
+Without the mod, keeping track of decisions is a two-surface job. The questions
+live on a published page; the conversation where you answer them lives in the
+terminal. To take a fork you open the page, read the options, switch back to the
+session, type which one you chose and name the entry, and hope the model records
+it in the brief. Whatever you read on one surface you carry to the other by hand.
+
+With the mod it is one surface. The open questions sit in a pane beside the
+conversation, and taking a fork is choosing between the outcomes the brief
+already proposes: pick an option under the entry, add a note if you like, and
+the reply goes to the model with the instruction to record it in the brief in
+that turn. The pane redraws when the brief changes, so you see the ruling land.
+
+![The brief sidebar beside a live Claude Code session: a question open in full, with its options and a "Take this option" button](docs/brief-sidebar.png)
+
+*A live session after the skill reviewed this repo's installers and wrote a
+brief. The pane, on the right, shows one question in full: the problem, the
+evidence, how it works today, and the options, recommendation first.*
+
+![The same session after one option was taken: the question has left the list and the model has carried the ruling out](docs/brief-sidebar-ruled.png)
+
+*After pressing "Take this option" on Q-2. The model recorded the ruling,
+carried it out and re-rendered the page. Q-2 has left the pane, and the count
+beside the prompt fell from 2 blocking, 3 open to 1 blocking, 2 open.*
+
+Both captures are of a real run in a terminal, not a mock-up; rows listing the
+author's unrelated briefs and a usage meter are blanked out.
 
 `./install.sh --sidebar` (`.\install.ps1 -Sidebar`) also loads a Claude Code
 plugin in every session, from the next one on. It shows the open questions of
