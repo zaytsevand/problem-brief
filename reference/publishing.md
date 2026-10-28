@@ -61,3 +61,18 @@ page: same content rules (plain English, problem first, grouped by root cause, r
 option first labelled `(Recommended)`), same state check and search first. Ask only
 `blocks-goal` entries; list `escalated` ones in the message. Record each answer in the JSON
 as it comes back, then the chat summary.
+
+The operator may see only the dialog, so each question carries the whole entry, not a
+digest of it. Map the entry onto the fields; every part lands somewhere:
+
+| Field | Carries |
+|---|---|
+| `header` | The entry id, `Q-3`. |
+| `question` | a. Problem, b. explanation, c. evidence (with file:line), then the decision asked, ending in `?`. |
+| option `label` | The option's name, 1–5 words; the first is the recommendation, `(Recommended)`. |
+| option `description` | What the option does, `cost.work`, `cost.forecloses`, and `Reversible` / `Cannot be undone`. |
+| option `preview` | d. How it works today and what this option changes: the diff, config or diagram. |
+
+Each fact appears once. The question never lists the options, and a description never
+restates its label or the question. More than four options: ask the first four, name the
+rest in the question. After the answer, do not echo it back; record it and move on.
