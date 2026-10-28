@@ -42,7 +42,7 @@ asking. Irreversible → always the operator's call, however obvious.
 
 ## An entry's life
 
-Never deleted, never renumbered. The page is refreshed by moving entries along.
+Never renumbered, and never deleted unless withdrawn (below). The page is refreshed by moving entries along.
 
 | `status` | Page shows | Means | Needs |
 |---|---|---|---|
@@ -50,6 +50,28 @@ Never deleted, never renumbered. The page is refreshed by moving entries along.
 | `decided` | *outstanding work* | A way forward was chosen, **not yet carried out**. | `decision` (option, date, why), `bearing`, `bearingReason` |
 | `complete` | *complete* | The chosen option was carried out (a fix, an answer, a scope cut, a settled measurement). | `resolution`: date, what happened, proof |
 | `superseded` | *retracted* | The problem went away or was overtaken. | — |
+
+**Withdrawing.** The one exception to "never deleted": the operator says a decision was
+misunderstood or wrong from the start and asks for it removed. Leaving it as `superseded`
+keeps it on the page, where every later session reads it as ground to build on.
+
+1. Work out every entry and ruling that exists only because of the withdrawn one, and
+   preview the deletion; name the ids and what it prints to the operator before going on:
+
+   ```bash
+   node ~/.claude/skills/problem-brief/bin/brief-withdraw.mjs brief.json Q-3 R-2 --dry-run
+   ```
+
+2. Run it without `--dry-run`. It deletes those entries and rulings, the outstanding items
+   blocked on them and every `changes` and `history` note that cites them; makes a ruling
+   active again where a withdrawn one had replaced it; lists the ids in `withdrawnIds`, so
+   no number is issued again; and moves `updated`. No marker stays.
+3. It ends with every citation still left (prose, an amendment, a mechanical item,
+   evidence). Those need judgement: rewrite or remove each, then validate until it passes.
+4. Comment threads on a deleted entry: resolve them after marking each with
+   `brief-comments.mjs --no-ruling <url> <thread> "withdrawn"`.
+
+Git keeps what was deleted; the brief does not. The chat delta reports `Q-n withdrawn and deleted`.
 
 `decided` ≠ `complete`: ruling closes the question, not the entry. Where what was done
 drifts from what was ruled, add one `resolution.amendments` item per drift (ruled, done

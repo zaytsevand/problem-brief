@@ -21,6 +21,7 @@
  * Zero dependencies. Node 18+.
  */
 
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -55,13 +56,22 @@ const LIVE_LABEL = {
 
 const RETIRE = join(dirname(fileURLToPath(import.meta.url)), "brief-retire.mjs");
 
+/* A brief's owner is the branch its rulings are carried out on. Outside git, or
+   on a detached head, there is no branch to name. */
+export function currentBranch(cwd) {
+  try {
+    const b = execFileSync("git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    return b && b !== "HEAD" ? b : null;
+  } catch { return null; }
+}
+
 /* Nothing waits on the reader, and no agreed work is left: the brief has done
    its job. Its full digest would only cost every session tokens. */
 export const finished = (brief) =>
   !(brief.decisions ?? []).some((e) => ["open", "decided"].includes(e.status ?? "open")) &&
   !(brief.outstanding ?? []).some((o) => (o.state ?? "not-started") !== "done");
 
-export function digest(brief, { path, url, memoryDir, pages = [] } = {}) {
+export function digest(brief, { path, url, memoryDir, pages = [], branch } = {}) {
   /* A throwaway brief is never worth its full digest. What a session needs to
      know is that it is still around, and where it is published, so the
      cleanup is offered until it is done. */
@@ -85,6 +95,10 @@ export function digest(brief, { path, url, memoryDir, pages = [] } = {}) {
   if (brief.binding) lines.push(`Works under ${brief.binding.ref}${brief.binding.system ? ` (${brief.binding.system})` : ""}` +
     `${brief.binding.title ? `: ${clip(brief.binding.title, 100)}` : ""}. Cite its ids as ${brief.binding.ref}/Q-n and ${brief.binding.ref}/R-n.`);
   if (brief.goal) lines.push(`Goal: ${clip(brief.goal)}`);
+  if (brief.owner) lines.push(branch && branch !== brief.owner
+    ? `Owned by ${brief.owner}; this session is on ${branch}. Record a ruling on this brief that reaches you here, ` +
+      `but do not carry it out: leave it outstanding and say it belongs to ${brief.owner}.`
+    : `Owned by ${brief.owner}: its rulings are carried out there.`);
   lines.push("Before raising a problem or asking a question on this subject, check it against the rulings and " +
     "entries below. Record any new answer in the brief's JSON in the same turn it is given.");
 
@@ -161,6 +175,7 @@ function hook() {
   let input = {};
   try { input = JSON.parse(readFileSync(0, "utf8") || "{}"); } catch { /* no input */ }
   const memoryDir = memoryDirOf(input);
+  const branch = input.cwd ? currentBranch(input.cwd) : null;
 
   const parts = process.env.PROBLEM_BRIEF_REMINDER === "off" ? [] : [REMINDER];
   let published = {};
@@ -170,7 +185,7 @@ function hook() {
       const brief = JSON.parse(readFileSync(p.brief, "utf8"));
       if (brief.retired) continue;
       const pages = Object.keys(published).filter((u) => published[u] === brief.created);
-      parts.push(digest(brief, { path: p.brief, url: p.url, memoryDir, pages }));
+      parts.push(digest(brief, { path: p.brief, url: p.url, memoryDir, pages, branch }));
     } catch {
       parts.push(`Problem brief pointer ${p.file} names ${p.brief}, which cannot be read.` +
         (p.url ? ` Recover it from ${p.url} with the problem-brief skill's extract-brief.mjs before raising anything on its subject.` : ""));

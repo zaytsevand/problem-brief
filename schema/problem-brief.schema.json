@@ -77,6 +77,17 @@
       "default": false,
       "description": "true for a brief made only to try something out: a test of the skill or its hooks, a layout experiment, a one-off demonstration. The page says so, and every session start lists it — by name and published page — until it is retired. Once the test is over it is cleaned up in full: retired, and its page deleted when the operator agrees."
     },
+    "owner": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who carries out what this brief's rulings decide: a branch, worktree or session label, set at first publish. A session that is not the owner records a ruling that reaches it, but does not carry it out."
+    },
+    "withdrawnIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[QR]-\\d+$" },
+      "description": "Ids of entries and rulings deleted because the operator withdrew them as wrong from the start. Only the bare ids are kept, so a number is never issued again; nothing about them is shown, and any citation of one left in the brief is an error. Git history keeps the deleted content."
+    },
     "generated": {
       "type": "string",
       "format": "date",
@@ -140,7 +151,7 @@
     },
     "rulings": {
       "type": "array",
-      "description": "Everything the operator has answered, ruled or judged that outlives a single entry: an answer given in chat, a preference, a scope cut, a 'we do not care about X'. The brief's memory. A long session is summarised and loses what was said in it; this list is not. Search it before raising anything. Never deleted — a ruling that no longer holds is marked replaced.",
+      "description": "Everything the operator has answered, ruled or judged that outlives a single entry: an answer given in chat, a preference, a scope cut, a 'we do not care about X'. The brief's memory. A long session is summarised and loses what was said in it; this list is not. Search it before raising anything. Never deleted — a ruling that no longer holds is marked replaced — unless the operator withdraws it as wrong from the start (see withdrawnIds).",
       "items": {
         "$ref": "#/$defs/ruling"
       }

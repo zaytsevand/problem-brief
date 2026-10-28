@@ -87,8 +87,10 @@ export function delta(prev, next) {
       lines.push(`${F(e.id)}: ${BEARING[p.bearing] ?? "unbracketed"} → ${BEARING[e.bearing]} — ${label(e)}`);
     }
   }
+  const withdrawn = new Set(next.withdrawnIds ?? []);
   for (const id of before.keys()) {
-    lines.push(`${F(id)} is missing from this version — entries are never deleted; restore it and retract it instead`);
+    lines.push(withdrawn.has(id) ? `${F(id)} withdrawn and deleted`
+      : `${F(id)} is missing from this version — delete an entry only when the operator withdraws it, and list its id in withdrawnIds; otherwise restore it and retract it`);
   }
 
   const oldRulings = new Map((prev.rulings ?? []).map((r) => [r.id, r]));

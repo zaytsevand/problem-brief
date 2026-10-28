@@ -74,7 +74,7 @@ const KNOWN_KEYWORDS = new Set([
   "$schema", "$id", "$ref", "$defs", "title", "description", "default",
   "type", "required", "properties", "additionalProperties", "items",
   "enum", "const", "pattern", "format",
-  "minLength", "maxLength", "minItems", "maxItems", "minimum", "maximum",
+  "minLength", "maxLength", "minItems", "maxItems", "uniqueItems", "minimum", "maximum",
   "allOf", "anyOf", "if", "then", "propertyNames",
 ]);
 
@@ -167,6 +167,11 @@ class Validator {
       if (schema.maxItems && value.length > schema.maxItems) {
         this.add(path, `allows at most ${schema.maxItems} ${plural(schema.maxItems, "item")}, has ${value.length}`,
           schema.description);
+      }
+      if (schema.uniqueItems) {
+        const keys = value.map((v) => JSON.stringify(v));
+        const twice = [...new Set(keys.filter((k, i) => keys.indexOf(k) !== i))];
+        if (twice.length) this.add(path, `lists ${twice.join(", ")} more than once`, "each item belongs here once");
       }
       if (schema.items) value.forEach((v, i) => this.check(v, schema.items, `${path}[${i}]`));
     }
@@ -651,7 +656,7 @@ const CITED = /\b[QR]-\d+\b/g;
 /* Ids cited as this brief's own: bare, or under its binding's prefix. An id
    under another prefix points at another brief and is not checked here. */
 const PREFIXED = /(?:\b([A-Za-z0-9][A-Za-z0-9._#-]*)\/)?\b([QR]-\d+)\b/g;
-const ownCitations = (text, brief) =>
+export const ownCitations = (text, brief) =>
   [...String(text).matchAll(PREFIXED)].filter((m) => !m[1] || m[1] === brief.binding?.ref).map((m) => m[2]);
 
 /* Three or more entries named in one sentence is a list written as prose: the
@@ -674,19 +679,30 @@ function enumerationWarnings(brief) {
 
 function referenceErrors(brief) {
   const ids = new Set([...(brief.decisions ?? []), ...(brief.rulings ?? [])].map((x) => x?.id));
+  const withdrawn = new Set(brief.withdrawnIds ?? []);
   const seen = new Set();
   const out = [];
+  /* A withdrawn id is never issued again, and nothing may still lean on it:
+     every leftover mention is how a retracted decision keeps shaping work. */
+  [...(brief.decisions ?? []).map((x, i) => [x, `decisions[${i}]`]), ...(brief.rulings ?? []).map((x, i) => [x, `rulings[${i}]`])]
+    .forEach(([x, at]) => {
+      if (x?.id && withdrawn.has(x.id)) out.push({ path: `${at} (${x.id})`, message: `re-uses ${x.id}, which was withdrawn`,
+        hint: "a withdrawn number is never issued again — take the next free one" });
+    });
   const walk = (v, path) => {
     if (typeof v === "string") {
       for (const id of ownCitations(v, brief)) {
         if (ids.has(id) || seen.has(`${path}|${id}`)) continue;
         seen.add(`${path}|${id}`);
-        out.push({ path, severity: "warning", message: `cites ${id}, which is not ${id.startsWith("R-") ? "a ruling" : "an entry"} on this page`,
-          hint: `fix the id, or add the ${id.startsWith("R-") ? "ruling" : "entry"} it refers to` });
+        out.push(withdrawn.has(id)
+          ? { path, message: `cites ${id}, which was withdrawn`,
+            hint: "remove the mention, or the note that holds it — a withdrawn decision must leave nothing behind for later work to build on" }
+          : { path, severity: "warning", message: `cites ${id}, which is not ${id.startsWith("R-") ? "a ruling" : "an entry"} on this page`,
+            hint: `fix the id, or add the ${id.startsWith("R-") ? "ruling" : "entry"} it refers to` });
       }
     } else if (Array.isArray(v)) v.forEach((x, i) => walk(x, `${path}[${i}]`));
     else if (v && typeof v === "object") {
-      for (const [k, x] of Object.entries(v)) if (k !== "id") walk(x, path ? `${path} → ${k}` : k);
+      for (const [k, x] of Object.entries(v)) if (k !== "id" && k !== "withdrawnIds") walk(x, path ? `${path} → ${k}` : k);
     }
   };
   walk(brief, "");

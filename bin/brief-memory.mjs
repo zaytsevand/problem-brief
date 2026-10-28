@@ -2,7 +2,7 @@
 /**
  * Register a brief in Claude Code's memory for this project.
  *
- *   node brief-memory.mjs brief.json --memory-dir DIR [--url URL]
+ *   node brief-memory.mjs brief.json --memory-dir DIR [--url URL] [--owner BRANCH]
  *
  * DIR is the persistent memory directory your system prompt names — for Claude
  * Code, ~/.claude/projects/<project>/memory. The script writes one ordinary
@@ -20,13 +20,14 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import { currentBranch } from "./brief-context.mjs";
 
 const args = process.argv.slice(2);
 const opt = (k) => { const i = args.indexOf(k); return i > -1 ? args[i + 1] : undefined; };
-const file = args.find((a, i) => !a.startsWith("--") && !["--memory-dir", "--url"].includes(args[i - 1]));
+const file = args.find((a, i) => !a.startsWith("--") && !["--memory-dir", "--url", "--owner"].includes(args[i - 1]));
 const memoryDir = opt("--memory-dir");
 if (!file || !memoryDir) {
-  console.error("usage: brief-memory.mjs <brief.json> --memory-dir DIR [--url URL]");
+  console.error("usage: brief-memory.mjs <brief.json> --memory-dir DIR [--url URL] [--owner BRANCH]");
   process.exit(2);
 }
 
@@ -35,6 +36,16 @@ const brief = JSON.parse(readFileSync(path, "utf8"));
 if (brief.retired) {
   console.error(`${file} was retired ${brief.retired}, so it is not registered again. Remove "retired" from it to bring it back.`);
   process.exit(1);
+}
+/* Registration happens at first publish, from the session doing the work: its
+   branch is who carries out this brief's rulings. Never moved once set. */
+if (!brief.owner) {
+  const owner = opt("--owner") ?? currentBranch(process.cwd());
+  if (owner) {
+    brief.owner = owner;
+    writeFileSync(path, JSON.stringify(brief, null, 2) + "\n", "utf8");
+    console.log(`owner set to ${owner}`);
+  }
 }
 const url = opt("--url") ?? brief.url;
 const slug = basename(path).replace(/(\.brief)?\.json$/, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "brief";

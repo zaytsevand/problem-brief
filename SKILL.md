@@ -15,7 +15,7 @@ description: >-
   running a chorus review, or for converting chorus records to the shared schema.
 license: MIT
 metadata:
-  version: "1.4"
+  version: "1.5"
   requires:
     - archify
     - humanizer
@@ -61,7 +61,7 @@ Whatever else you were doing, the turn the answer arrives produces these, in ord
    `source` (chat + date). A ruling about how Claude should work is also saved as a
    `feedback` memory, named in the ruling's `memory` field.
 4. A ruling that contradicts an earlier one: add the new one, mark the old `replaced` with
-   `replacedBy`. Never edit or delete a ruling.
+   `replacedBy`. Never edit or delete a ruling, unless the operator withdraws it (below).
 5. A `changed` item in `changes`; validate; render; republish to the same URL.
 6. **A comment thread**: only now resolve it (`ArtifactComments`, `action: "resolve"`), so
    the ruling is in the saved file before the thread closes. A thread with nothing to
@@ -71,6 +71,21 @@ Whatever else you were doing, the turn the answer arrives produces these, in ord
 
 "I'll fold it in at the next refresh" loses it: by then the turn may be summarised away.
 Being busy with something else is not a reason to defer.
+
+**Recording is not carrying out.** This session owns a brief when the brief's `owner` names
+this session, branch or worktree, or, with no `owner`, when this session created, published or
+edited it before the ruling arrived. A ruling on a brief it does not own is still recorded
+(steps 1–7), but nothing it decides is carried out here: no code, infrastructure or other
+change. Add the follow-up as an `outstanding` item, `not-started`, with a note that it is
+unowned, and say in one line of chat that the ruling landed here and who should carry it
+out. A ruling worded as an order ("add X to Y") is not a go-ahead for a brief this session
+does not own: ask once before acting on it.
+
+**Withdrawn, not retracted.** `superseded` is for a problem that went away. When the operator
+says a decision was misunderstood or wrong from the start and asks for it removed, delete
+it and everything built on it with `bin/brief-withdraw.mjs`, which lists the ids in
+`withdrawnIds`. Name the ids to the operator first (`--dry-run`); procedure:
+`reference/entry-format.md`.
 
 ## Before raising anything — search, by class
 
@@ -117,7 +132,7 @@ Load the JSON (never rebuild from memory; a lost file is recovered from the page
 Then, before writing a single new change note, move the current `changes` into `history`: append
 one block `{ "version": <the brief's updated stamp as last published, not today's>,
 "changes": <the changes array exactly as it stood> }` and start `changes` empty. Never
-trim or rewrite old notes; skip the move only when `changes` is empty. Then re-check every
+trim or rewrite old notes, except to remove a withdrawn id; skip the move only when `changes` is empty. Then re-check every
 factual claim against the current tree, branch and run.
 
 ## The entry — five parts, in this order
@@ -147,7 +162,8 @@ Every prose field (title, short, problem, explanation, options, rulings, chat su
 - `short` is a plain label of two to five words, never a sentence and never ids.
 - Problem first, background second. Two or more enumerated things are a list.
 - Mark unproven claims as unproven and say what evidence would settle them.
-- Run `humanizer:humanizer` over the prose before publishing.
+- Run `humanizer:humanizer` over the prose before you render. The renderer bakes the prose
+  into the page, so humanizing after a render means rendering twice.
 
 ## Building and publishing
 
@@ -166,7 +182,8 @@ falling back to mermaid.
    `mechanical` with how to undo it. Never change a ruling unasked; if a ruled option cannot
    be carried out at all, take its reversible fallback and record that you did. The
    validator warns on an `open` goal blocker whose recommended option is `reversible: true`.
-3. Validate, then render:
+3. Humanize, then validate, then render, every time; the prose must be final before the
+   renderer sees it:
 
    ```bash
    node ~/.claude/skills/problem-brief/bin/validate-brief.mjs brief.json
@@ -177,7 +194,8 @@ falling back to mermaid.
    Comments, the chat summary, `AskUserQuestion` and freshness: `reference/publishing.md`.
    Diagrams (mermaid, archify): `reference/diagrams.md`.
 5. First publish: register the brief in memory and store its `url`
-   (`reference/memory-and-hooks.md`).
+   (`reference/memory-and-hooks.md`). Registering sets `owner` to the current git branch
+   (`--owner` to name another); the session-start digest warns a session on a different branch.
 6. Chat: the computed delta (≤400 words), ending with `Blocks the goal: …`,
    `Escalated, not blocking: …`, the link and the JSON path.
 
@@ -190,6 +208,9 @@ falling back to mermaid.
 - An id or coinage you cannot explain in plain words in the same sentence.
 - An entry the conversation ruled on still reading *awaiting your ruling*.
 - Reaching for the HTML instead of the JSON; publishing without sending the link.
+- Rendering, then humanizing: a render after a prose change is a render thrown away.
+- Starting work on a ruling for a brief this session does not own.
+- Marking a decision the operator withdrew as `superseded`, so it stays on the page.
 - The operator saying "I already told you".
 
 ## Files
@@ -202,7 +223,7 @@ falling back to mermaid.
 | `reference/publishing.md` | Publishing, comments, chat summary, freshness, `AskUserQuestion`. |
 | `reference/memory-and-hooks.md` | Memory registration, hooks, recovery, retiring. |
 | `reference/diagrams.md` | Mermaid and archify diagrams. |
-| `bin/*.mjs` | Validator, renderer, delta, context, comments, memory, retire, extract — run with `node`. |
+| `bin/*.mjs` | Validator, renderer, delta, context, comments, memory, retire, withdraw, extract — run with `node`. |
 
 The source repository (github.com/zaytsevand/problem-brief) also holds `install.sh` /
 `install.ps1` (install, hooks, CLAUDE.md line) and `test/brief.test.mjs` (run
