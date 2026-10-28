@@ -59,8 +59,11 @@ It stops everything; use it only when the work cannot continue without the answe
 never to deliver questions the page could hold. When the operator asks for it instead of a
 page: same content rules (plain English, problem first, grouped by root cause, recommended
 option first labelled `(Recommended)`), same state check and search first. Ask only
-`blocks-goal` entries; list `escalated` ones in the message. Record each answer in the JSON
-as it comes back, then the chat summary.
+`blocks-goal` entries; list `escalated` ones in the message.
+
+Batch: one call holds up to four questions, one per entry, so ask four entries at a time,
+not one. Write every answer from a call into the JSON in one edit; validate, render, publish
+and post the chat summary once, after the last call, not after each answer.
 
 The operator may see only the dialog, so each question carries the whole entry, not a
 digest of it. Map the entry onto the fields; every part lands somewhere:
@@ -75,4 +78,5 @@ digest of it. Map the entry onto the fields; every part lands somewhere:
 
 Each fact appears once. The question never lists the options, and a description never
 restates its label or the question. More than four options: ask the first four, name the
-rest in the question. After the answer, do not echo it back; record it and move on.
+rest in the question. Read each answer back: a selected option, by restating its first
+line; a free-text answer (`Other`, notes), in your own words, so a misreading shows.
