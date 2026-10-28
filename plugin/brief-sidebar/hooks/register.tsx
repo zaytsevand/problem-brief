@@ -14,6 +14,7 @@ const NONE = '-'
 const briefs = atom({ plugin: 'brief-sidebar', key: 'briefs' } as const, [])
 const sessionSlug = atom({ plugin: 'brief-sidebar', key: 'sessionSlug' } as const, '')
 const inPlay = atom({ plugin: 'brief-sidebar', key: 'inPlay' } as const, [])
+const paths = atom({ plugin: 'brief-sidebar', key: 'paths' } as const, [])
 const openBrief = atom({ plugin: 'brief-sidebar', key: 'openBrief' } as const, '')
 const folded = atom({ plugin: 'brief-sidebar', key: 'folded' } as const, [])
 const sent = atom({ plugin: 'brief-sidebar', key: 'sent' } as const, {})
@@ -24,6 +25,8 @@ const upkeep = atom(
 
 // A bare file name counts too: a command run from inside the briefs folder names only the file.
 const BRIEF_PATH = /([A-Za-z0-9._-]+)\.brief\.json/g
+// An absolute or ~ path to `<slug>.brief.json` or `<slug>/brief.json`, anywhere on disk.
+const BRIEF_FILE = /(?<=^|[\s"'=(])(?:~|\/)[^\s"'`\\]*?\/(?:[A-Za-z0-9._-]+\.)?brief\.json/g
 const WRITES_FILE = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
 const SHELL_WORK = /\bgit (commit|push|merge)\b|\bgh pr (create|merge|edit)\b/
 
@@ -132,8 +135,28 @@ function toBrief(slug: string, path: string, raw: Raw): BriefView {
   }
 }
 
+// `$.store` is shared by every session here: each brief's last writer, so any sidebar's reply goes back to it.
+const authorKey = (path: string) => `author:${path}`
+
+async function markAuthor($: EngineInterface, slugs: string[]): Promise<void> {
+  if (slugs.length === 0) return
+  const me = await $.session.id()
+  for (const b of await read($, briefs)) if (slugs.includes(b.slug)) await $.store.set(authorKey(b.path), me)
+}
+
+function slugOf(path: string): string {
+  const parts = path.split('/')
+  const name = parts.pop() ?? ''
+  return name === 'brief.json' ? (parts.pop() ?? '') : name.slice(0, -'.brief.json'.length)
+}
+
+function filesIn(text: string, home: string): string[] {
+  return [...text.matchAll(BRIEF_FILE)].map(m => (m[0].startsWith('~') ? home + m[0].slice(1) : m[0]))
+}
+
 function slugsIn(text: string): string[] {
-  return [...text.matchAll(BRIEF_PATH)].map(m => m[1] ?? '').filter(Boolean)
+  const named = [...text.matchAll(BRIEF_PATH)].map(m => m[1] ?? '')
+  return [...new Set([...named, ...filesIn(text, '').map(slugOf)])].filter(Boolean)
 }
 
 function countsLine(b: BriefView): string {
@@ -178,8 +201,20 @@ function signature(listing: readonly { name: string; size: number; mtimeMs: numb
 // Cheap enough to run every few seconds: one listing, and a full read only when something changed.
 async function refreshIfChanged($: EngineInterface): Promise<void> {
   if (!dir) return reload($)
+  if ((await diskSignature($)) !== seen) await reload($)
+}
+
+// The scanned folder plus each kept path's own entry in its folder.
+async function diskSignature($: EngineInterface): Promise<string> {
   const listing = await $.fs.list(dir).catch(() => [])
-  if (signature(listing) !== seen) await reload($)
+  const kept = await read($, paths)
+  const parts = [signature(listing)]
+  for (const path of kept) {
+    const at = path.lastIndexOf('/')
+    const entry = (await $.fs.list(path.slice(0, at)).catch(() => [])).filter(f => f.name === path.slice(at + 1))
+    parts.push(`${path}=${signature(entry)}`)
+  }
+  return parts.join('#')
 }
 
 async function reload($: EngineInterface): Promise<void> {
@@ -187,12 +222,13 @@ async function reload($: EngineInterface): Promise<void> {
     dir = `${(await $.env.get('HOME')) ?? ''}/.claude/problem-brief/briefs`
   }
   const listing = await $.fs.list(dir).catch(() => [])
-  seen = signature(listing)
+  seen = await diskSignature($)
+  const found = listing
+    .filter(f => f.kind === 'file' && f.name.endsWith('.brief.json'))
+    .map(f => `${dir}/${f.name}`)
   const loaded: BriefView[] = []
-  for (const f of listing) {
-    if (f.kind !== 'file' || !f.name.endsWith('.brief.json')) continue
-    const slug = f.name.slice(0, -'.brief.json'.length)
-    const path = `${dir}/${f.name}`
+  for (const path of [...new Set([...found, ...(await read($, paths))])]) {
+    const slug = slugOf(path)
     try {
       loaded.push(toBrief(slug, path, JSON.parse(await $.fs.read(path)) as Raw))
     } catch {
@@ -292,7 +328,10 @@ export const register: Register = on => {
   })
 
   on('tool.call', async ($, e, next) => {
-    const touched = slugsIn(JSON.stringify(e))
+    const text = JSON.stringify(e)
+    const touched = slugsIn(text)
+    const files = filesIn(text, (await $.env.get('HOME').catch(() => undefined)) ?? '')
+    if (files.length > 0) await update($, paths, l => [...new Set([...l, ...files])])
     const isShell = e.tool === 'Bash'
     const command = isShell ? String((e as unknown as Raw).command ?? '') : ''
 
@@ -310,6 +349,7 @@ export const register: Register = on => {
 
     const result = await next(e)
     if (touched.length > 0) await reload($).catch(() => undefined)
+    if (WRITES_FILE.has(e.tool)) await markAuthor($, touched).catch(() => undefined)
 
     return result
   })
@@ -319,6 +359,7 @@ export const register: Register = on => {
     const verdict = judgeTurn(stampsAtStart, stampsOf(await read($, briefs)), named, await ownSlugs($))
     if (verdict.claimed.length > 0) {
       await update($, inPlay, l => [...new Set([...l, ...verdict.claimed])])
+      await markAuthor($, verdict.claimed).catch(() => undefined)
     }
     if (verdict.wrote) {
       const now = await $.clock.now()
@@ -377,6 +418,12 @@ export const register: Register = on => {
         const at = await $.clock.now()
         await update($, sent, m => ({ ...m, [k]: [...(m[k] ?? []), { text: shownText, at }] }))
         await update($, inPlay, l => [...new Set([...l, brief.slug])])
+        const author = await $.store.get(authorKey(brief.path)).catch(() => undefined)
+        if (typeof author === 'string' && author !== (await $.session.id())) {
+          const r = await $.session.send({ to: { sessionId: author }, text: prompt })
+          if (r.isDelivered) return void (await $.ui.toast(`Reply sent to session ${author}, which last wrote this brief`))
+          await $.ui.toast(`Session ${author} not reached (${r.reason}); reply sent here instead`)
+        }
         await $.prompt.submit({ text: prompt, asUser: true })
       })().catch(err => $.ui.toast(`Reply not sent: ${String(err)}`))
 

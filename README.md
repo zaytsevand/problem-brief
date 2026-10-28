@@ -90,7 +90,16 @@ keep the briefs it works on up to date.
 A brief counts as the session's own when the session writes it, when you reply
 in it from the pane, or when it is named after the session
 (`session-<first 8 characters of the session id>.brief.json`), which makes a
-safe place to try it out. The installer adds the plugin's folder to
+safe place to try it out. A brief stored anywhere else, such as
+`~/.claude/briefs/<slug>/brief.json`, shows once the session names its path in a
+tool call; the session keeps those paths as its own state, not in the context.
+
+A reply goes to the session that last wrote the brief, not necessarily the one
+whose pane you typed it in, so the session holding the work records it. When
+that session is this one, nobody has written the brief yet, or the other session
+cannot be reached, the reply goes to the open session, and a notice says which.
+
+The installer adds the plugin's folder to
 `CLAUDE_CODE_PLUGIN_DIRS` in the `env` block of `~/.claude/settings.json`;
 `--uninstall` takes it out again. The plugin lives in `plugin/brief-sidebar`,
 with its tests: `claude plugin test plugin/brief-sidebar`.
