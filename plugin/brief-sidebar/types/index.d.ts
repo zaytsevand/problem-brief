@@ -50,6 +50,8 @@ declare module 'claude-code' {
       briefs: BriefView[]
       sessionSlug: string
       inPlay: string[]
+      // Brief files this session named, as absolute paths: loaded wherever they live.
+      paths: string[]
       openBrief: string
       folded: string[]
       sent: Record<string, SentComment[]>

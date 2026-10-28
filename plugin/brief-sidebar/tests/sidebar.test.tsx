@@ -30,6 +30,13 @@ const FILES: Record<string, unknown> = {
   },
 }
 
+// A brief kept outside the scanned folder, as `<slug>/brief.json`: found only through the session's own paths.
+const ELSEWHERE = '/home/x/.claude/briefs/coord/brief.json'
+FILES[ELSEWHERE] = {
+  title: 'Coordinator brief',
+  decisions: [{ id: 'Q-18', title: 'A question kept elsewhere', short: 'kept elsewhere', status: 'open', bearing: 'escalated' }],
+}
+
 const PANE = {
   plugin: 'brief-sidebar',
   component: 'Pane',
@@ -37,13 +44,15 @@ const PANE = {
   props: { title: 'Open questions', isFocused: true, bodyColumns: 60, placement: 'dock' } as unknown as RenderPropsOf['Pane'],
 } as const
 
-function seedDisk(on: On) {
+function seedDisk(on: On, store: Record<string, unknown> = {}) {
   mock.env(on, { HOME: '/home/x' })
   mock.clock(on)
+  mock.store(on, store)
+  on('session.id', async () => ({ value: 's-me' }))
   on('fs.list', async (_$, e) => ({
-    value: e.path === DIR
-      ? Object.keys(FILES).map(p => ({ name: p.slice(DIR.length + 1), kind: 'file', size: 1, mtimeMs: 0 }) as FsEntry)
-      : [],
+    value: Object.keys(FILES)
+      .filter(p => p.slice(0, p.lastIndexOf('/')) === e.path)
+      .map(p => ({ name: p.slice(e.path.length + 1), kind: 'file', size: 1, mtimeMs: 0 }) as FsEntry),
   }))
   on('fs.read', async (_$, e) => ({ value: JSON.stringify(FILES[e.path]) }))
   on('ui.status', async () => ({ value: undefined }))
@@ -171,4 +180,91 @@ test('an entry with no status field counts as open, as the page renders it', asy
   expect(await ui.find({ type: 'Button', text: /Should the job retry/ })).toBeDefined()
   await ui.unmount()
   q.status = before
+})
+
+test('a brief named by path outside the folder is kept as session metadata and loaded', async ($, on) => {
+  seedDisk(on)
+  const seen: string[] = []
+  on('prompt.submit', async (_$, e) => {
+    seen.push((e.context ?? []).join('\n'))
+    return { text: e.text, context: e.context }
+  })
+
+  await $.tool.call({ tool: 'Bash', command: `node validate.mjs ~/.claude/briefs/coord/brief.json` } as never)
+  await $.tool.call({ tool: 'Edit', file_path: ELSEWHERE, old_string: 'a', new_string: 'b' })
+  await $.prompt.submit({ text: 'go on', ...USER } as never)
+  expect(seen[0]).toContain(ELSEWHERE)
+  expect(seen[0]).toContain('Q-18 (kept elsewhere)')
+})
+
+test('a write records this session as the brief\'s last writer, so its own replies stay here', async ($, on) => {
+  seedDisk(on, { [`author:${PATH}`]: 's-other' })
+  const texts: string[] = []
+  const sends: string[] = []
+  on('prompt.submit', async (_$, e) => {
+    texts.push(e.text)
+    return { text: e.text, context: e.context }
+  })
+  on('session.send', async (_$, e) => {
+    sends.push(e.to)
+    return { isDelivered: true }
+  })
+  await $.tool.call({ tool: 'Edit', file_path: PATH, old_string: 'a', new_string: 'b' })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.input({ key: 'c:demo#Q-1:0', text: 'Keep it here' })
+  expect(texts.some(t => t.includes('Keep it here'))).toBe(true)
+  expect(sends).toEqual([])
+})
+
+test('a reply goes to the session that last wrote the brief, not the open one', async ($, on) => {
+  seedDisk(on, { [`author:${PATH}`]: 's-other' })
+  const texts: string[] = []
+  const sends: { to: unknown; text: string }[] = []
+  const toasts: string[] = []
+  on('prompt.submit', async (_$, e) => {
+    texts.push(e.text)
+    return { text: e.text, context: e.context }
+  })
+  on('session.send', async (_$, e) => {
+    sends.push({ to: e.to, text: e.text })
+    return { isDelivered: true }
+  })
+  on('ui.toast', async (_$, e) => {
+    toasts.push(String((e as unknown as { text: string }).text))
+    return { value: undefined }
+  })
+  await $.tool.call({ tool: 'Read', file_path: PATH })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'f:demo' })
+
+  await ui.input({ key: 'c:demo#Q-1:0', text: 'Yes, once, after a pause' })
+  expect(sends).toHaveLength(1)
+  expect(JSON.stringify(sends[0]?.to)).toContain('s-other')
+  expect(sends[0]?.text).toContain('Comment on Q-1')
+  expect(sends[0]?.text).toContain(PATH)
+  expect(texts.some(t => t.includes('Comment on Q-1'))).toBe(false)
+  expect(toasts.join('\n')).toContain('s-other')
+})
+
+test('a reply whose writer cannot be reached falls back to the open session and says so', async ($, on) => {
+  seedDisk(on, { [`author:${PATH}`]: 's-gone' })
+  const texts: string[] = []
+  const toasts: string[] = []
+  on('prompt.submit', async (_$, e) => {
+    texts.push(e.text)
+    return { text: e.text, context: e.context }
+  })
+  on('session.send', async () => ({ isDelivered: false, reason: 'the recipient is gone' }))
+  on('ui.toast', async (_$, e) => {
+    toasts.push(String((e as unknown as { text: string }).text))
+    return { value: undefined }
+  })
+  await $.tool.call({ tool: 'Read', file_path: PATH })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'f:demo' })
+
+  await ui.input({ key: 'c:demo#Q-1:0', text: 'Yes, once, after a pause' })
+  expect(texts.some(t => t.includes('Comment on Q-1'))).toBe(true)
+  expect(toasts.join('\n')).toContain('the recipient is gone')
 })
