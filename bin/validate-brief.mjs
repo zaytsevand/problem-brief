@@ -74,7 +74,7 @@ const KNOWN_KEYWORDS = new Set([
   "$schema", "$id", "$ref", "$defs", "title", "description", "default",
   "type", "required", "properties", "additionalProperties", "items",
   "enum", "const", "pattern", "format",
-  "minLength", "maxLength", "minItems", "maxItems", "minimum", "maximum",
+  "minLength", "maxLength", "minItems", "maxItems", "uniqueItems", "minimum", "maximum",
   "allOf", "anyOf", "if", "then", "propertyNames",
 ]);
 
@@ -167,6 +167,11 @@ class Validator {
       if (schema.maxItems && value.length > schema.maxItems) {
         this.add(path, `allows at most ${schema.maxItems} ${plural(schema.maxItems, "item")}, has ${value.length}`,
           schema.description);
+      }
+      if (schema.uniqueItems) {
+        const keys = value.map((v) => JSON.stringify(v));
+        const twice = [...new Set(keys.filter((k, i) => keys.indexOf(k) !== i))];
+        if (twice.length) this.add(path, `lists ${twice.join(", ")} more than once`, "each item belongs here once");
       }
       if (schema.items) value.forEach((v, i) => this.check(v, schema.items, `${path}[${i}]`));
     }
@@ -651,7 +656,7 @@ const CITED = /\b[QR]-\d+\b/g;
 /* Ids cited as this brief's own: bare, or under its binding's prefix. An id
    under another prefix points at another brief and is not checked here. */
 const PREFIXED = /(?:\b([A-Za-z0-9][A-Za-z0-9._#-]*)\/)?\b([QR]-\d+)\b/g;
-const ownCitations = (text, brief) =>
+export const ownCitations = (text, brief) =>
   [...String(text).matchAll(PREFIXED)].filter((m) => !m[1] || m[1] === brief.binding?.ref).map((m) => m[2]);
 
 /* Three or more entries named in one sentence is a list written as prose: the

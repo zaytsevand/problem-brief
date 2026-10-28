@@ -175,7 +175,7 @@ cite it. It moves through four states instead:
 
 The one exception is a decision the operator withdraws as wrong from the start,
 such as a misread ruling that later questions were built on. It is deleted along
-with everything that grew from it, its number goes into `withdrawnIds` so it is
+with everything that grew from it by `bin/brief-withdraw.mjs`, its number goes into `withdrawnIds` so it is
 never reused, and the validator fails until no mention of it is left. Git keeps
 the record.
 

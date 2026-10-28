@@ -695,6 +695,52 @@ test("a withdrawn id is never reissued and nothing may still cite it", () => {
   for (const at of ["blockedBy", "→ brief", "history[0]"]) {
     assert.ok(left.errors.some((m) => m.includes(at) && m.includes("which was withdrawn")), `${at}: ${left.errors.join("\n")}`);
   }
+
+  const twice = messages(brief([entry("Q-2", live)], { withdrawnIds: ["Q-1", "Q-1"] }));
+  assert.ok(twice.errors.some((m) => m.includes('withdrawnIds lists "Q-1" more than once')), twice.errors.join("\n"));
+});
+
+test("withdrawing deletes the entry and what hangs on it, restores the ruling it replaced, and lists what is left by hand", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const path = join(dir, "b.json");
+  const original = brief([entry("Q-1", live), entry("Q-2", { ...live, brief: "Built on the answer to Q-1, so duplicate postings reach the ledger by hand." })], {
+    rulings: [ruling("R-1", { status: "replaced", replacedBy: "R-2" }), ruling("R-2", { entries: ["Q-1"] })],
+    outstanding: [{ summary: "Wire the dedup check", created: T, updated: T, blockedBy: "Q-1" }],
+    changes: [{ kind: "raised", id: "Q-1", note: "Raised." }, { kind: "raised", id: "Q-2", note: "Raised." }],
+    history: [{ version: "2026-09-14T10:00Z", changes: [{ kind: "raised", id: "Q-1", note: "Raised." }] }],
+  });
+  writeFileSync(path, JSON.stringify(original));
+
+  const preview = run("brief-withdraw.mjs", [path, "Q-1", "R-2", "--dry-run"]);
+  assert.match(preview, /would delete 1 entry\n/);
+  assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), original);
+
+  const out = run("brief-withdraw.mjs", [path, "Q-1", "R-2"]);
+  const after = JSON.parse(readFileSync(path, "utf8"));
+  assert.deepEqual(after.decisions.map((e) => e.id), ["Q-2"]);
+  assert.deepEqual(after.rulings.map((r) => [r.id, r.status, r.replacedBy]), [["R-1", "active", undefined]]);
+  assert.deepEqual(after.outstanding, []);
+  assert.deepEqual(after.changes.map((c) => c.id), ["Q-2"]);
+  assert.equal(after.history.length, 0);
+  assert.deepEqual(after.withdrawnIds, ["Q-1", "R-2"]);
+  assert.match(out, /made R-1 .* active again/);
+  assert.match(out, /decisions\[0\] → brief cites Q-1, which was withdrawn/);
+  assert.throws(() => run("brief-withdraw.mjs", [path, "Q-9"]), /not an entry or ruling/);
+});
+
+/* ── issue #18: a brief's rulings are carried out by its owner ─────────── */
+
+test("registering sets the owner once; the digest tells a session on another branch to record only", async () => {
+  const { digest } = await import("../bin/brief-context.mjs");
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const path = join(dir, "b.brief.json");
+  writeFileSync(path, JSON.stringify(brief([entry("Q-1", live)])));
+  run("brief-memory.mjs", [path, "--memory-dir", join(dir, "memory"), "--owner", "feature/importer"]);
+  run("brief-memory.mjs", [path, "--memory-dir", join(dir, "memory"), "--owner", "elsewhere"]);
+  const b = JSON.parse(readFileSync(path, "utf8"));
+  assert.equal(b.owner, "feature/importer");
+  assert.match(digest(b, { branch: "feature/importer" }), /Owned by feature\/importer: its rulings are carried out there/);
+  assert.match(digest(b, { branch: "main" }), /this session is on main\. Record a ruling .* do not carry it out/);
 });
 
 test("the summary stays under 400 words however much moved", async () => {

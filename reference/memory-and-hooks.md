@@ -15,7 +15,10 @@ node ~/.claude/skills/problem-brief/bin/brief-memory.mjs brief.json --memory-dir
 Writes one `project` memory file, `problem-brief-<name>.md` (where the JSON lives, where it
 is published, the goal, "check it before asking anything"), and keeps its single line in
 `MEMORY.md`. Re-running updates both. No memory directory → skip. After the first publish
-store the page address in the brief's own `url`.
+store the page address in the brief's own `url`. The first registration also sets the brief's
+`owner` to the current git branch (`--owner <branch>` names another); it is never moved after.
+The session-start hook then tells a session on any other branch to record that brief's
+rulings without carrying them out.
 
 ## Rulings about how to work
 

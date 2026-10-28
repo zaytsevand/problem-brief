@@ -84,6 +84,7 @@
     },
     "withdrawnIds": {
       "type": "array",
+      "uniqueItems": true,
       "items": { "type": "string", "pattern": "^[QR]-\\d+$" },
       "description": "Ids of entries and rulings deleted because the operator withdrew them as wrong from the start. Only the bare ids are kept, so a number is never issued again; nothing about them is shown, and any citation of one left in the brief is an error. Git history keeps the deleted content."
     },

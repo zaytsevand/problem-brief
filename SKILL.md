@@ -15,7 +15,7 @@ description: >-
   running a chorus review, or for converting chorus records to the shared schema.
 license: MIT
 metadata:
-  version: "1.4"
+  version: "1.5"
   requires:
     - archify
     - humanizer
@@ -83,8 +83,9 @@ does not own: ask once before acting on it.
 
 **Withdrawn, not retracted.** `superseded` is for a problem that went away. When the operator
 says a decision was misunderstood or wrong from the start and asks for it removed, delete
-it and everything built on it, and list the ids in `withdrawnIds`. Name the ids to the
-operator first; procedure: `reference/entry-format.md`.
+it and everything built on it with `bin/brief-withdraw.mjs`, which lists the ids in
+`withdrawnIds`. Name the ids to the operator first (`--dry-run`); procedure:
+`reference/entry-format.md`.
 
 ## Before raising anything — search, by class
 
@@ -192,8 +193,9 @@ falling back to mermaid.
 4. Publish with the `Artifact` tool, republishing to the same URL; read comments first.
    Comments, the chat summary, `AskUserQuestion` and freshness: `reference/publishing.md`.
    Diagrams (mermaid, archify): `reference/diagrams.md`.
-5. First publish: register the brief in memory, store its `url`
-   (`reference/memory-and-hooks.md`) and set `owner` to this branch or worktree.
+5. First publish: register the brief in memory and store its `url`
+   (`reference/memory-and-hooks.md`). Registering sets `owner` to the current git branch
+   (`--owner` to name another); the session-start digest warns a session on a different branch.
 6. Chat: the computed delta (≤400 words), ending with `Blocks the goal: …`,
    `Escalated, not blocking: …`, the link and the JSON path.
 
@@ -221,7 +223,7 @@ falling back to mermaid.
 | `reference/publishing.md` | Publishing, comments, chat summary, freshness, `AskUserQuestion`. |
 | `reference/memory-and-hooks.md` | Memory registration, hooks, recovery, retiring. |
 | `reference/diagrams.md` | Mermaid and archify diagrams. |
-| `bin/*.mjs` | Validator, renderer, delta, context, comments, memory, retire, extract — run with `node`. |
+| `bin/*.mjs` | Validator, renderer, delta, context, comments, memory, retire, withdraw, extract — run with `node`. |
 
 The source repository (github.com/zaytsevand/problem-brief) also holds `install.sh` /
 `install.ps1` (install, hooks, CLAUDE.md line) and `test/brief.test.mjs` (run

@@ -55,13 +55,20 @@ Never renumbered, and never deleted unless withdrawn (below). The page is refres
 misunderstood or wrong from the start and asks for it removed. Leaving it as `superseded`
 keeps it on the page, where every later session reads it as ground to build on.
 
-1. Name to the operator every id you will delete: the withdrawn entry or ruling, and the
-   entries, rulings, amendments, outstanding and mechanical items that exist only because of it.
-2. Delete them, and every `changes` and `history` note that mentions them. No marker stays.
-3. Add each deleted id to `withdrawnIds`, so the number is never issued again.
-4. Run the validator. It fails on every remaining citation of a withdrawn id, in prose,
-   `blockedBy`, a ruling's `entries` or evidence; remove or rewrite each one until it passes.
-5. Comment threads on a deleted entry: resolve them after marking each with
+1. Work out every entry and ruling that exists only because of the withdrawn one, and
+   preview the deletion; name the ids and what it prints to the operator before going on:
+
+   ```bash
+   node ~/.claude/skills/problem-brief/bin/brief-withdraw.mjs brief.json Q-3 R-2 --dry-run
+   ```
+
+2. Run it without `--dry-run`. It deletes those entries and rulings, the outstanding items
+   blocked on them and every `changes` and `history` note that cites them; makes a ruling
+   active again where a withdrawn one had replaced it; lists the ids in `withdrawnIds`, so
+   no number is issued again; and moves `updated`. No marker stays.
+3. It ends with every citation still left (prose, an amendment, a mechanical item,
+   evidence). Those need judgement: rewrite or remove each, then validate until it passes.
+4. Comment threads on a deleted entry: resolve them after marking each with
    `brief-comments.mjs --no-ruling <url> <thread> "withdrawn"`.
 
 Git keeps what was deleted; the brief does not. The chat delta reports `Q-n withdrawn and deleted`.
