@@ -119,6 +119,9 @@ Ask Claude Code for a brief and the skill picks itself up:
 
 > group the review findings by root cause and build me a brief
 
+Type `/problem-brief` on its own and Claude walks you through every open question in the
+current brief, four per dialog, then records your answers and republishes once.
+
 Validate first — always, and especially when the JSON was generated:
 
 ```sh

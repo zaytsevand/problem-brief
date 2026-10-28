@@ -59,7 +59,8 @@ It stops everything; use it only when the work cannot continue without the answe
 never to deliver questions the page could hold. When the operator asks for it instead of a
 page: same content rules (plain English, problem first, grouped by root cause, recommended
 option first labelled `(Recommended)`), same state check and search first. Ask only
-`blocks-goal` entries; list `escalated` ones in the message.
+`blocks-goal` entries; list `escalated` ones in the message. The exception is the walk a bare
+`/problem-brief` starts (`SKILL.md`): it asks every `open` entry, goal blockers first.
 
 Batch: one call holds up to four questions, one per entry, so ask four entries at a time,
 not one. Write every answer from a call into the JSON in one edit; validate, render, publish

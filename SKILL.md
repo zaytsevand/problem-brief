@@ -45,6 +45,22 @@ understood from the page alone is not finished.
 - The operator answers, rules or comments on something a brief holds — even mid-task.
 - Not for a progress or completion report with nothing to decide; that goes in chat.
 
+## Called as `/problem-brief` with nothing else asked — walk the open questions
+
+The default action is an interactive walk of every `open` entry, the escalated ones as well as
+the goal blockers:
+
+1. Pick the brief: the one this session owns, else the one registered for this project in
+   memory. More than one candidate: ask which first, in one `AskUserQuestion`.
+2. Run the state check (below), so nothing already answered is asked again.
+3. Ask every entry still `open` through `AskUserQuestion`, goal blockers first, following
+   the question variant in `reference/publishing.md`: four per dialog, read-back, one
+   record and publish at the end.
+4. No open entries: say so in one line with the link; do not publish.
+
+Arguments after the command (`/problem-brief refresh`, a subject, a request) replace this
+default with what they ask for.
+
 ## When the operator answers or rules — this turn, before anything else
 
 Whatever else you were doing, the turn the answer arrives produces these, in order:
