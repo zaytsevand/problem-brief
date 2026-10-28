@@ -78,4 +78,5 @@ digest of it. Map the entry onto the fields; every part lands somewhere:
 
 Each fact appears once. The question never lists the options, and a description never
 restates its label or the question. More than four options: ask the first four, name the
-rest in the question. Do not echo answers back.
+rest in the question. Read each answer back: a selected option, by restating its first
+line; a free-text answer (`Other`, notes), in your own words, so a misreading shows.
