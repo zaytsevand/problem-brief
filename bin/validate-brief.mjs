@@ -674,19 +674,30 @@ function enumerationWarnings(brief) {
 
 function referenceErrors(brief) {
   const ids = new Set([...(brief.decisions ?? []), ...(brief.rulings ?? [])].map((x) => x?.id));
+  const withdrawn = new Set(brief.withdrawnIds ?? []);
   const seen = new Set();
   const out = [];
+  /* A withdrawn id is never issued again, and nothing may still lean on it:
+     every leftover mention is how a retracted decision keeps shaping work. */
+  [...(brief.decisions ?? []).map((x, i) => [x, `decisions[${i}]`]), ...(brief.rulings ?? []).map((x, i) => [x, `rulings[${i}]`])]
+    .forEach(([x, at]) => {
+      if (x?.id && withdrawn.has(x.id)) out.push({ path: `${at} (${x.id})`, message: `re-uses ${x.id}, which was withdrawn`,
+        hint: "a withdrawn number is never issued again — take the next free one" });
+    });
   const walk = (v, path) => {
     if (typeof v === "string") {
       for (const id of ownCitations(v, brief)) {
         if (ids.has(id) || seen.has(`${path}|${id}`)) continue;
         seen.add(`${path}|${id}`);
-        out.push({ path, severity: "warning", message: `cites ${id}, which is not ${id.startsWith("R-") ? "a ruling" : "an entry"} on this page`,
-          hint: `fix the id, or add the ${id.startsWith("R-") ? "ruling" : "entry"} it refers to` });
+        out.push(withdrawn.has(id)
+          ? { path, message: `cites ${id}, which was withdrawn`,
+            hint: "remove the mention, or the note that holds it — a withdrawn decision must leave nothing behind for later work to build on" }
+          : { path, severity: "warning", message: `cites ${id}, which is not ${id.startsWith("R-") ? "a ruling" : "an entry"} on this page`,
+            hint: `fix the id, or add the ${id.startsWith("R-") ? "ruling" : "entry"} it refers to` });
       }
     } else if (Array.isArray(v)) v.forEach((x, i) => walk(x, `${path}[${i}]`));
     else if (v && typeof v === "object") {
-      for (const [k, x] of Object.entries(v)) if (k !== "id") walk(x, path ? `${path} → ${k}` : k);
+      for (const [k, x] of Object.entries(v)) if (k !== "id" && k !== "withdrawnIds") walk(x, path ? `${path} → ${k}` : k);
     }
   };
   walk(brief, "");

@@ -76,6 +76,7 @@ test('no nudge before a brief is in play; a nudge naming it, its path and labels
   await $.prompt.submit({ text: 'go on', ...USER } as never)
   expect(seen[1]).toContain(PATH)
   expect(seen[1]).toContain('Q-1 (job retry)')
+  expect(seen[1]).toContain("Other sessions' briefs:")
 })
 
 test('the session brief is open on top, other briefs folded to a count', async ($, on) => {

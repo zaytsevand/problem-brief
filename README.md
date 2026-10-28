@@ -109,7 +109,7 @@ with its tests: `claude plugin test plugin/brief-sidebar`.
 | Skill | Does what here | Without it |
 |---|---|---|
 | [archify](https://github.com/tt-a1i/archify) | Draws the architecture, lifecycle, data-flow and sequence pictures. | You are left with mermaid — fine for a branch, poor for a real system view. |
-| [humanizer](https://github.com/blader/humanizer) | Strips the tells of machine-written prose before publishing. | The brief reads as generated, which is what makes a reader stop trusting it. |
+| [humanizer](https://github.com/blader/humanizer) | Strips the tells of machine-written prose before the page is rendered. | The brief reads as generated, which is what makes a reader stop trusting it. |
 
 The install scripts check for both and print how to get them.
 
@@ -172,6 +172,12 @@ cite it. It moves through four states instead:
 | `decided` | outstanding work | A way forward was chosen; it has not been carried out. |
 | `complete` | complete | The chosen option was carried out. Closed, with proof. |
 | `superseded` | retracted | The problem went away or was overtaken. |
+
+The one exception is a decision the operator withdraws as wrong from the start,
+such as a misread ruling that later questions were built on. It is deleted along
+with everything that grew from it, its number goes into `withdrawnIds` so it is
+never reused, and the validator fails until no mention of it is left. Git keeps
+the record.
 
 A brief names its `goal`, and every entry still waiting on a ruling or on work
 says how it bears on that goal: it **blocks the goal**, or it is **escalated,

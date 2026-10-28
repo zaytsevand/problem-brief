@@ -677,6 +677,24 @@ test("the summary lists what moved, new entries first, then what waits on the re
   assert.match(text, /Blocks the goal: nothing\nEscalated, not blocking: Q-2/);
   assert.match(delta(after, after), /Nothing moved since the last publish/);
   assert.match(delta(after, brief([after.decisions[1]])), /Q-1 is missing from this version/);
+  assert.match(delta(after, brief([after.decisions[1]], { withdrawnIds: ["Q-1"] })), /Q-1 withdrawn and deleted/);
+});
+
+/* ── issue #14: withdrawing a decision that was wrong from the start ────── */
+
+test("a withdrawn id is never reissued and nothing may still cite it", () => {
+  const clean = messages(brief([entry("Q-2", { bearing: "escalated", bearingReason: "Not on the path." })], { withdrawnIds: ["Q-1", "R-1"] }));
+  assert.ok(clean.ok, clean.errors.join("\n"));
+
+  const reused = messages(brief([entry("Q-1")], { withdrawnIds: ["Q-1"] }));
+  assert.ok(reused.errors.some((m) => m.includes("re-uses Q-1, which was withdrawn")));
+
+  const left = messages(brief([entry("Q-2", { blockedBy: ["Q-1"], brief: "Follows from the rule in R-1, which drives duplicate postings to the ledger by hand." })],
+    { withdrawnIds: ["Q-1", "R-1"], history: [{ version: "2026-09-14T10:00Z", changes: [{ kind: "raised", id: "Q-1", note: "Raised Q-1." }] }] }));
+  assert.ok(!left.ok);
+  for (const at of ["blockedBy", "→ brief", "history[0]"]) {
+    assert.ok(left.errors.some((m) => m.includes(at) && m.includes("which was withdrawn")), `${at}: ${left.errors.join("\n")}`);
+  }
 });
 
 test("the summary stays under 400 words however much moved", async () => {

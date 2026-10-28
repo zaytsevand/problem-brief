@@ -177,7 +177,7 @@ function commentPrompt(brief: BriefView, q: Entry, text: string): string {
     text,
     '',
     `Record this in ${brief.path} this turn (on ${q.id}: decision, status or a ruling,`,
-    'as the problem-brief skill says), act on it, and republish the brief page.',
+    'as the problem-brief skill says), act on it if this session owns the brief, and republish the brief page.',
   ].join('\n')
 }
 
@@ -186,7 +186,7 @@ function rulingPrompt(brief: BriefView, q: Entry, o: Option): string {
     `Ruling on ${q.id} ("${q.title}") in the problem brief "${brief.title}": take "${o.label}".`,
     '',
     `Record it in ${brief.path} this turn: the decision on ${q.id}, status decided,`,
-    'then carry it out as the problem-brief skill says and republish the brief page.',
+    'then carry it out if this session owns the brief, as the problem-brief skill says, and republish the brief page.',
   ].join('\n')
 }
 
@@ -265,8 +265,10 @@ async function refreshStatus($: EngineInterface): Promise<void> {
 
 async function upkeepNote($: EngineInterface): Promise<string | null> {
   const mine = await ownSlugs($)
-  const ours = (await read($, briefs)).filter(b => mine.includes(b.slug))
+  const all = await read($, briefs)
+  const ours = all.filter(b => mine.includes(b.slug))
   if (ours.length === 0) return null
+  const others = all.filter(b => !mine.includes(b.slug))
 
   const { turnsWithWork } = await read($, upkeep)
   const lines = [
@@ -278,6 +280,12 @@ async function upkeepNote($: EngineInterface): Promise<string | null> {
     'If this message answers, rules on or comments on any entry, record it in that brief this turn,',
     'and record any new finding, decision or question there rather than only in chat.',
   ]
+  if (others.length > 0) {
+    lines.push(
+      `Other sessions' briefs: ${others.map(b => b.title).join('; ')}.`,
+      'A ruling on one of these is recorded, not carried out here: say which session should carry it out.',
+    )
+  }
   if (turnsWithWork > 0) {
     lines.push(
       `The last ${turnsWithWork} turn(s) changed code or git state without touching a brief:`,

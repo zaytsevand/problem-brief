@@ -42,7 +42,7 @@ asking. Irreversible → always the operator's call, however obvious.
 
 ## An entry's life
 
-Never deleted, never renumbered. The page is refreshed by moving entries along.
+Never renumbered, and never deleted unless withdrawn (below). The page is refreshed by moving entries along.
 
 | `status` | Page shows | Means | Needs |
 |---|---|---|---|
@@ -50,6 +50,21 @@ Never deleted, never renumbered. The page is refreshed by moving entries along.
 | `decided` | *outstanding work* | A way forward was chosen, **not yet carried out**. | `decision` (option, date, why), `bearing`, `bearingReason` |
 | `complete` | *complete* | The chosen option was carried out (a fix, an answer, a scope cut, a settled measurement). | `resolution`: date, what happened, proof |
 | `superseded` | *retracted* | The problem went away or was overtaken. | — |
+
+**Withdrawing.** The one exception to "never deleted": the operator says a decision was
+misunderstood or wrong from the start and asks for it removed. Leaving it as `superseded`
+keeps it on the page, where every later session reads it as ground to build on.
+
+1. Name to the operator every id you will delete: the withdrawn entry or ruling, and the
+   entries, rulings, amendments, outstanding and mechanical items that exist only because of it.
+2. Delete them, and every `changes` and `history` note that mentions them. No marker stays.
+3. Add each deleted id to `withdrawnIds`, so the number is never issued again.
+4. Run the validator. It fails on every remaining citation of a withdrawn id, in prose,
+   `blockedBy`, a ruling's `entries` or evidence; remove or rewrite each one until it passes.
+5. Comment threads on a deleted entry: resolve them after marking each with
+   `brief-comments.mjs --no-ruling <url> <thread> "withdrawn"`.
+
+Git keeps what was deleted; the brief does not. The chat delta reports `Q-n withdrawn and deleted`.
 
 `decided` ≠ `complete`: ruling closes the question, not the entry. Where what was done
 drifts from what was ruled, add one `resolution.amendments` item per drift (ruled, done
