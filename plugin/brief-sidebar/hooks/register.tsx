@@ -10,6 +10,9 @@ const PANE = 'brief-sidebar'
 const TITLE = 'Open questions'
 // openBrief holds a slug, '' for "the first of this session's", or NONE once the person folded everything.
 const NONE = '-'
+const INLINE_REFUSAL =
+  'The brief sidebar needs the fullscreen layout, docked beside the transcript, and a terminal at least 110 columns wide. ' +
+  'Above the prompt it cannot scroll or take replies. Restart with CLAUDE_CODE_NO_FLICKER=1 (tmux defaults to the main screen).'
 
 const briefs = atom({ plugin: 'brief-sidebar', key: 'briefs' } as const, [])
 const sessionSlug = atom({ plugin: 'brief-sidebar', key: 'sessionSlug' } as const, '')
@@ -328,7 +331,8 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'brief-sidebar' }, async $ => {
+  on('command.run', { command: 'brief-sidebar' }, async ($, e) => {
+    if (!e.presentation.isFullscreen) return { text: INLINE_REFUSAL }
     await reload($)
     await $.ui.open({ id: PANE, title: TITLE })
 
@@ -393,6 +397,14 @@ export const register: Register = on => {
     const { Box, Text, Button, Link, Markdown } = els
     // The mobile surface has no text field: questions show, replies go through the chat there.
     const Input = 'Input' in els ? els.Input : null
+    // Above the terminal's prompt the pane can neither scroll nor take typing: say so instead of drawing a dead brief.
+    if (e.surface === 'terminal' && e.props.placement === 'inline') {
+      return (
+        <Text color="red" bold>
+          {INLINE_REFUSAL}
+        </Text>
+      )
+    }
 
     const all = await read($, briefs)
     const own = await read($, sessionSlug)
