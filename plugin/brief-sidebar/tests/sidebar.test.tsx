@@ -269,3 +269,17 @@ test('a reply whose writer cannot be reached falls back to the open session and 
   expect(texts.some(t => t.includes('Comment on Q-1'))).toBe(true)
   expect(toasts.join('\n')).toContain('the recipient is gone')
 })
+
+test('above the terminal prompt the pane refuses loudly instead of drawing a dead brief', async ($, on) => {
+  seedDisk(on)
+  await $.tool.call({ tool: 'Edit', file_path: PATH, old_string: 'a', new_string: 'b' })
+
+  const inline = await $.ui.mount({ ...PANE, props: { ...PANE.props, placement: 'inline' }, surface: 'terminal' })
+  expect(await inline.find({ type: 'Text', text: /needs the fullscreen layout/ })).toBeDefined()
+  expect(await inline.find({ type: 'Button', text: /Should the job retry/ })).toBeUndefined()
+  await inline.unmount()
+
+  const docked = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await docked.find({ type: 'Button', text: /Should the job retry/ })).toBeDefined()
+  await docked.unmount()
+})
