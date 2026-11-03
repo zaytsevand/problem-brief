@@ -15,7 +15,7 @@ description: >-
   running a chorus review, or for converting chorus records to the shared schema.
 license: MIT
 metadata:
-  version: "1.6"
+  version: "1.7"
   requires:
     - archify
     - humanizer
@@ -158,7 +158,13 @@ factual claim against the current tree, branch and run.
 | `problem` | What is wrong, in plain words. No preamble, no background, no options. | 1–2 sentences |
 | `brief` | The explanation: why it matters, in the operator's terms. (Not the brief's name.) | 2–8 sentences |
 | `evidence` | Verified artefacts: code lines, runs, commits, documents, each with a note. | 1–4 items |
-| `unwound` | How it works today (`now`, diagrams, file:line refs), then `whyWrong`. | as needed |
+| `unwound` | How it works today (`now`, diagrams, file:line refs), then `whyWrong`. Diagram or `noDiagram` (below). | as needed |
+
+**The diagram judgement, on every open or decided entry.** Ask: does it describe behaviour
+or states, and would a picture make it answerable? Parties exchanging messages over time →
+`sequenceDiagram`; states and transitions → `stateDiagram-v2`; today versus proposed → a
+drawing of each. Draw it, or write one line in `unwound.noDiagram` on why no picture helps.
+The page prints that line; the validator warns when neither is there.
 | `solutions` | Recommended option first, labelled; each priced and marked `reversible`. | 2+ options |
 
 Ids are `Q-n`, permanent, next free number for a new entry. Full field list, states and

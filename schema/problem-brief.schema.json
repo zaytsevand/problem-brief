@@ -531,6 +531,10 @@
           "items": {
             "$ref": "#/$defs/diagram"
           }
+        },
+        "noDiagram": {
+          "type": "string",
+          "description": "The diagram judgement when no picture is drawn: one line on why none helps, e.g. \"a yes/no on a wording change; no behaviour\". The page prints it so the operator can overrule it. The validator warns on an open or decided entry with neither diagrams nor this."
         }
       },
       "anyOf": [

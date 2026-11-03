@@ -159,7 +159,8 @@
       "unwound": {
         "now": "The call is wrapped in a ladder of handlers, one per known failure. Four of them set a named flag that later shows up in the run summary. The fifth handler is the catch-all at the bottom, which logs a line and returns an empty answer.\n\nAn empty answer is indistinguishable downstream from a real answer that found nothing.",
         "whyWrong": "A run with twenty silent connection drops and a run with no failures at all produce the same summary. We cannot tell a good measurement from a broken one after the fact, which is precisely what the four previous losses were.",
-        "target": "Every way this call can fail sets a named flag, and a run summary that contains any flag is not quotable as a measurement until the flags are explained."
+        "target": "Every way this call can fail sets a named flag, and a run summary that contains any flag is not quotable as a measurement until the flags are explained.",
+        "noDiagram": "One call with one missing handler; the list of handlers above says it all."
       },
       "solutions": [
         {

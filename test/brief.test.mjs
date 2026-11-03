@@ -18,6 +18,7 @@ const entry = (id, extra = {}) => ({
   id, created: T, updated: T, title: `Entry ${id}`,
   problem: "The importer posts invoices twice when retried.", brief: "Duplicate postings reach the ledger and have to be reversed by hand, which nobody notices for days.",
   evidence: [{ kind: "code", ref: "a.py:1", note: "Shows it." }],
+  unwound: { now: "A retry re-runs the whole import.", noDiagram: "One step repeats; nothing to draw." },
   solutions: [option], ...extra,
 });
 const brief = (decisions, extra = {}) => ({
@@ -1008,4 +1009,21 @@ test("the already-fixed section is folded by default, with its count in the head
   const html = render(brief([entry("Q-1", live)], { mechanical: [{ summary: "Fixed a typo in the note.", created: T, updated: T }] }));
   assert.match(html, /data-block="mechanical">\s*<details class="fold"><summary><h2>Already fixed <span class="fold-n">1<\/span><\/h2><\/summary>/);
   assert.doesNotMatch(html, /<details class="fold" open>/);
+});
+
+/* ── issue #25: the diagram judgement is made and recorded ─────────────── */
+
+test("an open or decided entry with neither a diagram nor a noDiagram reason is flagged", () => {
+  const bare = { now: "A retry re-runs the whole import." };
+  const drawn = { ...bare, diagrams: [{ kind: "mermaid", caption: "The retry.", source: "sequenceDiagram\n  A->>B: post" }] };
+  const flagged = (e) => messages(brief([e])).warnings.some((m) => m.includes("noDiagram"));
+  assert.ok(flagged(entry("Q-1", { ...live, unwound: bare })));
+  assert.ok(flagged(entry("Q-1", { ...live, status: "decided", decision: { date: "2026-09-15", chose: "a" }, unwound: bare })));
+  assert.ok(!flagged(entry("Q-1", { ...live, unwound: drawn })));
+  assert.ok(!flagged(entry("Q-1", { status: "complete", resolution: { date: "2026-09-15", note: "Fixed." }, unwound: bare })));
+});
+
+test("the noDiagram reason is printed on the page so it can be overruled", () => {
+  const html = render(brief([entry("Q-1", live)]));
+  assert.match(html, /<p class="nodiagram">No diagram: One step repeats; nothing to draw\.<\/p>/);
 });

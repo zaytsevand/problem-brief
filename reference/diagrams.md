@@ -1,5 +1,21 @@
 # Diagrams
 
+## When to draw
+
+Every open or decided entry gets the judgement: a diagram in `unwound.diagrams`, or one
+line in `unwound.noDiagram` saying why no picture helps ("a yes/no on a wording change;
+no behaviour"). The page prints the line so the operator can overrule it; the validator
+warns on an entry with neither. Cues that usually mean draw:
+
+| The entry describes | Draw |
+|---|---|
+| Parties exchanging messages over time: calls, retries, deadlines, hand-offs | mermaid `sequenceDiagram` |
+| A lifecycle: account, run or job states and what moves between them | mermaid `stateDiagram-v2` |
+| An ordering or a branch | mermaid `flowchart` |
+| Today versus proposed behaviour | one drawing of each, same kind |
+
+## Which tool draws it
+
 The choice is about who draws it, not about looks.
 
 | Kind | Use for | How |
