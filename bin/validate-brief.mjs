@@ -304,6 +304,11 @@ function semanticErrors(brief) {
       }
     }
 
+    if (["open", "decided"].includes(e?.status ?? "open") && !e?.unwound?.diagrams?.length && !e?.unwound?.noDiagram) {
+      out.push({ path: `${where} → unwound`, severity: "warning", message: "has no diagram and no noDiagram reason",
+        hint: "ask whether a picture would make this answerable: an exchange over time → sequenceDiagram, states and transitions → stateDiagram-v2, today versus proposed → a drawing of each. Draw it, or say in unwound.noDiagram in one line why none helps" });
+    }
+
     (e?.unwound?.diagrams ?? []).forEach((d, j) => {
       const p = `${where} → unwound → diagrams[${j}]`;
       if (d?.kind === "mermaid" && !d.source) {

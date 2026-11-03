@@ -59,7 +59,8 @@ function saveThreads(t) {
   writeFileSync(threadsFile(), JSON.stringify(t, null, 2), "utf8");
 }
 
-const byUrl = (briefs, url) => briefs.find((b) => b.urls.has(url));
+/* Only the brief whose own page this is, never one that merely looks related. */
+const byUrl = (briefs, url) => briefs.find((b) => b.url === url);
 
 /* ── the reminders ───────────────────────────────────────────────────────── */
 

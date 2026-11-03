@@ -11,8 +11,8 @@
  * its snapshot, its page and its comment threads. Retiring undoes all of that:
  *
  *   - removes its pointer file and its line in MEMORY.md,
- *   - clears what the hooks keep for it: the snapshot of its last publish,
- *     which page belongs to it, which of its threads were read,
+ *   - clears what the hooks keep for its page: the snapshot of its last
+ *     publish and which of its threads were read,
  *   - stamps "retired" in the brief's JSON (and moves "updated"), so it is
  *     not registered again by mistake,
  *   - lists the pages it was published at.
@@ -24,10 +24,9 @@
  * Zero dependencies. Node 18+.
  */
 
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { pointers, stateHome } from "./brief-context.mjs";
+import { pageOf, pointers, snapshotFile, stateHome } from "./brief-context.mjs";
 
 const args = process.argv.slice(2);
 const opt = (k) => { const i = args.indexOf(k); return i > -1 ? args[i + 1] : undefined; };
@@ -41,11 +40,14 @@ if (!file) {
 const path = resolve(file);
 const brief = JSON.parse(readFileSync(path, "utf8"));
 const done = [];
+const pages = new Set([brief.url].filter(Boolean));
 
 /* memory: the pointer file and its index line */
 if (memoryDir) {
   for (const p of pointers(memoryDir)) {
     if (resolve(p.brief) !== path) continue;
+    const page = pageOf(brief, p.url);
+    if (page) pages.add(page);
     unlinkSync(join(memoryDir, p.file));
     const index = join(memoryDir, "MEMORY.md");
     if (existsSync(index)) {
@@ -56,19 +58,12 @@ if (memoryDir) {
   }
 }
 
-/* the hooks' state: which pages are this brief's, their snapshot, their threads */
-const home = stateHome();
+/* the hooks' state for its pages: their snapshots and their threads */
 const read = (f, empty) => { try { return JSON.parse(readFileSync(f, "utf8")); } catch { return empty; } };
-const urlsFile = join(home, "published", "urls.json");
-const urls = read(urlsFile, {});
-const pages = new Set([brief.url, ...Object.keys(urls).filter((u) => urls[u] === brief.created)].filter(Boolean));
-for (const u of pages) delete urls[u];
-if (existsSync(urlsFile)) {
-  if (Object.keys(urls).length) writeFileSync(urlsFile, JSON.stringify(urls, null, 2), "utf8"); else unlinkSync(urlsFile);
-}
-const snap = join(home, "published", `${createHash("sha1").update(String(brief.created)).digest("hex").slice(0, 16)}.json`);
-if (existsSync(snap)) { unlinkSync(snap); done.push("removed the snapshot of its last publish"); }
-const threadsFile = join(home, "threads.json");
+const snaps = [...pages].map(snapshotFile).filter(existsSync);
+for (const s of snaps) unlinkSync(s);
+if (snaps.length) done.push("removed the snapshot of its last publish");
+const threadsFile = join(stateHome(), "threads.json");
 const threads = read(threadsFile, {});
 let cleared = 0;
 for (const u of pages) if (threads[u]) { delete threads[u]; cleared++; }
