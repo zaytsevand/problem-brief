@@ -757,7 +757,8 @@ test("the publish hook summarises against the previous publish, and ignores anyt
   const hookRun = (input) => execFileSync("node", [bin("brief-delta.mjs"), "--hook"], { encoding: "utf8", input: JSON.stringify(input), env });
   const publish = (b) => {
     writeFileSync(join(dir, "index.html"), render(b));
-    return hookRun({ tool_name: "Artifact", tool_input: { file_path: "index.html" }, cwd: dir });
+    return hookRun({ tool_name: "Artifact", tool_input: { file_path: "index.html" }, cwd: dir,
+      tool_response: "Published index.html at https://claude.ai/artifact/PAGE (Version 1)" });
   };
   const first = JSON.parse(publish(brief([entry("Q-1", live)])));
   assert.equal(first.hookSpecificOutput.hookEventName, "PostToolUse");
@@ -844,16 +845,55 @@ test("comment hooks leave other pages, replies and other tools alone", () => {
   assert.equal(hook({ ...resolveCall, tool_name: "Bash" }), null);
 });
 
-test("the publish hook remembers which page belongs to which brief", () => {
+test("two briefs with the same created stamp are each diffed against their own page", () => {
   const dir = mkdtempSync(join(tmpdir(), "brief-"));
   const env = { ...process.env, PROBLEM_BRIEF_HOME: join(dir, "home") };
-  const b = brief([entry("Q-1", live)]);
-  writeFileSync(join(dir, "index.html"), render(b));
-  execFileSync("node", [bin("brief-delta.mjs"), "--hook"], { encoding: "utf8", env, input: JSON.stringify({
-    tool_name: "Artifact", tool_input: { file_path: "index.html" }, cwd: dir,
-    tool_response: "Published index.html at https://claude.ai/artifact/NEWPAGE (Version 1)" }) });
-  const urls = JSON.parse(readFileSync(join(dir, "home", "published", "urls.json"), "utf8"));
-  assert.equal(urls["https://claude.ai/artifact/NEWPAGE"], b.created);
+  const publish = (b, url) => {
+    writeFileSync(join(dir, "index.html"), render(b));
+    const out = execFileSync("node", [bin("brief-delta.mjs"), "--hook"], { encoding: "utf8", env, input: JSON.stringify({
+      tool_name: "Artifact", tool_input: { file_path: "index.html", url }, cwd: dir }) });
+    return JSON.parse(out).hookSpecificOutput.additionalContext;
+  };
+  const A = "https://claude.ai/artifact/SPEC325", B = "https://claude.ai/artifact/SPEC326";
+  const a = brief([entry("Q-8", live), entry("Q-9", live)], { title: "Spec 325", url: A });
+  const b = brief([entry("Q-1", live)], { title: "Spec 326", url: B });
+  publish(a, A);
+  assert.match(publish(b, B), /First publish: 1 awaiting a ruling/);
+  const again = publish(b, B);
+  assert.match(again, /Nothing moved since the last publish/);
+  assert.doesNotMatch(again, /Q-8|Q-9/);
+  assert.match(publish(a, A), /Nothing moved since the last publish/);
+});
+
+test("the publish hook refuses to diff a brief whose url names another page", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const env = { ...process.env, PROBLEM_BRIEF_HOME: join(dir, "home") };
+  writeFileSync(join(dir, "index.html"), render(brief([entry("Q-1", live)], { url: "https://claude.ai/artifact/SPEC325" })));
+  const hook = (input) => JSON.parse(execFileSync("node", [bin("brief-delta.mjs"), "--hook"], { encoding: "utf8", env,
+    input: JSON.stringify({ tool_name: "Artifact", cwd: dir, ...input }) })).hookSpecificOutput.additionalContext;
+  const text = hook({ tool_input: { file_path: "index.html", url: "https://claude.ai/artifact/SPEC326" } });
+  assert.match(text, /no chat summary for this publish/);
+  assert.doesNotMatch(text, /Q-1 raised/);
+  assert.ok(!existsSync(join(dir, "home", "published")), "no snapshot is written under the wrong page");
+  writeFileSync(join(dir, "index.html"), render(brief([entry("Q-1", live)])));
+  assert.match(hook({ tool_input: { file_path: "index.html" }, tool_response: "Published at https://claude.ai/artifact/NEWPAGE" }),
+    /set the brief's url to https:\/\/claude\.ai\/artifact\/NEWPAGE/);
+});
+
+test("a comment on one brief's page is never tied to another brief with the same created stamp", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  const mem = join(dir, "project", "memory");
+  mkdirSync(mem, { recursive: true });
+  for (const [name, url] of [["spec112", "https://claude.ai/artifact/SPEC112"], ["spec325", "https://claude.ai/artifact/SPEC325"]]) {
+    writeFileSync(join(dir, `${name}.brief.json`), JSON.stringify(brief([entry("Q-1", live)], { title: name, url })));
+    run("brief-memory.mjs", [join(dir, `${name}.brief.json`), "--memory-dir", mem]);
+  }
+  const out = JSON.parse(execFileSync("node", [bin("brief-comments.mjs"), "--hook"], { encoding: "utf8",
+    env: { ...process.env, PROBLEM_BRIEF_HOME: join(dir, "home") },
+    input: JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "ArtifactComments", transcript_path: join(dir, "project", "s.jsonl"),
+      tool_input: { action: "resolve", url: "https://claude.ai/artifact/SPEC325", thread_id: THREAD } }) })).hookSpecificOutput;
+  assert.match(out.permissionDecisionReason, /"spec325"/);
+  assert.doesNotMatch(out.permissionDecisionReason, /spec112/);
 });
 
 test("the installer registers the comment hooks too", () => {
@@ -936,7 +976,8 @@ test("retiring takes a brief out of memory and the hooks, stamps it, and keeps t
   const env = { ...process.env, PROBLEM_BRIEF_HOME: join(dir, "home") };
   const node = (script, args, input) => execFileSync("node", [bin(script), ...args], { encoding: "utf8", env, input });
   const path = join(dir, "old.brief.json");
-  const b = brief([entry("Q-1", { status: "complete", resolution: { date: "2026-09-15", note: "Done and merged." } })]);
+  const b = brief([entry("Q-1", { status: "complete", resolution: { date: "2026-09-15", note: "Done and merged." } })],
+    { url: "https://claude.ai/artifact/OLDPAGE" });
   writeFileSync(path, JSON.stringify(b));
   node("brief-memory.mjs", [path, "--memory-dir", mem]);
   writeFileSync(join(dir, "index.html"), render(b));
@@ -951,7 +992,7 @@ test("retiring takes a brief out of memory and the hooks, stamps it, and keeps t
   assert.match(out, /not deleted — ask the operator/);
   assert.equal(readFileSync(join(mem, "MEMORY.md"), "utf8"), "- [Other](other.md) — keep me\n");
   assert.ok(!existsSync(join(mem, "problem-brief-old.md")));
-  assert.ok(!existsSync(join(dir, "home", "published", "urls.json")));
+  assert.match(out, /removed the snapshot of its last publish/);
   assert.ok(!existsSync(join(dir, "home", "threads.json")));
   const after = JSON.parse(readFileSync(path, "utf8"));
   assert.match(after.retired, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z$/);
@@ -986,7 +1027,7 @@ test("a throwaway brief is one line at every session start, with its pages, unti
   const env = { ...process.env, PROBLEM_BRIEF_HOME: join(dir, "home") };
   const node = (script, args, input) => execFileSync("node", [bin(script), ...args], { encoding: "utf8", env, input });
   const path = join(dir, "try.brief.json");
-  const b = brief([entry("Q-1", { ...live, short: "retried invoices" })], { throwaway: true, rulings: [ruling("R-1")] });
+  const b = brief([entry("Q-1", { ...live, short: "retried invoices" })], { throwaway: true, rulings: [ruling("R-1")], url: "https://claude.ai/artifact/TRYPAGE" });
   writeFileSync(path, JSON.stringify(b));
   node("brief-memory.mjs", [path, "--memory-dir", mem]);
   const html = render(b);

@@ -36,10 +36,14 @@ the repository, not in the installed skill directory. If `~/.claude/settings.jso
 | Hook | Script | Does |
 |---|---|---|
 | SessionStart | `brief-context.mjs --hook` | Default-channel line; each registered brief's goal, active rulings, live entries, closed ids. At startup, resume, clear and after every summary. |
-| PostToolUse `Artifact` | `brief-delta.mjs --hook` | After a brief is published: the computed chat summary of what moved. |
+| PostToolUse `Artifact` | `brief-delta.mjs --hook` | After a brief is published: the computed chat summary of what moved since the last publish at that same page. No summary when the brief's `url` names a different page. |
 | UserPromptSubmit | `brief-comments.mjs` | A comment notification or a message citing a brief's ids gets the brief's path, the cited items' state, and "record the answer now". |
 | PostToolUse `ArtifactComments` | `brief-comments.mjs` | Notes when a brief's comments were read. |
 | PreToolUse `ArtifactComments` | `brief-comments.mjs` | Refuses to resolve a brief's thread until the brief was saved since it was read, or the thread is marked `--no-ruling`. |
+
+The hooks find a page's brief by the brief's own `url` field (the memory pointer's `url` only when
+the brief has none), so set `url` right after the first publish, and fix it before copying one
+brief's JSON to start another.
 
 Preview what a session will be shown: `node ~/.claude/skills/problem-brief/bin/brief-context.mjs brief.json`.
 

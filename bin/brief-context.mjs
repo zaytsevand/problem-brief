@@ -22,6 +22,7 @@
  */
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -31,10 +32,17 @@ const MAX_RULINGS = 30;
 const MAX_TEXT = 220;
 const MAX_CHARS = 9000;
 
-/* Where the hooks keep what they learn between calls: snapshots of each
-   published brief, which page belongs to which brief, which comment threads
-   were read. */
+/* Where the hooks keep what they learn between calls: a snapshot of each page's
+   last publish, and which comment threads were read. */
 export const stateHome = () => process.env.PROBLEM_BRIEF_HOME || join(homedir(), ".claude", "problem-brief");
+
+/* Keyed by the page's address, the one thing two briefs never share: created
+   stamps repeat when a brief is started from another's JSON. */
+export const snapshotFile = (url) =>
+  join(stateHome(), "published", `${createHash("sha1").update(String(url)).digest("hex").slice(0, 16)}.json`);
+
+/* A brief's page is its own url field; the memory pointer's only when it has none. */
+export const pageOf = (brief, pointerUrl) => brief?.url || pointerUrl || null;
 
 /* The one line every session gets, whether or not a brief exists yet. An
    instruction given once in chat fades in a long session and is gone after a
@@ -71,12 +79,12 @@ export const finished = (brief) =>
   !(brief.decisions ?? []).some((e) => ["open", "decided"].includes(e.status ?? "open")) &&
   !(brief.outstanding ?? []).some((o) => (o.state ?? "not-started") !== "done");
 
-export function digest(brief, { path, url, memoryDir, pages = [], branch } = {}) {
+export function digest(brief, { path, url, memoryDir, branch } = {}) {
   /* A throwaway brief is never worth its full digest. What a session needs to
      know is that it is still around, and where it is published, so the
      cleanup is offered until it is done. */
   if (brief.throwaway) {
-    const where = [...new Set([url, brief.url, ...pages].filter(Boolean))];
+    const where = [...new Set([url, brief.url].filter(Boolean))];
     return `Throwaway brief "${brief.title}"${path ? ` — ${path}` : ""} is still registered` +
       (where.length ? `, published at ${where.join(", ")}` : "") + `. If the test it was made for is over, offer the operator ` +
       `to clean it up: retire it (node "${RETIRE}" "${path ?? "<brief.json>"}" --memory-dir "${memoryDir ?? "<memory directory>"}") ` +
@@ -154,18 +162,14 @@ export function pointers(memoryDir) {
 export const memoryDirOf = (input) => input?.transcript_path ? join(dirname(input.transcript_path), "memory") : null;
 
 /* Every brief registered for this project, loaded, with where it lives and the
-   addresses it is known to be published at. */
+   page it is published at. */
 export function briefsFor(memoryDir) {
   if (!memoryDir) return [];
-  let urls = {};
-  try { urls = JSON.parse(readFileSync(join(stateHome(), "published", "urls.json"), "utf8")); } catch { /* none yet */ }
   const out = [];
   for (const p of pointers(memoryDir)) {
     try {
       const brief = JSON.parse(readFileSync(p.brief, "utf8"));
-      const known = new Set([p.url, brief.url].filter(Boolean));
-      for (const [u, created] of Object.entries(urls)) if (created === brief.created) known.add(u);
-      out.push({ path: p.brief, brief, urls: known });
+      out.push({ path: p.brief, brief, url: pageOf(brief, p.url) });
     } catch { /* unreadable briefs are reported by the SessionStart hook */ }
   }
   return out;
@@ -178,14 +182,11 @@ function hook() {
   const branch = input.cwd ? currentBranch(input.cwd) : null;
 
   const parts = process.env.PROBLEM_BRIEF_REMINDER === "off" ? [] : [REMINDER];
-  let published = {};
-  try { published = JSON.parse(readFileSync(join(stateHome(), "published", "urls.json"), "utf8")); } catch { /* none yet */ }
   for (const p of memoryDir ? pointers(memoryDir) : []) {
     try {
       const brief = JSON.parse(readFileSync(p.brief, "utf8"));
       if (brief.retired) continue;
-      const pages = Object.keys(published).filter((u) => published[u] === brief.created);
-      parts.push(digest(brief, { path: p.brief, url: p.url, memoryDir, pages, branch }));
+      parts.push(digest(brief, { path: p.brief, url: pageOf(brief, p.url), memoryDir, branch }));
     } catch {
       parts.push(`Problem brief pointer ${p.file} names ${p.brief}, which cannot be read.` +
         (p.url ? ` Recover it from ${p.url} with the problem-brief skill's extract-brief.mjs before raising anything on its subject.` : ""));
