@@ -13,18 +13,19 @@
  *
  * As a hook it runs after every Artifact publish. When the published page is a
  * problem brief (it carries its own data), it compares that data with what was
- * published last time — a snapshot kept under ~/.claude/problem-brief/published —
+ * published at the same page last time — a snapshot kept under
+ * ~/.claude/problem-brief/published, keyed by the page's address. When the
+ * brief's url field names a different page it refuses to diff —
  * and hands the summary back to Claude to post. A hook must never break a
  * session, so in hook mode every failure is silent.
  *
  * Zero dependencies. Node 18+.
  */
 
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { stateHome } from "./brief-context.mjs";
+import { snapshotFile } from "./brief-context.mjs";
 
 const MAX_WORDS = 400;
 
@@ -152,33 +153,32 @@ function hook() {
   const brief = embedded(readFileSync(resolve(input.cwd ?? ".", t.file_path), "utf8"));
   if (!brief?.created) return;
 
-  const dir = join(stateHome(), "published");
-  const key = createHash("sha1").update(String(brief.created)).digest("hex").slice(0, 16);
-  const snap = join(dir, `${key}.json`);
-  const prev = existsSync(snap) ? JSON.parse(readFileSync(snap, "utf8")) : null;
-  const text = delta(prev, brief);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(snap, JSON.stringify(brief), "utf8");
-
-  /* A comment notification names the page, not the brief. Remember which page
-     belongs to which brief, so the comment hooks can find the brief's JSON. */
+  /* The page is the key: only its own last publish is a fair base to diff against. */
   const url = t.url ?? JSON.stringify(input.tool_response ?? "").match(/https:\/\/claude\.ai\/(?:code\/)?artifact\/[A-Za-z0-9_-]+/)?.[0];
-  if (url) {
-    const index = join(dir, "urls.json");
-    let urls = {};
-    try { urls = JSON.parse(readFileSync(index, "utf8")); } catch { /* first one */ }
-    urls[url] = brief.created;
-    writeFileSync(index, JSON.stringify(urls, null, 2), "utf8");
+  if (!url) return;
+  if (brief.url && brief.url !== url) {
+    return say(`problem-brief: no chat summary for this publish. The brief published at ${url} names another page in ` +
+      `its url field (${brief.url}), so there is no telling which publish to compare it with. If ${url} is this brief's ` +
+      `page now, set its url to ${url} and republish; if not, the wrong brief's page was published here — put it right ` +
+      `before posting anything about it.`);
   }
 
-  process.stdout.write(JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: "PostToolUse",
-      additionalContext: `problem-brief: the chat summary for the publish you just made, computed from the brief's own data ` +
-        `against the previous publish. Post it as your update, as it stands. Add only the page's link and the path of the ` +
-        `brief's JSON, and a few words where a line needs them. Do not retell the brief.\n\n${text}`,
-    },
-  }));
+  const snap = snapshotFile(url);
+  const prev = existsSync(snap) ? JSON.parse(readFileSync(snap, "utf8")) : null;
+  const text = delta(prev, brief);
+  mkdirSync(dirname(snap), { recursive: true });
+  writeFileSync(snap, JSON.stringify(brief), "utf8");
+
+  say(`problem-brief: the chat summary for the publish you just made, computed from the brief's own data ` +
+    `against the previous publish. Post it as your update, as it stands. Add only the page's link and the path of the ` +
+    `brief's JSON, and a few words where a line needs them. Do not retell the brief.` +
+    /* A comment names the page, not the brief: the comment hooks find the brief by its url field. */
+    (brief.url ? "" : ` First set the brief's url to ${url} in its JSON (and register it in memory), so comments on the page reach it.`) +
+    `\n\n${text}`);
+}
+
+function say(text) {
+  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: text } }));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
