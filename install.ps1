@@ -15,9 +15,9 @@
   Install into a different skills directory.
 
 .PARAMETER Hook
-  Also add the two hooks to %USERPROFILE%\.claude\settings.json: one puts each
+  Also add the hooks to %USERPROFILE%\.claude\settings.json: one puts each
   brief's rulings back after a session is summarised, one computes the chat
-  summary on every publish.
+  summary on every publish, one refuses hand edits of a brief's JSON.
 
 .PARAMETER ClaudeMd
   Also append one line to %USERPROFILE%\.claude\CLAUDE.md saying findings,
@@ -126,8 +126,9 @@ if ($Hook) {
   & node (Join-Path $target 'bin\install-hook.mjs')
   Write-Ok 'briefs come back into view at every session start and after every summary'
 } else {
-  Write-Host '  Optional: .\install.ps1 -Hook adds two hooks: one puts each brief''s rulings back'
-  Write-Host '  after a session is summarised, one computes the chat summary on every publish.'
+  Write-Host '  Optional: .\install.ps1 -Hook adds hooks: one puts each brief''s rulings back'
+  Write-Host '  after a session is summarised, one computes the chat summary on every publish,'
+  Write-Host '  one refuses hand edits of a brief''s JSON.'
 }
 
 # ── the line in CLAUDE.md ───────────────────────────────────────────────────

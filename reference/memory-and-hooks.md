@@ -40,6 +40,7 @@ the repository, not in the installed skill directory. If `~/.claude/settings.jso
 | UserPromptSubmit | `brief-comments.mjs` | A comment notification or a message citing a brief's ids gets the brief's path, the cited items' state, and "record the answer now". |
 | PostToolUse `ArtifactComments` | `brief-comments.mjs` | Notes when a brief's comments were read. |
 | PreToolUse `ArtifactComments` | `brief-comments.mjs` | Refuses to resolve a brief's thread until the brief was saved since it was read, or the thread is marked `--no-ruling`. |
+| PreToolUse `Bash`, `Write`, `Edit` | `brief-guard.mjs --hook` | Refuses a hand edit of a brief's JSON (`brief.json`, `*.brief.json`), and a shell command that writes one, and names the `brief.mjs` command to use instead. |
 
 The hooks find a page's brief by the brief's own `url` field (the memory pointer's `url` only when
 the brief has none), so set `url` right after the first publish, and fix it before copying one
