@@ -976,11 +976,38 @@ function page(brief, baseDir) {
     (brief.context ? `<section>${prose(brief.context)}</section>` : "") +
     background + `</div>`;
 
+  /* Work that waits on another brief's questions: read that brief for its link
+     and how many of the questions it waits on are still open. open is null
+     when the file cannot be read, so the page does not claim either way. */
+  const elsewhere = (o) => {
+    const [file, id] = o.blockedBy.split("#");
+    let other;
+    try { other = JSON.parse(readFileSync(resolve(baseDir, file), "utf8")); } catch {
+      notes.problems.push(`a work item waits on ${file}, which could not be read, so the page cannot say whether it still blocks`);
+      return { cite: `<code>${esc(o.blockedBy)}</code>`, open: null };
+    }
+    const qs = (other.decisions ?? []).filter((e) => !id || e.id === id);
+    if (id && !qs.length) notes.problems.push(`a work item waits on ${id} in ${file}, which has no such entry`);
+    const open = qs.filter((e) => (e.status ?? "open") === "open").length;
+    if (!open && o.state === "blocked") {
+      notes.problems.push(`a work item is marked blocked on ${o.blockedBy}, but nothing it waits on there is open — change its state`);
+    }
+    const name = inline(other.title ?? file, { refs: false }) +
+      (id ? ` <span class="n">${esc(other.binding?.ref ? `${other.binding.ref}/${id}` : id)}</span>` : "");
+    return { cite: other.url ? `<a href="${esc(other.url)}">${name}</a>` : name, open };
+  };
+
   /* Say where the work stands, and only say it waits on an entry while that
      entry is still awaiting a ruling. */
   const outstandingState = (o) => {
     const target = o.blockedBy && brief.decisions.find((e) => e.id === o.blockedBy);
     const label = { "not-started": "Not started", "in-progress": "In progress", blocked: "Blocked", done: "Done" }[o.state ?? "not-started"];
+    if (o.blockedBy?.includes(".json")) {
+      const { cite, open } = elsewhere(o);
+      if (open === null) return `${label} · waits on ${cite}`;
+      if (open && o.state !== "done") return `Waits on ${cite}` + (o.blockedBy.includes("#") ? "" : ` · ${open} open`);
+      return label + ` · follows from ${cite}`;
+    }
     const cite = target ? citations(esc(o.blockedBy)) : esc(o.blockedBy);
     if (target && st(target) === "open" && o.state !== "done") return `Waits on ${cite}`;
     return label + (o.blockedBy ? ` · follows from ${cite}` : "");

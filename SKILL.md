@@ -15,7 +15,7 @@ description: >-
   running a chorus review, or for converting chorus records to the shared schema.
 license: MIT
 metadata:
-  version: "1.7"
+  version: "1.8"
   requires:
     - archify
     - humanizer

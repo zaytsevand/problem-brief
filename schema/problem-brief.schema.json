@@ -783,7 +783,7 @@
         },
         "blockedBy": {
           "type": "string",
-          "description": "The entry id this waits on, where it waits on a ruling. e.g. Q-2. Once that entry is ruled, the item is no longer blocked — change its state."
+          "description": "What this waits on, where it waits on a ruling: an entry id on this page (e.g. Q-2), or another brief's file, relative to this one, when the work waits on that brief's questions (e.g. ../spec-017/brief.json, or ../spec-017/brief.json#Q-3 for one of its entries). The page links the other brief and counts what is still open there. Once the ruling is made, the item is no longer blocked — change its state."
         },
         "state": {
           "type": "string",
@@ -794,7 +794,7 @@
             "done"
           ],
           "default": "not-started",
-          "description": "Where the work stands. 'blocked' only while blockedBy names an entry still awaiting a ruling. 'done' once it has been carried out — the item stays on the page, it is not deleted."
+          "description": "Where the work stands. 'blocked' only while blockedBy names an entry, or another brief, still awaiting a ruling. 'done' once it has been carried out — the item stays on the page, it is not deleted."
         }
       }
     },

@@ -1068,3 +1068,26 @@ test("the noDiagram reason is printed on the page so it can be overruled", () =>
   const html = render(brief([entry("Q-1", live)]));
   assert.match(html, /<p class="nodiagram">No diagram: One step repeats; nothing to draw\.<\/p>/);
 });
+
+/* ── issue #26: a work item waits on another brief's questions ─────────── */
+
+test("a work item can wait on another brief, and the page links it with what is still open there", () => {
+  const decided = { ...live, status: "decided", decision: { chose: "a", date: "2026-09-15" } };
+  const item = (blockedBy, state = "blocked") => ({ summary: "Ship the spec", created: T, updated: T, blockedBy, state });
+  const ok = messages(brief([entry("Q-1", decided)], { outstanding: [item("../spec/brief.json#Q-2")] }));
+  assert.deepEqual(ok.errors, []);
+  assert.ok(messages(brief([entry("Q-1", decided)], { outstanding: [item("spec.json#two")] })).errors
+    .some((m) => m.includes("is not a brief reference")));
+
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  writeFileSync(join(dir, "spec.json"), JSON.stringify(brief([entry("Q-1", live), entry("Q-2", live), entry("Q-3", decided)],
+    { title: "Spec 17 questions", url: "https://claude.ai/artifact/spec17" })));
+  const page = (o) => {
+    writeFileSync(join(dir, "b.json"), JSON.stringify(brief([entry("Q-1", decided)], { outstanding: [o] })));
+    execFileSync("node", [bin("render-brief.mjs"), join(dir, "b.json"), join(dir, "b.html")], { stdio: "pipe" });
+    return readFileSync(join(dir, "b.html"), "utf8");
+  };
+  assert.match(page(item("spec.json")), /Waits on <a href="https:\/\/claude\.ai\/artifact\/spec17">Spec 17 questions<\/a> · 2 open/);
+  assert.match(page(item("spec.json#Q-3", "in-progress")), /In progress · follows from <a [^>]+>Spec 17 questions <span class="n">Q-3<\/span><\/a>/);
+  assert.match(page(item("missing.json")), /Blocked · waits on <code>missing\.json<\/code>/);
+});

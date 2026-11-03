@@ -329,6 +329,15 @@ function semanticErrors(brief) {
   (brief.outstanding ?? []).forEach((o, i) => {
     if (!o?.blockedBy) return;
     const where = `outstanding[${i}]`;
+    /* Another brief's questions. Its file is read when the page is rendered,
+       so here only the shape is checked. */
+    if (o.blockedBy.includes(".json")) {
+      if (!/^[^#]+\.json(#Q-\d+)?$/.test(o.blockedBy)) {
+        out.push({ path: `${where} → blockedBy`, message: `"${o.blockedBy}" is not a brief reference`,
+          hint: "write the other brief's file, relative to this one, optionally with an entry: ../spec-017/brief.json#Q-3" });
+      }
+      return;
+    }
     const target = byId.get(o.blockedBy);
     if (!target) {
       out.push({ path: where, message: `waits on "${o.blockedBy}", which is not an entry on this page`,

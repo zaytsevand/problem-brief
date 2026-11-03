@@ -89,6 +89,12 @@ there.
 **`blockedBy`.** When an entry cannot be ruled before another, list the other in its
 `blockedBy`; *Waiting on you* then puts the ruling that frees the most work first.
 
+An `outstanding` item's `blockedBy` names one entry on this page, or, when the work waits on
+questions held in another brief (a per-spec brief a ruling here spawned), that brief's file
+relative to this one: `../spec-017/brief.json`, or `../spec-017/brief.json#Q-3` for one of
+its entries. Mark the item `blocked`; the page links the other brief and says how many of
+its questions are still open, and the renderer warns once none are.
+
 ## Grouping and bearing
 
 Group by root cause, not by finding: five findings with one cause are one entry with five

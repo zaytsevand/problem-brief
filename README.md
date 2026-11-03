@@ -237,7 +237,9 @@ cited items' state with a reminder to record the ruling.
 
 Options say whether they can be undone (`reversible`), and only what can be
 undone is ever handled without asking. Entries can wait on each other
-(`blockedBy`), and the page puts first the ruling that frees the most work.
+(`blockedBy`), and the page puts first the ruling that frees the most work. A
+work item can also wait on another brief's questions, by naming that brief's
+file; the page links it and counts what is still open there.
 
 The counts along the top of the page are filters — click one and the page shows
 that category alone. It opens on what blocks the goal, since that is what is
