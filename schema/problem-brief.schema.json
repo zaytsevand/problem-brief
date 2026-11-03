@@ -766,6 +766,11 @@
       ],
       "additionalProperties": false,
       "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^W-[0-9]+$",
+          "description": "W-1, W-2… Given by `brief.mjs work` the first time it touches the list, so a later command names the item exactly. Permanent, like an entry id."
+        },
         "summary": {
           "type": "string",
           "description": "The work, named so the reader knows what it delivers."
