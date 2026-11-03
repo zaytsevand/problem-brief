@@ -407,6 +407,7 @@ function entry(e, baseDir) {
   const unwound = (u.now || u.target || dgms)
     ? `<section class="part"><h3>How it works today${u.whyWrong ? ", and why that is a problem" : ""}</h3>` +
       (u.now ? prose(u.now) : "") + dgms +
+      (u.noDiagram && !dgms ? `<p class="nodiagram">No diagram: ${inline(u.noDiagram)}</p>` : "") +
       (u.whyWrong ? `<div class="why"><h4>Why that is wrong</h4>${prose(u.whyWrong)}</div>` : "") +
       (u.target ? `<div class="target"><h4>Where it should end up</h4>${prose(u.target)}</div>` : "") +
       `</section>`
@@ -805,6 +806,7 @@ details.rolled ul{margin-top:.6em;}
 .tail li .qid{margin-right:.3em;}
 .tail li .said{margin-top:.35em;color:var(--ink-2);}
 .deps{font-family:ui-sans-serif,system-ui,sans-serif;font-size:.85rem;color:var(--ink-2);margin:-8px 0 14px;}
+.nodiagram{font-family:ui-sans-serif,system-ui,sans-serif;font-size:.8rem;color:var(--ink-2);}
 .unblocks{font-family:ui-sans-serif,system-ui,sans-serif;font-size:.8em;color:var(--ink-3);}
 .done-mark{color:var(--rec);font-weight:650;margin-right:.4em;}
 

@@ -16,7 +16,7 @@ Every entry, in this order. The order is the deliverable.
 | **a. Problem** | One or two plain sentences naming what is wrong. No preamble. | 1–2 sentences |
 | **b. Brief explanation** | Why that matters, in the operator's terms. | 2–8 sentences |
 | **c. Evidences** | Verified evidence grounded in real artefacts: code lines, documents, prior findings. | 1–4 items |
-| **d. The unwound explanation** | How it works today, with a diagram where one helps, and references (file:line, commit SHAs, run IDs, spec paths). Then why that is wrong. With no defect, state the target state instead. | as long as it needs |
+| **d. The unwound explanation** | How it works today, with a diagram where one helps (or `noDiagram`: one line on why none does; `reference/diagrams.md`), and references (file:line, commit SHAs, run IDs, spec paths). Then why that is wrong. With no defect, state the target state instead. | as long as it needs |
 | **e. Solutions** | At least one, better two or more. **The first is the recommendation**, labelled as such. Each carries its cost (work, risk, what it forecloses) and says whether it can be undone. | 2+ options |
 
 **Ids.** `Q-1`, `Q-2`… never invented codes. An id is permanent: a refreshed entry keeps
