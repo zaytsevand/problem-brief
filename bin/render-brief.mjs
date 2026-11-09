@@ -104,6 +104,11 @@ function inline(s, { refs = true } = {}) {
   return refs ? citations(html) : html;
 }
 
+/* Where a decision landed in the project's own spec suite, so the page shows the
+   record the project will read, not only the brief's. */
+const specsLine = (specs) => specs?.length
+  ? ` · written back to ${specs.map((p) => `<code>${esc(p)}</code>`).join(", ")}` : "";
+
 /* Paragraphs, and dash or numbered lists — including a lead-in line followed
    directly by its list, which is how people actually write one. */
 function prose(s) {
@@ -424,7 +429,7 @@ function entry(e, baseDir) {
 
   const ruled = e.decision
     ? `<div class="ruled"><strong>Ruled ${esc(e.decision.date)}:</strong> ${chosen(e.decision.chose)}` +
-      (e.decision.note ? ` — ${inline(e.decision.note)}` : "") + `</div>`
+      (e.decision.note ? ` — ${inline(e.decision.note)}` : "") + specsLine(e.decision.specs) + `</div>`
     : "";
 
   const r = e.resolution;
@@ -1051,7 +1056,8 @@ function page(brief, baseDir) {
         `<a class="qid" href="#${esc(r.id)}">${esc(fid(r.id))}</a> <strong>${inline(r.about)}</strong>` +
         `<div class="said">${prose(r.said)}</div>` +
         `<div class="b">${gone ? `Replaced by ${citations(esc(r.replacedBy))} · ` : ""}From ${inline(r.source)}` +
-        (r.entries?.length ? ` · bears on ${r.entries.map((id) => citations(esc(id))).join(", ")}` : "") + `</div>` +
+        (r.entries?.length ? ` · bears on ${r.entries.map((id) => citations(esc(id))).join(", ")}` : "") +
+        specsLine(r.specs) + `</div>` +
         `<p class="stamps">${stamps(r, "given")}</p></li>`;
     }).join("")}</ul></section>` : "";
 

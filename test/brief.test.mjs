@@ -517,6 +517,17 @@ test("rulings get their own section and filter, and R- ids link to them", () => 
   assert.match(html, /<a class="qref" href="#R-1"/);
 });
 
+test("where a decision was written back into the project's spec suite validates and is shown", () => {
+  const b = brief([entry("Q-1", { ...live, status: "decided",
+    decision: { chose: "a", date: "2026-09-15", specs: ["specs/012-export/spec.md#clarifications"] } })],
+    { rulings: [ruling("R-1", { specs: ["docs/adr/0007-dedupe.md"] })] });
+  assert.equal(messages(b).ok, true);
+  const html = render(b);
+  assert.match(html, /written back to <code>specs\/012-export\/spec\.md#clarifications<\/code>/);
+  assert.match(html, /written back to <code>docs\/adr\/0007-dedupe\.md<\/code>/);
+  assert.equal(messages(brief([entry("Q-1", live)], { rulings: [ruling("R-1", { specs: "docs/adr" })] })).ok, false);
+});
+
 test("the page carries its own data, and extract-brief recovers it exactly", () => {
   const b = brief([entry("Q-1", { ...live, problem: "A </script> in the text must not end the data block early." })],
     { rulings: [ruling("R-1")] });

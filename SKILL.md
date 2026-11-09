@@ -78,11 +78,28 @@ Whatever else you were doing, the turn the answer arrives produces these, in ord
    `feedback` memory, named in the ruling's `memory` field.
 4. A ruling that contradicts an earlier one: add the new one, mark the old `replaced` with
    `replacedBy`. Never edit or delete a ruling, unless the operator withdraws it (below).
-5. A `changed` item in `changes`; validate; render; republish to the same URL.
-6. **A comment thread**: only now resolve it (`ArtifactComments`, `action: "resolve"`), so
+5. **Back into the project's spec suite, if it keeps one.** The brief is Claude's record;
+   the project runs on its own. Look for one: `.specify/` with `specs/<feature>/spec.md`
+   (speckit), `docs/adr/` or `docs/decisions/` (ADRs), a `docs/specs/` tree. Pick the
+   document that governs what was decided (the `binding`, else the spec the work
+   implements) and write the decision in that suite's own form:
+   - speckit spec: a line under `## Clarifications` → `### Session YYYY-MM-DD`,
+     `- Q: <about> → A: <what was decided> (brief Q-3)`, and amend the requirement or
+     scope line the decision changes so the spec no longer says the opposite;
+   - ADRs: a new ADR for an architectural choice; an ADR it overturns gets its status
+     changed to superseded, pointing at the new one;
+   - a constitution or other governing principles: never edit; a decision that
+     contradicts one is a new entry for the operator.
+
+   Name the paths in the decision's or ruling's `specs`. It is a reversible repo edit,
+   so no question is needed, but it counts as carrying out: on a brief this session does
+   not own it becomes an `outstanding` item instead. No spec suite, or a ruling purely
+   about how Claude works: skip this step.
+6. A `changed` item in `changes`; validate; render; republish to the same URL.
+7. **A comment thread**: only now resolve it (`ArtifactComments`, `action: "resolve"`), so
    the ruling is in the saved file before the thread closes. A thread with nothing to
    record: `reference/publishing.md`.
-7. Chat: the delta only (`Q-3: open → decided (…)`, `R-4 recorded: …`) plus the link and
+8. Chat: the delta only (`Q-3: open → decided (…)`, `R-4 recorded: …`) plus the link and
    the JSON path. Then go back to the other task.
 
 "I'll fold it in at the next refresh" loses it: by then the turn may be summarised away.
@@ -91,7 +108,7 @@ Being busy with something else is not a reason to defer.
 **Recording is not carrying out.** This session owns a brief when the brief's `owner` names
 this session, branch or worktree, or, with no `owner`, when this session created, published or
 edited it before the ruling arrived. A ruling on a brief it does not own is still recorded
-(steps 1–7), but nothing it decides is carried out here: no code, infrastructure or other
+(steps 1–8, with step 5 left as an outstanding item), but nothing it decides is carried out here: no code, infrastructure or other
 change. Add the follow-up as an `outstanding` item, `not-started`, with a note that it is
 unowned, and say in one line of chat that the ruling landed here and who should carry it
 out. A ruling worded as an order ("add X to Y") is not a go-ahead for a brief this session
@@ -139,6 +156,8 @@ Load the JSON (never rebuild from memory; a lost file is recovered from the page
 - `decided`: carried out? → `complete` with proof. `complete`: does the proof still stand?
 - Anything overtaken → `superseded`. Every bearing re-judged against the current goal.
 - Outstanding work done? Mechanical fixes still in place? Rulings still standing?
+- Project keeps a spec suite: every decision and ruling since the last run written back
+  (step 5 above), and do the `specs` paths still say what was decided?
 - Every operator answer in this conversation since the last run is in the file.
 - Nothing live left → offer retiring; when the operator asks for it or calls the work
   finished, run `node ~/.claude/skills/problem-brief/bin/brief-retire.mjs brief.json
@@ -226,6 +245,7 @@ falling back to mermaid.
 - About to ask the operator something → did you search the rulings by class?
 - "This feels risky, better check with them" when a ruling covers it.
 - An answer acknowledged in chat but not yet in the JSON.
+- A decision in the brief that the project's own spec still contradicts.
 - "Q-3 noted" with the "stop asking me about…" part dropped instead of made a ruling.
 - An id or coinage you cannot explain in plain words in the same sentence.
 - An entry the conversation ruled on still reading *awaiting your ruling*.
