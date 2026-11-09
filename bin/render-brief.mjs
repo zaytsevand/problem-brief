@@ -1031,13 +1031,21 @@ function page(brief, baseDir) {
       (m.evidence?.length ? `<div class="b">${m.evidence.map((e) => `<code>${esc(e.ref)}</code>`).join(" · ")}</div>` : "") +
       `<p class="stamps">${stamps(m)}</p></li>`).join("")}</ul></details></section>` : "";
 
-  const outSec = out.length ? `<section class="tail" data-block="outstanding">
+  /* Done items are folded away like the fixes above, so the open list and the
+     outstanding-work counter count the same things. */
+  const workRow = (o) => `<li>${o.state === "done" ? `<span class="done-mark">✓</span>` : ""}${inline(o.summary)}` +
+    (o.detail ? `<div class="d">${prose(o.detail)}</div>` : "") +
+    `<div class="b">${outstandingState(o)}</div>` +
+    `<p class="stamps">${stamps(o)}</p></li>`;
+  const openWork = out.filter((o) => o.state !== "done");
+  const doneWork = out.filter((o) => o.state === "done");
+  const outSec = (openWork.length ? `<section class="tail" data-block="outstanding">
     <h2>Outstanding work</h2>
     <p class="lede">Agreed and understood, not yet done. Nothing here needs a ruling.</p>
-    <ul>${out.map((o) => `<li>${o.state === "done" ? `<span class="done-mark">✓</span>` : ""}${inline(o.summary)}` +
-      (o.detail ? `<div class="d">${prose(o.detail)}</div>` : "") +
-      `<div class="b">${outstandingState(o)}</div>` +
-      `<p class="stamps">${stamps(o)}</p></li>`).join("")}</ul></section>` : "";
+    <ul>${openWork.map(workRow).join("")}</ul></section>` : "") +
+    (doneWork.length ? `<section class="tail" data-block="outstanding-done">
+    <details class="fold"><summary><h2>Work done <span class="fold-n">${doneWork.length}</span></h2></summary>
+    <ul>${doneWork.map(workRow).join("")}</ul></details></section>` : "");
 
   /* What the operator has already said. Kept on the page, newest first, so the
      reader can see what they have told us, and so any later session can check
