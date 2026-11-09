@@ -304,6 +304,11 @@
             "note": {
               "type": "string",
               "description": "The reasoning, in the operator's words where they gave it."
+            },
+            "specs": { "$ref": "#/$defs/specRefs" },
+            "memory": {
+              "type": "string",
+              "description": "The Claude memory file this decision was saved to, when the project keeps no spec suite to write it back into. e.g. export-keeps-utc-timestamps.md."
             }
           },
           "description": "Which option was chosen and why. Set when the ruling is made, and kept afterwards."
@@ -798,6 +803,11 @@
         }
       }
     },
+    "specRefs": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 3 },
+      "description": "Where this decision was written back into the project's own spec suite, when the project keeps one: a path, optionally with #section. e.g. specs/012-export/spec.md#clarifications, docs/adr/0007-queue.md. Absent when the project has no spec suite, or the brief does not own the work (the write-back is then an outstanding item)."
+    },
     "timestamp": {
       "type": "string",
       "format": "date-time",
@@ -867,8 +877,9 @@
         },
         "memory": {
           "type": "string",
-          "description": "The Claude memory file this ruling was also saved to, when it is about how to work in general (a preference, a standing instruction) rather than about this brief's subject. e.g. feedback-fix-wording-without-asking.md."
-        }
+          "description": "The Claude memory file this ruling was also saved to, when it is about how to work in general (a preference, a standing instruction) rather than about this brief's subject (a feedback memory), or, when the project keeps no spec suite, the project memory it was written back to. e.g. feedback-fix-wording-without-asking.md."
+        },
+        "specs": { "$ref": "#/$defs/specRefs" }
       },
       "allOf": [
         {
