@@ -142,6 +142,14 @@ test("the guard refuses hand edits of brief JSON and lets the commands through",
   assert.equal(refusal("Bash", { command: `node ~/.claude/skills/problem-brief/bin/brief.mjs set brief.json Q-1 --short "x y"` }), null);
   assert.equal(refusal("Bash", { command: "node bin/render-brief.mjs brief.json out/index.html" }), null);
   assert.equal(refusal("Bash", { command: "cp brief.json previous.json" }), null);
+  // A `>` closing a placeholder is no redirect (#34); a real one still is, spaced or not.
+  assert.equal(refusal("Bash", { command: "git commit -m 'load brief.json and <slug>.brief.json once'" }), null);
+  assert.equal(refusal("Bash", { command: "echo '{}' > x.brief.json" }), "shell");
+  assert.equal(refusal("Bash", { command: "echo '{}'>brief.json" }), "shell");
+  assert.equal(refusal("Bash", { command: "ls ~/.claude/briefs/<slug>/brief.json" }), null);
+  // A heredoc or an input redirect right before the `>` is no placeholder.
+  assert.equal(refusal("Bash", { command: "cat <<EOF>brief.json\n{}\nEOF" }), "shell");
+  assert.equal(refusal("Bash", { command: "jq . <old.json>brief.json" }), "shell");
   assert.equal(refusal("Read", { file_path: "brief.json" }), null);
 
   const r = spawnSync("node", [join(ROOT, "bin", "brief-guard.mjs"), "--hook"], {

@@ -16,8 +16,10 @@ import { fileURLToPath } from "node:url";
 
 const CLI = join(dirname(fileURLToPath(import.meta.url)), "brief.mjs");
 // brief.json, or name.brief.json — not problem-brief.schema.json or my-brief.json.
-const BRIEF_FILE = /(?:^|[\/\\\s'"=.])brief\.json(?![\w.-])/;
-const WRITES = /json\.dumps?\b|JSON\.stringify|writeFile|write_text|\.write\(|open\([^)]*['"][wa]\+?['"]|>>?\s*['"]?[^\s'"|;&]*brief\.json|\bsed\s+(-\w+\s+)*-i|\btee\b|\bsponge\b|\b(mv|rm)\s/;
+// A `>` closing a placeholder like <slug> is no redirect; a heredoc (<<EOF>) or a dotted input (<a.json>) still is.
+// shortcut: a dotless input file redirected straight into a brief (`jq . <in>brief.json`) reads as a placeholder; parse the shell if that ever shows up.
+const BRIEF_FILE = /(?:^|[\/\\\s'"=.>])brief\.json(?![\w.-])/;
+const WRITES = /json\.dumps?\b|JSON\.stringify|writeFile|write_text|\.write\(|open\([^)]*['"][wa]\+?['"]|(?<!(?:^|[^<])<[\w-]+)>>?\s*['"]?[^\s'"|;&]*brief\.json|\bsed\s+(-\w+\s+)*-i|\btee\b|\bsponge\b|\b(mv|rm)\s/;
 // The skill's own scripts write briefs through the same validation; let them run.
 const OURS = /\b(brief|brief-withdraw|brief-retire|brief-memory|extract-brief)\.mjs\b/;
 
