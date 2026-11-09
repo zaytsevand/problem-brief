@@ -236,7 +236,10 @@ any hand edit of a brief's JSON and names the `brief.mjs` command to use.
 A brief whose work is done, or that was only a test, is retired with
 `bin/brief-retire.mjs`: taken out of memory and the hooks, its hook state
 cleared, stamped `retired`, and its published pages listed. The pages are
-never deleted without the operator's say-so.
+never deleted without the operator's say-so. With the hooks installed, a
+SessionEnd hook does this on its own for the briefs the ending session owns and
+left finished (throwaway ones, and ones with nothing live), and the next
+session start says what it retired.
 
 `./install.sh --claude-md` (`.\install.ps1 -ClaudeMd`) adds one line to
 `~/.claude/CLAUDE.md` making a brief the default channel for findings,
