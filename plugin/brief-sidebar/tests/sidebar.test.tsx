@@ -3,6 +3,7 @@ import { expect, mock, test } from 'claude-code/testing'
 
 const DIR = '/home/x/.claude/problem-brief/briefs'
 const PATH = `${DIR}/demo.brief.json`
+const OTHER = `${DIR}/other.brief.json`
 const FILES: Record<string, unknown> = {
   [PATH]: {
     title: 'Demo brief',
@@ -102,9 +103,9 @@ test('the session brief is open on top, other briefs folded to a count', async (
     expect(await ui.find({ type: 'Button', text: /elsewhere/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: '1 awaiting' })).toBeDefined()
 
-    await ui.press({ key: 'f:other' })
+    await ui.press({ key: `f:${OTHER}` })
     expect(await ui.find({ type: 'Button', text: /elsewhere/ })).toBeDefined()
-    await ui.press({ key: 'f:demo' })
+    await ui.press({ key: `f:${PATH}` })
     await ui.unmount()
   }
 })
@@ -119,14 +120,14 @@ test('a reply and a ruling each go to the model naming brief, entry and path', a
   await $.tool.call({ tool: 'Edit', file_path: PATH, old_string: 'a', new_string: 'b' })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
 
-  await ui.input({ key: 'c:demo#Q-1:0', text: 'Yes, once, after a pause' })
+  await ui.input({ key: `c:${PATH}#Q-1:0`, text: 'Yes, once, after a pause' })
   const reply = texts.find(t => t.includes('Comment on Q-1')) ?? ''
   expect(reply).toContain('Yes, once, after a pause')
   expect(reply).toContain(PATH)
   expect(await ui.find({ type: 'Text', text: /You said: Yes, once/ })).toBeDefined()
 
   expect(await ui.find({ type: 'Text', text: 'Cannot be undone' })).toBeDefined()
-  await ui.press({ key: 'r:demo#Q-1:0' })
+  await ui.press({ key: `r:${PATH}#Q-1:0` })
   const ruling = texts.find(t => t.includes('Ruling on Q-1')) ?? ''
   expect(ruling).toContain('take "Retry once after a pause"')
   expect(ruling).toContain(PATH)
@@ -154,11 +155,11 @@ test('briefs open one at a time and questions show in full', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /runner journal 17:48/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /Risk: Masks a real fault/ })).toBeDefined()
 
-  await ui.press({ key: 'f:other' })
+  await ui.press({ key: `f:${OTHER}` })
   expect(await ui.find({ type: 'Button', text: /A question elsewhere/ })).toBeDefined()
   expect(await ui.find({ type: 'Markdown', text: /killed for lack of memory/ })).toBeUndefined()
 
-  await ui.press({ key: 'f:other' })
+  await ui.press({ key: `f:${OTHER}` })
   expect(await ui.find({ type: 'Button', text: /A question elsewhere/ })).toBeUndefined()
   expect(await ui.find({ type: 'Markdown', text: /killed for lack of memory/ })).toBeUndefined()
 })
@@ -208,6 +209,45 @@ test('a brief named by path outside the folder is kept as session metadata and l
   expect(seen[0]).toContain('Q-18 (kept elsewhere)')
 })
 
+test('two briefs sharing a slug both show, each with controls of its own', async ($, on) => {
+  const twin = '/home/x/.claude/briefs/coord/coord.brief.json'
+  FILES[twin] = FILES[ELSEWHERE]
+  try {
+    seedDisk(on)
+    const texts: string[] = []
+    on('prompt.submit', async (_$, e) => {
+      texts.push(e.text)
+      return { text: e.text, context: e.context }
+    })
+    await $.tool.call({ tool: 'Edit', file_path: ELSEWHERE, old_string: 'a', new_string: 'b' })
+    await $.tool.call({ tool: 'Edit', file_path: twin, old_string: 'a', new_string: 'b' })
+
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.findAll({ type: 'Button', text: /Coordinator brief/ })).toHaveLength(2)
+    await ui.input({ key: `c:${twin}#Q-18:0`, text: 'On the twin' })
+    await ui.unmount()
+    // The reply names the file it was typed under, not its namesake.
+    expect(texts.some(t => t.includes(`Record this in ${twin}`))).toBe(true)
+  } finally {
+    delete FILES[twin]
+  }
+})
+
+test('a reload that finds nothing changed writes nothing, so the pane is not redrawn', async ($, on) => {
+  seedDisk(on)
+  let writes = 0
+  on('state.set', { plugin: 'brief-sidebar', key: 'briefs' }, async (_$, e, next) => {
+    writes++
+    return next(e)
+  })
+  await $.tool.call({ tool: 'Edit', file_path: PATH, old_string: 'a', new_string: 'b' })
+  expect(writes).toBeGreaterThan(0)
+  writes = 0
+  await $.tool.call({ tool: 'Edit', file_path: PATH, old_string: 'a', new_string: 'b' })
+  await $.tool.call({ tool: 'Bash', command: `node validate.mjs ${PATH}` } as never)
+  expect(writes).toBe(0)
+})
+
 test('a write records this session as the brief\'s last writer, so its own replies stay here', async ($, on) => {
   seedDisk(on, { [`author:${PATH}`]: 's-other' })
   const texts: string[] = []
@@ -223,7 +263,7 @@ test('a write records this session as the brief\'s last writer, so its own repli
   await $.tool.call({ tool: 'Edit', file_path: PATH, old_string: 'a', new_string: 'b' })
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.input({ key: 'c:demo#Q-1:0', text: 'Keep it here' })
+  await ui.input({ key: `c:${PATH}#Q-1:0`, text: 'Keep it here' })
   expect(texts.some(t => t.includes('Keep it here'))).toBe(true)
   expect(sends).toEqual([])
 })
@@ -248,8 +288,8 @@ test('a write that only names a brief in its content does not make it this sessi
 
   await $.tool.call({ tool: 'Read', file_path: PATH })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.press({ key: 'f:demo' })
-  await ui.input({ key: 'c:demo#Q-1:0', text: 'Route to its writer' })
+  await ui.press({ key: `f:${PATH}` })
+  await ui.input({ key: `c:${PATH}#Q-1:0`, text: 'Route to its writer' })
   expect(sends).toEqual(['s-other'])
 })
 
@@ -272,9 +312,9 @@ test('a reply goes to the session that last wrote the brief, not the open one', 
   })
   await $.tool.call({ tool: 'Read', file_path: PATH })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.press({ key: 'f:demo' })
+  await ui.press({ key: `f:${PATH}` })
 
-  await ui.input({ key: 'c:demo#Q-1:0', text: 'Yes, once, after a pause' })
+  await ui.input({ key: `c:${PATH}#Q-1:0`, text: 'Yes, once, after a pause' })
   expect(sends).toHaveLength(1)
   expect(JSON.stringify(sends[0]?.to)).toContain('s-other')
   expect(sends[0]?.text).toContain('Comment on Q-1')
@@ -301,9 +341,9 @@ test('a reply whose owner cannot be reached waits for it, and never lands in the
   })
   await $.tool.call({ tool: 'Read', file_path: PATH })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.press({ key: 'f:demo' })
+  await ui.press({ key: `f:${PATH}` })
 
-  await ui.input({ key: 'c:demo#Q-1:0', text: 'Yes, once, after a pause' })
+  await ui.input({ key: `c:${PATH}#Q-1:0`, text: 'Yes, once, after a pause' })
   expect(texts.some(t => t.includes('Comment on Q-1'))).toBe(false)
   expect(toasts.join('\n')).toContain('the recipient is gone')
   const held = store[`pending:${PATH}`] as { owner: string; text: string }[]
@@ -327,19 +367,19 @@ test('a held reply shows under its question, and can be withdrawn or sent here b
   on('ui.toast', async () => ({ value: undefined }))
   await $.tool.call({ tool: 'Read', file_path: PATH })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.press({ key: 'f:demo' })
+  await ui.press({ key: `f:${PATH}` })
 
-  await ui.input({ key: 'c:demo#Q-1:0', text: 'first answer' })
-  await ui.input({ key: 'c:demo#Q-1:1', text: 'second answer' })
+  await ui.input({ key: `c:${PATH}#Q-1:0`, text: 'first answer' })
+  await ui.input({ key: `c:${PATH}#Q-1:1`, text: 'second answer' })
   expect(await ui.find({ type: 'Text', text: /Waiting for session s-gone: first answer/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /Waiting for session s-gone: second answer/ })).toBeDefined()
 
-  await ui.press({ key: 'hw:demo#Q-1:0' })
+  await ui.press({ key: `hw:${PATH}#Q-1:0` })
   expect(await ui.find({ type: 'Text', text: /Waiting for session s-gone: first answer/ })).toBeUndefined()
   expect((store[`pending:${PATH}`] as unknown[]).length).toBe(1)
   expect(texts.some(t => t.includes('first answer'))).toBe(false)
 
-  await ui.press({ key: 'hs:demo#Q-1:0' })
+  await ui.press({ key: `hs:${PATH}#Q-1:0` })
   expect(store[`pending:${PATH}`]).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Waiting for session/ })).toBeUndefined()
   const handed = texts.find(t => t.includes('second answer')) ?? ''
@@ -366,9 +406,9 @@ test('a brief named after another session, with no writer on record, holds the r
     on('ui.toast', async () => ({ value: undefined }))
     await $.tool.call({ tool: 'Read', file_path: FOREIGN })
     const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    await ui.press({ key: 'f:session-93849256' })
+    await ui.press({ key: `f:${FOREIGN}` })
 
-    await ui.input({ key: 'c:session-93849256#Q-1:0', text: 'cosmetic changes are medium' })
+    await ui.input({ key: `c:${FOREIGN}#Q-1:0`, text: 'cosmetic changes are medium' })
     expect(sends).toEqual([])
     expect(texts.some(t => t.includes('cosmetic changes are medium'))).toBe(false)
     const held = store[`pending:${FOREIGN}`] as { owner: string }[]

@@ -128,7 +128,25 @@ Ask Claude Code for a brief and the skill picks itself up:
 Type `/problem-brief` on its own and Claude walks you through every open question in the
 current brief, four per dialog, then records your answers and republishes once.
 
-Validate first — always, and especially when the JSON was generated:
+Claude never edits a brief's JSON by hand. Every change goes through
+`bin/brief.mjs`, one command per kind of change:
+
+```sh
+B="node ~/.claude/skills/problem-brief/bin/brief.mjs"
+$B raise  my-brief.json --title … --short … --problem … --brief … --evidence '{…}' --solution '{…}'
+$B decide my-brief.json Q-3 --chose rerun-live --note "Hold the release."
+$B rule   my-brief.json --about "…" --said "…" --source "chat, 2026-11-03"
+$B refresh my-brief.json   # current change notes into history, once per refresh
+```
+
+Each one validates the result and writes nothing if it would break the file.
+It also writes the change note, gives the next free id, keeps every stamp in
+order and locks the file while it writes, so two sessions cannot overwrite each
+other. `--help` lists the rest (`new`, `complete`, `retract`, `work`, `fix`,
+`note`, `set`, `stamp`). With the hooks installed, a hand edit or a script that
+writes the JSON is refused and pointed at the right command.
+
+Validate before rendering, always:
 
 ```sh
 node ~/.claude/skills/problem-brief/bin/validate-brief.mjs my-brief.json
@@ -218,12 +236,16 @@ standing rulings and live entries back in context. That is the moment answers
 used to be lost. The same flag adds a PostToolUse hook on `Artifact`: after
 every publish of a brief it compares the page with the previous publish and
 hands Claude the chat summary, so the summary lists what moved and cannot
-drift into retelling the brief.
+drift into retelling the brief. It also adds a PreToolUse guard that refuses
+any hand edit of a brief's JSON and names the `brief.mjs` command to use.
 
 A brief whose work is done, or that was only a test, is retired with
 `bin/brief-retire.mjs`: taken out of memory and the hooks, its hook state
 cleared, stamped `retired`, and its published pages listed. The pages are
-never deleted without the operator's say-so.
+never deleted without the operator's say-so. With the hooks installed, a
+SessionEnd hook does this on its own for the briefs the ending session owns and
+left finished (throwaway ones, and ones with nothing live), and the next
+session start says what it retired.
 
 `./install.sh --claude-md` (`.\install.ps1 -ClaudeMd`) adds one line to
 `~/.claude/CLAUDE.md` making a brief the default channel for findings,

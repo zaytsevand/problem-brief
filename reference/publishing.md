@@ -63,8 +63,9 @@ option first labelled `(Recommended)`), same state check and search first. Ask o
 `/problem-brief` starts (`SKILL.md`): it asks every `open` entry, goal blockers first.
 
 Batch: one call holds up to four questions, one per entry, so ask four entries at a time,
-not one. Write every answer from a call into the JSON in one edit; validate, render, publish
-and post the chat summary once, after the last call, not after each answer.
+not one. Record each answer from a call with its `brief.mjs` command (`decide`, `rule`,
+`complete`) as soon as the call returns; validate, render, publish and post the chat summary
+once, after the last call, not after each answer.
 
 The operator may see only the dialog, so each question carries the whole entry, not a
 digest of it. Map the entry onto the fields; every part lands somewhere:

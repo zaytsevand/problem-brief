@@ -6,9 +6,14 @@
  *                                            every new, resumed, cleared or summarised session
  *   PostToolUse   brief-delta.mjs --hook     after each Artifact publish of a brief, hands
  *                                            Claude the chat summary of what moved
+ *   SessionEnd    brief-end.mjs --hook       retires the briefs the ending session owns and
+ *                                            left finished (throwaway, or nothing live and no
+ *                                            standing ruling); never deletes a page
  *   UserPromptSubmit,                        a comment on a brief's page, or a message citing
  *   Pre/PostToolUse brief-comments.mjs       its ids, gets recorded; a brief's comment thread
  *     (ArtifactComments) --hook              cannot be resolved until it has been
+ *   PreToolUse      brief-guard.mjs --hook    a brief's JSON is written only through brief.mjs:
+ *     (Bash, Write, Edit)                    a hand edit is refused, naming the command to use
  *
  *   node install-hook.mjs                     add it to ~/.claude/settings.json
  *   node install-hook.mjs --remove            take it out again
@@ -34,10 +39,12 @@ const remove = args.includes("--remove");
 const here = dirname(fileURLToPath(import.meta.url));
 const HOOKS = [
   { event: "SessionStart", matcher: "^(startup|resume|clear|compact)$", script: "brief-context.mjs" },
+  { event: "SessionEnd", script: "brief-end.mjs" },
   { event: "PostToolUse", matcher: "Artifact", script: "brief-delta.mjs" },
   { event: "UserPromptSubmit", script: "brief-comments.mjs" },
   { event: "PostToolUse", matcher: "ArtifactComments", script: "brief-comments.mjs" },
   { event: "PreToolUse", matcher: "ArtifactComments", script: "brief-comments.mjs" },
+  { event: "PreToolUse", matcher: "^(Bash|Write|Edit|MultiEdit|NotebookEdit)$", script: "brief-guard.mjs" },
 ];
 
 let settings = {};
