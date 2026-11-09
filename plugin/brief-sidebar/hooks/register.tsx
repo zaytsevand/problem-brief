@@ -382,12 +382,14 @@ function stampsOf(list: readonly BriefView[]): Stamps {
 
 export const register: Register = on => {
   let stampsAtStart: Stamps = {}
+  let startedAt = 0
   let named = new Set<string>()
   let didWork = false
 
   on('turn.start', async ($, e, next) => {
     await reload($).catch(() => undefined)
     stampsAtStart = stampsOf(await read($, briefs))
+    startedAt = await $.clock.now()
     named = new Set()
     didWork = false
 
@@ -449,7 +451,7 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     await reload($).catch(() => undefined)
-    const verdict = judgeTurn(stampsAtStart, stampsOf(await read($, briefs)), named, await ownSlugs($))
+    const verdict = judgeTurn(stampsAtStart, stampsOf(await read($, briefs)), named, await ownSlugs($), startedAt)
     if (verdict.claimed.length > 0) {
       await addInPlay($, verdict.claimed)
       await markAuthor($, verdict.claimed).catch(() => undefined)
