@@ -106,8 +106,9 @@ function inline(s, { refs = true } = {}) {
 
 /* Where a decision landed in the project's own spec suite, so the page shows the
    record the project will read, not only the brief's. */
-const specsLine = (specs) => specs?.length
-  ? ` · written back to ${specs.map((p) => `<code>${esc(p)}</code>`).join(", ")}` : "";
+const specsLine = (specs, memory) =>
+  (specs?.length ? ` · written back to ${specs.map((p) => `<code>${esc(p)}</code>`).join(", ")}` : "") +
+  (memory ? ` · saved to memory <code>${esc(memory)}</code>` : "");
 
 /* Paragraphs, and dash or numbered lists — including a lead-in line followed
    directly by its list, which is how people actually write one. */
@@ -429,7 +430,7 @@ function entry(e, baseDir) {
 
   const ruled = e.decision
     ? `<div class="ruled"><strong>Ruled ${esc(e.decision.date)}:</strong> ${chosen(e.decision.chose)}` +
-      (e.decision.note ? ` — ${inline(e.decision.note)}` : "") + specsLine(e.decision.specs) + `</div>`
+      (e.decision.note ? ` — ${inline(e.decision.note)}` : "") + specsLine(e.decision.specs, e.decision.memory) +`</div>`
     : "";
 
   const r = e.resolution;
@@ -1057,7 +1058,7 @@ function page(brief, baseDir) {
         `<div class="said">${prose(r.said)}</div>` +
         `<div class="b">${gone ? `Replaced by ${citations(esc(r.replacedBy))} · ` : ""}From ${inline(r.source)}` +
         (r.entries?.length ? ` · bears on ${r.entries.map((id) => citations(esc(id))).join(", ")}` : "") +
-        specsLine(r.specs) + `</div>` +
+        specsLine(r.specs, r.memory) +`</div>` +
         `<p class="stamps">${stamps(r, "given")}</p></li>`;
     }).join("")}</ul></section>` : "";
 

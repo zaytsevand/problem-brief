@@ -29,7 +29,8 @@ number. Give every entry a `short` label of two to five words; bare ids in text 
 implemented, task the operator named. Never invent one. Ids are then cited as `JOB-42/Q-3`;
 the file keeps them bare. Once a ruling is made, write it back into the project's spec
 suite or decision log (SKILL.md, answer step 5) and name the paths in `decision.specs` or
-the ruling's `specs`.
+the ruling's `specs`; with no spec suite, save it as a `project` memory and name the file
+in `memory`.
 
 **Pricing an option.** `cost.work` says what the work consists of — what changes, how much,
 what it needs from the operator (review, decision, access, migration window). Never "two

@@ -528,6 +528,13 @@ test("where a decision was written back into the project's spec suite validates 
   assert.equal(messages(brief([entry("Q-1", live)], { rulings: [ruling("R-1", { specs: "docs/adr" })] })).ok, false);
 });
 
+test("with no spec suite, the memory file a decision was saved to validates and is shown", () => {
+  const b = brief([entry("Q-1", { ...live, status: "decided",
+    decision: { chose: "a", date: "2026-09-15", memory: "dedupe-on-invoice-number.md" } })]);
+  assert.equal(messages(b).ok, true);
+  assert.match(render(b), /saved to memory <code>dedupe-on-invoice-number\.md<\/code>/);
+});
+
 test("the page carries its own data, and extract-brief recovers it exactly", () => {
   const b = brief([entry("Q-1", { ...live, problem: "A </script> in the text must not end the data block early." })],
     { rulings: [ruling("R-1")] });

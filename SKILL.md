@@ -93,8 +93,15 @@ Whatever else you were doing, the turn the answer arrives produces these, in ord
 
    Name the paths in the decision's or ruling's `specs`. It is a reversible repo edit,
    so no question is needed, but it counts as carrying out: on a brief this session does
-   not own it becomes an `outstanding` item instead. No spec suite, or a ruling purely
-   about how Claude works: skip this step.
+   not own it becomes an `outstanding` item instead.
+
+   **No spec suite: Claude's native memory instead.** Save a `project` memory, one
+   decision per file: the decision as a fact, then **Why:** (the operator's reason) and
+   **How to apply:**, linking the brief's pointer memory as `[[problem-brief-<name>]]`
+   and citing the entry id, plus its line in `MEMORY.md`. Name the file in the decision's
+   or ruling's `memory`. It is the project's lasting record, so it stays when the brief
+   is retired. A ruling about how Claude works already went to a `feedback` memory in
+   step 3, and that covers it.
 6. A `changed` item in `changes`; validate; render; republish to the same URL.
 7. **A comment thread**: only now resolve it (`ArtifactComments`, `action: "resolve"`), so
    the ruling is in the saved file before the thread closes. A thread with nothing to
@@ -156,8 +163,8 @@ Load the JSON (never rebuild from memory; a lost file is recovered from the page
 - `decided`: carried out? → `complete` with proof. `complete`: does the proof still stand?
 - Anything overtaken → `superseded`. Every bearing re-judged against the current goal.
 - Outstanding work done? Mechanical fixes still in place? Rulings still standing?
-- Project keeps a spec suite: every decision and ruling since the last run written back
-  (step 5 above), and do the `specs` paths still say what was decided?
+- Every decision and ruling since the last run written back (step 5 above): to the spec
+  suite, whose `specs` paths still say what was decided, or else to a memory file.
 - Every operator answer in this conversation since the last run is in the file.
 - Nothing live left → offer retiring; when the operator asks for it or calls the work
   finished, run `node ~/.claude/skills/problem-brief/bin/brief-retire.mjs brief.json
@@ -245,7 +252,7 @@ falling back to mermaid.
 - About to ask the operator something → did you search the rulings by class?
 - "This feels risky, better check with them" when a ruling covers it.
 - An answer acknowledged in chat but not yet in the JSON.
-- A decision in the brief that the project's own spec still contradicts.
+- A decision that lives only in the brief: neither in the project's spec nor in memory.
 - "Q-3 noted" with the "stop asking me about…" part dropped instead of made a ruling.
 - An id or coinage you cannot explain in plain words in the same sentence.
 - An entry the conversation ruled on still reading *awaiting your ruling*.

@@ -305,7 +305,11 @@
               "type": "string",
               "description": "The reasoning, in the operator's words where they gave it."
             },
-            "specs": { "$ref": "#/$defs/specRefs" }
+            "specs": { "$ref": "#/$defs/specRefs" },
+            "memory": {
+              "type": "string",
+              "description": "The Claude memory file this decision was saved to, when the project keeps no spec suite to write it back into. e.g. export-keeps-utc-timestamps.md."
+            }
           },
           "description": "Which option was chosen and why. Set when the ruling is made, and kept afterwards."
         },
@@ -873,7 +877,7 @@
         },
         "memory": {
           "type": "string",
-          "description": "The Claude memory file this ruling was also saved to, when it is about how to work in general (a preference, a standing instruction) rather than about this brief's subject. e.g. feedback-fix-wording-without-asking.md."
+          "description": "The Claude memory file this ruling was also saved to, when it is about how to work in general (a preference, a standing instruction) rather than about this brief's subject (a feedback memory), or, when the project keeps no spec suite, the project memory it was written back to. e.g. feedback-fix-wording-without-asking.md."
         },
         "specs": { "$ref": "#/$defs/specRefs" }
       },
