@@ -27,8 +27,10 @@ number. Give every entry a `short` label of two to five words; bare ids in text 
 **Binding.** When the work runs under a tracker item (task, spec, ADR), set `binding`
 (`ref`, kind, title, link) from where the work is already bound — branch name, spec being
 implemented, task the operator named. Never invent one. Ids are then cited as `JOB-42/Q-3`;
-the file keeps them bare. Once a ruling is made, record it in the project's own decision
-log too and cite that record in the entry's `resolution`.
+the file keeps them bare. Once a ruling is made, write it back into the project's spec
+suite or decision log (SKILL.md, answer step 5) and name the paths in `decision.specs` or
+the ruling's `specs`; with no spec suite, save it as a `project` memory and name the file
+in `memory`.
 
 **Pricing an option.** `cost.work` says what the work consists of — what changes, how much,
 what it needs from the operator (review, decision, access, migration window). Never "two
@@ -82,8 +84,8 @@ renderer refuses to close an entry without proof.
 every change to that item, and only then), as `2026-09-15T09:40Z`. The brief's own
 `updated` is never earlier than any item's; a full re-check moves it. `generated` is retired.
 
-**Mechanical.** An unambiguous, reversible fix with no judgement goes in `mechanical`:
-fixed first, listed as done, never asked about. The validator refuses `reversible: false`
+**Mechanical.** An unambiguous, reversible fix with no judgement goes in `mechanical`
+(`brief.mjs fix`): fixed first, listed as done, never asked about. The validator refuses `reversible: false`
 there.
 
 **`blockedBy`.** When an entry cannot be ruled before another, list the other in its
@@ -121,20 +123,39 @@ reader, what moved, the rest.
 - `changes` — one item per change with its `kind`: `raised`, `changed`, `completed`,
   `retracted`, `note`. The renderer groups them (new first). Every new entry needs a
   `raised` change with its `id`.
-- `history` — earlier versions' `changes`, one stamped block each. On every refresh, move
-  the current `changes` into `history` as `{ "version": <previous updated>, "changes": [...] }`
-  before writing new ones; never overwrite or trim. Skip only when `changes` is empty.
+- `history` — earlier versions' `changes`, one stamped block each. On every refresh, run
+  `brief.mjs refresh` before writing new ones: it moves the current `changes` into `history`
+  as `{ "version": <previous updated>, "changes": [...] }`, once. Never overwrite or trim.
 - `context` — optional, anything needed before entry one.
 - `background` — earlier history, folded; `source` goes with it.
 
 ## Write the data, validate, render
 
-The page is never hand-written. Start from `examples/example.brief.json`.
+Neither the page nor the JSON is hand-written. `bin/brief.mjs` makes every change to the
+JSON, validates the result and refuses to write a broken one; it also writes each change
+note, gives ids (`Q-n`, `R-n`, and `W-n` for outstanding items), moves the stamps and locks
+the file while it writes, so two sessions cannot overwrite each other's edits.
+`examples/example.brief.json` shows a finished brief.
 
 ```bash
+B="node ~/.claude/skills/problem-brief/bin/brief.mjs"
+$B new      brief.json --title … --subject … --goal …
+$B raise    brief.json --title … --short … --problem … --brief … --evidence '{…}' --solution '{…}' …
+$B decide   brief.json Q-3 --chose <option id> --note "<the operator's words>"
+$B complete brief.json Q-3 --note … --evidence '{"kind":"commit","ref":"abc123","note":"…"}'
+$B retract  brief.json Q-4 --note "the problem went away when …"
+$B rule     brief.json --about … --said … --source "chat, 2026-09-15" [--replaces R-2]
+$B work     brief.json add --summary … [--blocked-by Q-2]   |   work brief.json done W-3
+$B fix      brief.json --summary … --detail "how to undo it"
+$B note     brief.json Q-2 "Q-2 re-checked against the current branch."
+$B set      brief.json Q-2 --unwound.noDiagram "…" --change "Q-2 says why it has no picture."
+$B refresh  brief.json        # once per refresh, before any new change note
 node ~/.claude/skills/problem-brief/bin/validate-brief.mjs brief.json      # every time, before rendering
 node ~/.claude/skills/problem-brief/bin/render-brief.mjs brief.json out/index.html
 ```
+
+A value starting with `{` or `[` is JSON; `set … --field null` removes a field. `--help` lists
+every flag, `--dry-run` checks a change without writing it.
 
 The validator catches misspelt fields (the usual machine error: the content silently
 vanishes), the one-recommended-option-first rule, prices, proof on closed entries, id reuse,
