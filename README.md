@@ -88,16 +88,19 @@ folded at the bottom. The plugin also reminds the model, on every message, to
 keep the briefs it works on up to date.
 
 A brief counts as the session's own when the session writes it, when you reply
-in it from the pane, or when it is named after the session
+in it from the pane and no other session owns it, or when it is named after the session
 (`session-<first 8 characters of the session id>.brief.json`), which makes a
 safe place to try it out. A brief stored anywhere else, such as
 `~/.claude/briefs/<slug>/brief.json`, shows once the session names its path in a
 tool call; the session keeps those paths as its own state, not in the context.
 
-A reply goes to the session that last wrote the brief, not necessarily the one
-whose pane you typed it in, so the session holding the work records it. When
-that session is this one, nobody has written the brief yet, or the other session
-cannot be reached, the reply goes to the open session, and a notice says which.
+A reply goes to the session that owns the brief, not necessarily the one whose
+pane you typed it in, so the session holding the work records it. The owner is
+the session that last wrote the brief, or, when nobody has, the session it is
+named after. When the owner is not running, the reply waits and reaches it the
+next time that session starts or ends a turn; it never lands in the open
+session, and a notice says where it went. Only a brief with no owner at all
+takes the reply in the open session, which then owns it.
 
 The installer adds the plugin's folder to
 `CLAUDE_CODE_PLUGIN_DIRS` in the `env` block of `~/.claude/settings.json`;

@@ -147,6 +147,41 @@ async function markAuthor($: EngineInterface, slugs: string[]): Promise<void> {
   for (const b of await read($, briefs)) if (slugs.includes(b.slug)) await $.store.set(authorKey(b.path), me)
 }
 
+// Replies held for an owner that was not running, by brief path, until that session starts again.
+const PENDING = 'pending:'
+type Pending = { owner: string; text: string }
+
+// A brief's owner: its last writer's session id, else the session it is named after (`session-<id prefix>`).
+async function ownerOf($: EngineInterface, b: BriefView): Promise<string | undefined> {
+  const author = await $.store.get(authorKey(b.path)).catch(() => undefined)
+  if (typeof author === 'string' && author !== '') return author
+  return /^session-[0-9a-f]{8}$/.test(b.slug) ? b.slug : undefined
+}
+
+async function hold($: EngineInterface, path: string, owner: string, text: string): Promise<void> {
+  const held = list(await $.store.get(PENDING + path)) as Pending[]
+  await $.store.set(PENDING + path, [...held, { owner, text }])
+}
+
+// The owner's side: a session that starts or ends a turn takes the replies held for it and its briefs.
+async function deliverHeld($: EngineInterface): Promise<void> {
+  const me = await $.session.id()
+  const own = await read($, sessionSlug)
+  for (const key of await $.store.keys()) {
+    if (!key.startsWith(PENDING)) continue
+    const path = key.slice(PENDING.length)
+    const held = list(await $.store.get(key)) as Pending[]
+    const ours = held.filter(p => p.owner === me || p.owner === own || slugOf(path) === own)
+    if (ours.length === 0) continue
+    const rest = held.filter(p => !ours.includes(p))
+    await (rest.length > 0 ? $.store.set(key, rest) : $.store.delete(key))
+    await update($, inPlay, l => [...new Set([...l, slugOf(path)])])
+    for (const p of ours) {
+      await $.prompt.submit({ text: `${p.text}\n\n(Sent from the brief sidebar while this session was not running.)`, asUser: true })
+    }
+  }
+}
+
 function slugOf(path: string): string {
   const parts = path.split('/')
   const name = parts.pop() ?? ''
@@ -286,7 +321,8 @@ async function upkeepNote($: EngineInterface): Promise<string | null> {
   if (others.length > 0) {
     lines.push(
       `Other sessions' briefs: ${others.map(b => b.title).join('; ')}.`,
-      'A ruling on one of these is recorded, not carried out here: say which session should carry it out.',
+      'These belong to their own sessions: do not edit or republish them here. The sidebar sends a reply on one to its',
+      'session and holds it until that session runs; for a reply typed in chat, say which session owns that brief.',
     )
   }
   if (turnsWithWork > 0) {
@@ -325,6 +361,7 @@ export const register: Register = on => {
     const id = await $.session.id().catch(() => '')
     await update($, sessionSlug, () => (id ? `session-${id.slice(0, 8)}` : ''))
     await reload($)
+    await deliverHeld($).catch(() => undefined)
     $.clock.every(3_000, () => void refreshIfChanged($).catch(() => undefined))
     void $.ui.open({ id: PANE, title: TITLE })
 
@@ -381,6 +418,8 @@ export const register: Register = on => {
     }
     didWork = false
     await refreshStatus($)
+    // An owner already running but unreachable when the reply was sent picks it up here.
+    await deliverHeld($).catch(() => undefined)
 
     return next(e)
   })
@@ -437,13 +476,20 @@ export const register: Register = on => {
       void (async () => {
         const at = await $.clock.now()
         await update($, sent, m => ({ ...m, [k]: [...(m[k] ?? []), { text: shownText, at }] }))
-        await update($, inPlay, l => [...new Set([...l, brief.slug])])
-        const author = await $.store.get(authorKey(brief.path)).catch(() => undefined)
-        if (typeof author === 'string' && author !== (await $.session.id())) {
-          const r = await $.session.send({ to: { sessionId: author }, text: prompt })
-          if (r.isDelivered) return void (await $.ui.toast(`Reply sent to session ${author}, which last wrote this brief`))
-          await $.ui.toast(`Session ${author} not reached (${r.reason}); reply sent here instead`)
+        const owner = await ownerOf($, brief)
+        const me = await $.session.id()
+        // Another session's brief: the reply reaches that session or waits for it, never this one.
+        if (owner && owner !== me && owner !== own) {
+          let why = 'it is not running'
+          if (owner !== brief.slug) {
+            const r = await $.session.send({ to: { sessionId: owner }, text: prompt })
+            if (r.isDelivered) return void (await $.ui.toast(`Reply sent to session ${owner}, which owns this brief`))
+            why = r.reason ?? why
+          }
+          await hold($, brief.path, owner, prompt)
+          return void (await $.ui.toast(`Session ${owner} not reached (${why}); the reply waits for it and arrives when it runs`))
         }
+        await update($, inPlay, l => [...new Set([...l, brief.slug])])
         await $.prompt.submit({ text: prompt, asUser: true })
       })().catch(err => $.ui.toast(`Reply not sent: ${String(err)}`))
 
