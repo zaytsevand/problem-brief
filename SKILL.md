@@ -15,7 +15,7 @@ description: >-
   running a chorus review, or for converting chorus records to the shared schema.
 license: MIT
 metadata:
-  version: "1.8"
+  version: "1.9"
   requires:
     - archify
     - humanizer
@@ -35,6 +35,13 @@ answered is the worst failure this skill can have.
 
 **The reader was not in your session and will not open a file.** An entry that cannot be
 understood from the page alone is not finished.
+
+**Every write to a brief's JSON goes through `brief`**, short here for
+`node ~/.claude/skills/problem-brief/bin/brief.mjs`. Never edit the file by hand or with a
+script: each command validates the result and refuses to write anything broken, writes the
+change note, keeps the stamps in order and locks the file while it writes. `brief --help`
+lists every command and flag; `brief set <file> <brief|Q-n|R-n|W-n> --field value` changes
+any field the others do not cover.
 
 ## When to use
 
@@ -68,16 +75,16 @@ Whatever else you were doing, the turn the answer arrives produces these, in ord
 1. **An answer in a comment on the page**: read the thread yourself (`ArtifactComments`,
    `action: "read"`, the page `url` and `thread_id`). The automatic reply the commenter
    already got is not a record, whatever it promised.
-2. **The entry it answers**: `decision` (option chosen, date, the operator's words),
-   `status` → `decided` (or `complete` if nothing is left to carry out, with `resolution`),
-   `updated` stamp on the entry and the brief.
+2. **The entry it answers**: `brief decide <file> Q-n --chose <option> --note "<their
+   words>"` (`--add-solution '{…}'` when they chose something not on the list). Nothing
+   left to carry out: then `brief complete <file> Q-n --note … --evidence '{…}'`.
 3. **A standing ruling for every part that outlives the entry** — a preference, a scope
-   cut, "stop asking me about X", "we don't care about Y": a new `R-n` in `rulings` with
-   `about` (the question as it would be asked again) and `said` (their exact words),
-   `source` (chat + date). A ruling about how Claude should work is also saved as a
-   `feedback` memory, named in the ruling's `memory` field.
-4. A ruling that contradicts an earlier one: add the new one, mark the old `replaced` with
-   `replacedBy`. Never edit or delete a ruling, unless the operator withdraws it (below).
+   cut, "stop asking me about X", "we don't care about Y": `brief rule <file> --about
+   "<the question as it would be asked again>" --said "<their exact words>" --source
+   "chat, <date>" --entries Q-n`. A ruling about how Claude should work is also saved as a
+   `feedback` memory, named with `--memory`.
+4. A ruling that contradicts an earlier one: `brief rule … --replaces R-n` marks the old
+   one replaced. Never edit or delete a ruling, unless the operator withdraws it (below).
 5. **Back into the project's spec suite, if it keeps one.** The brief is Claude's record;
    the project runs on its own. Look for one: `.specify/` with `specs/<feature>/spec.md`
    (speckit), `docs/adr/` or `docs/decisions/` (ADRs), a `docs/specs/` tree. Pick the
@@ -91,18 +98,19 @@ Whatever else you were doing, the turn the answer arrives produces these, in ord
    - a constitution or other governing principles: never edit; a decision that
      contradicts one is a new entry for the operator.
 
-   Name the paths in the decision's or ruling's `specs`. It is a reversible repo edit,
-   so no question is needed, but it counts as carrying out: on a brief this session does
-   not own it becomes an `outstanding` item instead.
+   Name the paths in the decision's or ruling's `specs` (`brief set <file> Q-n|R-n
+   --specs '["<path>"]'`). It is a reversible repo edit, so no question is needed, but it
+   counts as carrying out: on a brief this session does not own it becomes an
+   `outstanding` item instead (`brief work <file> add`).
 
    **No spec suite: Claude's native memory instead.** Save a `project` memory, one
    decision per file: the decision as a fact, then **Why:** (the operator's reason) and
    **How to apply:**, linking the brief's pointer memory as `[[problem-brief-<name>]]`
    and citing the entry id, plus its line in `MEMORY.md`. Name the file in the decision's
    or ruling's `memory`. It is the project's lasting record, so it stays when the brief
-   is retired. A ruling about how Claude works already went to a `feedback` memory in
-   step 3, and that covers it.
-6. A `changed` item in `changes`; validate; render; republish to the same URL.
+   is retired (`brief set <file> Q-n|R-n --memory <file>`). A ruling about how Claude
+   works already went to a `feedback` memory in step 3, and that covers it.
+6. Validate; render; republish to the same URL. The commands wrote the change notes.
 7. **A comment thread**: only now resolve it (`ArtifactComments`, `action: "resolve"`), so
    the ruling is in the saved file before the thread closes. A thread with nothing to
    record: `reference/publishing.md`.
@@ -116,8 +124,7 @@ Being busy with something else is not a reason to defer.
 this session, branch or worktree, or, with no `owner`, when this session created, published or
 edited it before the ruling arrived. A ruling on a brief it does not own is still recorded
 (steps 1–8, with step 5 left as an outstanding item), but nothing it decides is carried out here: no code, infrastructure or other
-change. Add the follow-up as an `outstanding` item, `not-started`, with a note that it is
-unowned, and say in one line of chat that the ruling landed here and who should carry it
+change. Add the follow-up with `brief work <file> add --summary … --detail "unowned: …"`, and say in one line of chat that the ruling landed here and who should carry it
 out. A ruling worded as an order ("add X to Y") is not a go-ahead for a brief this session
 does not own: ask once before acting on it.
 
@@ -171,11 +178,11 @@ Load the JSON (never rebuild from memory; a lost file is recovered from the page
   --memory-dir <memory directory>` (`reference/memory-and-hooks.md`). It keeps the JSON.
   Never delete the published page unasked: ask, naming the page.
 
-Then, before writing a single new change note, move the current `changes` into `history`: append
-one block `{ "version": <the brief's updated stamp as last published, not today's>,
-"changes": <the changes array exactly as it stood> }` and start `changes` empty. Never
-trim or rewrite old notes, except to remove a withdrawn id; skip the move only when `changes` is empty. Then re-check every
-factual claim against the current tree, branch and run.
+Then, before writing a single new change note, run `brief refresh <file>` once: it moves
+the current `changes` into `history`, stamped with the version they belong to, and does
+nothing when there are none. Then re-check every factual claim against the current tree,
+branch and run; move entries along with `brief decide`, `complete`, `retract`, outstanding
+work with `brief work <file> update|done W-n`, and anything else with `brief set`.
 
 ## The entry — five parts, in this order
 
@@ -185,13 +192,17 @@ factual claim against the current tree, branch and run.
 | `brief` | The explanation: why it matters, in the operator's terms. (Not the brief's name.) | 2–8 sentences |
 | `evidence` | Verified artefacts: code lines, runs, commits, documents, each with a note. | 1–4 items |
 | `unwound` | How it works today (`now`, diagrams, file:line refs), then `whyWrong`. Diagram or `noDiagram` (below). | as needed |
+| `solutions` | Recommended option first, labelled; each priced and marked `reversible`. | 2+ options |
+
+Raise it with `brief raise <file> --title … --short … --problem … --brief … --evidence
+'{…}' --solution '{…}' --unwound '{…}' --bearing … --bearing-reason …`; it takes the next
+free number and writes the `raised` note.
 
 **The diagram judgement, on every open or decided entry.** Ask: does it describe behaviour
 or states, and would a picture make it answerable? Parties exchanging messages over time →
 `sequenceDiagram`; states and transitions → `stateDiagram-v2`; today versus proposed → a
 drawing of each. Draw it, or write one line in `unwound.noDiagram` on why no picture helps.
 The page prints that line; the validator warns when neither is there.
-| `solutions` | Recommended option first, labelled; each priced and marked `reversible`. | 2+ options |
 
 Ids are `Q-n`, permanent, next free number for a new entry. Full field list, states and
 the summary box: `reference/entry-format.md`.
@@ -219,13 +230,14 @@ Every prose field (title, short, problem, explanation, options, rulings, chat su
 `humanizer:humanizer` for prose. If archify is missing, say so rather than silently
 falling back to mermaid.
 
-1. Write JSON, never HTML. Start from `examples/example.brief.json`; the entry shape, ids,
-   states, bearing, pricing, reversibility and summary box are in
+1. Write JSON through `brief`, never HTML: `brief new <file> --title … --subject … --goal …`,
+   then `brief raise` per entry. `examples/example.brief.json` shows a finished one; the
+   entry shape, ids, states, bearing, pricing, reversibility and summary box are in
    `reference/entry-format.md`.
 2. Group by root cause. Write `goal` first; every live entry gets `bearing`
    (`blocks-goal` / `escalated`) and `bearingReason`. Recommended option first, every
    option priced and marked `reversible`. Fix unambiguous reversible things yourself and
-   list them as `mechanical`; anything irreversible is always the operator's call.
+   list them with `brief fix <file> --summary …`; anything irreversible is always the operator's call.
    A reversible, small fix that would block the goal is not a blocker: do it, list it as
    `mechanical` with how to undo it. Never change a ruling unasked; if a ruled option cannot
    be carried out at all, take its reversible fallback and record that you did. The
@@ -257,6 +269,7 @@ falling back to mermaid.
 - An id or coinage you cannot explain in plain words in the same sentence.
 - An entry the conversation ruled on still reading *awaiting your ruling*.
 - Reaching for the HTML instead of the JSON; publishing without sending the link.
+- Opening a brief's JSON in an editor, or writing it from python, `jq` or `sed`, instead of `brief`.
 - Rendering, then humanizing: a render after a prose change is a render thrown away.
 - Starting work on a ruling for a brief this session does not own.
 - Marking a decision the operator withdrew as `superseded`, so it stays on the page.
@@ -272,7 +285,8 @@ falling back to mermaid.
 | `reference/publishing.md` | Publishing, comments, chat summary, freshness, `AskUserQuestion`. |
 | `reference/memory-and-hooks.md` | Memory registration, hooks, recovery, retiring. |
 | `reference/diagrams.md` | Mermaid and archify diagrams. |
-| `bin/*.mjs` | Validator, renderer, delta, context, comments, memory, retire, withdraw, extract — run with `node`. |
+| `bin/brief.mjs` | Every write to a brief: new, raise, decide, complete, retract, rule, work, fix, note, set, refresh, stamp. |
+| `bin/*.mjs` | Validator, renderer, delta, context, comments, memory, retire, withdraw, extract, guard hook — run with `node`. |
 
 The source repository (github.com/zaytsevand/problem-brief) also holds `install.sh` /
 `install.ps1` (install, hooks, CLAUDE.md line) and `test/brief.test.mjs` (run

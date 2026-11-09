@@ -180,7 +180,7 @@ function commentPrompt(brief: BriefView, q: Entry, text: string): string {
     text,
     '',
     `Record this in ${brief.path} this turn (on ${q.id}: decision, status or a ruling,`,
-    'as the problem-brief skill says), act on it if this session owns the brief, and republish the brief page.',
+    "with the skill's brief.mjs commands, never a hand edit), act on it if this session owns the brief, and republish the brief page.",
   ].join('\n')
 }
 
@@ -188,7 +188,7 @@ function rulingPrompt(brief: BriefView, q: Entry, o: Option): string {
   return [
     `Ruling on ${q.id} ("${q.title}") in the problem brief "${brief.title}": take "${o.label}".`,
     '',
-    `Record it in ${brief.path} this turn: the decision on ${q.id}, status decided,`,
+    `Record it in ${brief.path} this turn with the skill's brief.mjs: decide ${brief.path} ${q.id} --chose <that option's id>,`,
     'then carry it out if this session owns the brief, as the problem-brief skill says, and republish the brief page.',
   ].join('\n')
 }
