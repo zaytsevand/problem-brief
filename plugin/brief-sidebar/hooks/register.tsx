@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
-import type { BriefView, Entry, Evidence, Group, Option } from '../types'
+import type { BriefView, Entry, Evidence, Group, HeldReply, Option } from '../types'
 
 import { judgeTurn } from './turn'
 import type { Stamps } from './turn'
@@ -149,7 +149,29 @@ async function markAuthor($: EngineInterface, slugs: string[]): Promise<void> {
 
 // Replies held for an owner that was not running, by brief path, until that session starts again.
 const PENDING = 'pending:'
-type Pending = { owner: string; text: string }
+type Pending = HeldReply
+const held = atom({ plugin: 'brief-sidebar', key: 'held' } as const, {})
+
+// Mirrors the held replies into the pane; written only when they changed, so the 3 s tick causes no redraw.
+async function refreshHeld($: EngineInterface): Promise<void> {
+  const map: Record<string, Pending[]> = {}
+  for (const key of await $.store.keys()) {
+    if (!key.startsWith(PENDING)) continue
+    const waiting = list(await $.store.get(key)) as Pending[]
+    if (waiting.length > 0) map[key.slice(PENDING.length)] = waiting
+  }
+  if (JSON.stringify(map) !== JSON.stringify(await read($, held))) await update($, held, () => map)
+}
+
+// Takes one held reply out of the queue, matched by owner and text: the owner may have taken others meanwhile.
+async function unhold($: EngineInterface, path: string, p: Pending): Promise<boolean> {
+  const waiting = list(await $.store.get(PENDING + path)) as Pending[]
+  const at = waiting.findIndex(w => w.owner === p.owner && w.text === p.text)
+  if (at >= 0) waiting.splice(at, 1)
+  await (waiting.length > 0 ? $.store.set(PENDING + path, waiting) : $.store.delete(PENDING + path))
+  await refreshHeld($)
+  return at >= 0
+}
 
 // A brief's owner: its last writer's session id, else the session it is named after (`session-<id prefix>`).
 async function ownerOf($: EngineInterface, b: BriefView): Promise<string | undefined> {
@@ -158,9 +180,10 @@ async function ownerOf($: EngineInterface, b: BriefView): Promise<string | undef
   return /^session-[0-9a-f]{8}$/.test(b.slug) ? b.slug : undefined
 }
 
-async function hold($: EngineInterface, path: string, owner: string, text: string): Promise<void> {
-  const held = list(await $.store.get(PENDING + path)) as Pending[]
-  await $.store.set(PENDING + path, [...held, { owner, text }])
+async function hold($: EngineInterface, path: string, p: Pending): Promise<void> {
+  const waiting = list(await $.store.get(PENDING + path)) as Pending[]
+  await $.store.set(PENDING + path, [...waiting, p])
+  await refreshHeld($)
 }
 
 // The owner's side: a session that starts or ends a turn takes the replies held for it and its briefs.
@@ -180,6 +203,7 @@ async function deliverHeld($: EngineInterface): Promise<void> {
       await $.prompt.submit({ text: `${p.text}\n\n(Sent from the brief sidebar while this session was not running.)`, asUser: true })
     }
   }
+  await refreshHeld($)
 }
 
 function slugOf(path: string): string {
@@ -275,6 +299,7 @@ async function reload($: EngineInterface): Promise<void> {
   }
   loaded.sort((a, b) => (b.updated ?? '').localeCompare(a.updated ?? ''))
   await update($, briefs, () => loaded)
+  await refreshHeld($).catch(() => undefined)
   await refreshStatus($)
 }
 
@@ -362,7 +387,8 @@ export const register: Register = on => {
     await update($, sessionSlug, () => (id ? `session-${id.slice(0, 8)}` : ''))
     await reload($)
     await deliverHeld($).catch(() => undefined)
-    $.clock.every(3_000, () => void refreshIfChanged($).catch(() => undefined))
+    // Held replies live in the store, not on disk: another session taking one shows here within a tick.
+    $.clock.every(3_000, () => void refreshIfChanged($).then(() => refreshHeld($)).catch(() => undefined))
     void $.ui.open({ id: PANE, title: TITLE })
 
     return next(e)
@@ -453,6 +479,7 @@ export const register: Register = on => {
     const chosen = await read($, openBrief)
     const shut = await read($, folded)
     const notes = await read($, sent)
+    const waitingAll = await read($, held)
 
     const ours = all
       .filter(b => mine.includes(b.slug))
@@ -488,12 +515,27 @@ export const register: Register = on => {
             if (r.isDelivered) return void (await $.ui.toast(`Reply sent to session ${owner}, which owns this brief`))
             why = r.reason ?? why
           }
-          await hold($, brief.path, owner, prompt)
+          await hold($, brief.path, { owner, text: prompt, entry: k.slice(k.indexOf('#') + 1), said: shownText })
           return void (await $.ui.toast(`Session ${owner} not reached (${why}); the reply waits for it and arrives when it runs`))
         }
         await update($, inPlay, l => [...new Set([...l, brief.slug])])
         await $.prompt.submit({ text: prompt, asUser: true })
       })().catch(err => $.ui.toast(`Reply not sent: ${String(err)}`))
+
+    const withdraw = (brief: BriefView, p: Pending) =>
+      void unhold($, brief.path, p)
+        .then(took => $.ui.toast(took ? 'Reply withdrawn' : `Session ${p.owner} already took that reply`))
+        .catch(err => $.ui.toast(`Not withdrawn: ${String(err)}`))
+
+    // Your explicit choice to hand a stuck reply to this session, marked so the model records it, not adopts it.
+    const sendHere = (brief: BriefView, p: Pending) =>
+      void (async () => {
+        if (!(await unhold($, brief.path, p))) return void (await $.ui.toast(`Session ${p.owner} already took that reply`))
+        await $.prompt.submit({
+          text: `${p.text}\n\n(Sent here by hand from the brief sidebar: the brief belongs to session ${p.owner}, which had not picked this reply up. Record it as the problem-brief skill says for a brief this session does not own.)`,
+          asUser: true,
+        })
+      })().catch(err => $.ui.toast(`Not sent: ${String(err)}`))
 
     // Laid out like the Claude app's own sidebar: grey section labels, a fixed icon column, and every
     // child aligned to its parent's text column, so each level of the brief sits one step further in.
@@ -564,6 +606,7 @@ export const register: Register = on => {
       const evidence = q.evidence ?? []
       const options = q.options ?? []
       const isBlocking = q.group === 'blocks'
+      const waiting = (waitingAll[brief.path] ?? []).filter(p => p.entry === q.id)
 
       const head = (
         <Box>
@@ -614,6 +657,17 @@ export const register: Register = on => {
               {thread.length > 1 ? ` (and ${thread.length - 1} earlier)` : ''}
             </Text>
           )}
+          {waiting.map((p, i) => (
+            <Box key={`h:${k}:${i}`} flexDirection="column" marginTop={1}>
+              <Text color="yellow" wrap="truncate-end">
+                Waiting for session {p.owner}: {p.said ?? 'a reply'}
+              </Text>
+              <Box gap={1}>
+                <Button key={`hw:${k}:${i}`} label="Withdraw" variant="secondary" onPress={() => withdraw(brief, p)} />
+                <Button key={`hs:${k}:${i}`} label="Send here instead" variant="secondary" onPress={() => sendHere(brief, p)} />
+              </Box>
+            </Box>
+          ))}
           {Input && (
             <Box width="100%" borderStyle="round" borderDimColor paddingX={1}>
               <Input

@@ -315,6 +315,38 @@ test('a reply whose owner cannot be reached waits for it, and never lands in the
   expect(contexts.at(-1)).toBe('')
 })
 
+test('a held reply shows under its question, and can be withdrawn or sent here by hand', async ($, on) => {
+  const store: Record<string, unknown> = { [`author:${PATH}`]: 's-gone' }
+  seedDisk(on, store)
+  const texts: string[] = []
+  on('prompt.submit', async (_$, e) => {
+    texts.push(e.text)
+    return { text: e.text, context: e.context }
+  })
+  on('session.send', async () => ({ isDelivered: false, reason: 'the recipient is gone' }))
+  on('ui.toast', async () => ({ value: undefined }))
+  await $.tool.call({ tool: 'Read', file_path: PATH })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'f:demo' })
+
+  await ui.input({ key: 'c:demo#Q-1:0', text: 'first answer' })
+  await ui.input({ key: 'c:demo#Q-1:1', text: 'second answer' })
+  expect(await ui.find({ type: 'Text', text: /Waiting for session s-gone: first answer/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Waiting for session s-gone: second answer/ })).toBeDefined()
+
+  await ui.press({ key: 'hw:demo#Q-1:0' })
+  expect(await ui.find({ type: 'Text', text: /Waiting for session s-gone: first answer/ })).toBeUndefined()
+  expect((store[`pending:${PATH}`] as unknown[]).length).toBe(1)
+  expect(texts.some(t => t.includes('first answer'))).toBe(false)
+
+  await ui.press({ key: 'hs:demo#Q-1:0' })
+  expect(store[`pending:${PATH}`]).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Waiting for session/ })).toBeUndefined()
+  const handed = texts.find(t => t.includes('second answer')) ?? ''
+  expect(handed).toContain('Sent here by hand')
+  expect(handed).toContain('s-gone')
+})
+
 test('a brief named after another session, with no writer on record, holds the reply for that session', async ($, on) => {
   const FOREIGN = `${DIR}/session-93849256.brief.json`
   FILES[FOREIGN] = { title: 'Foreign brief', decisions: [{ id: 'Q-1', title: 'Which risk tier', short: 'risk tier', status: 'open' }] }

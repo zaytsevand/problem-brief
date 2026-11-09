@@ -100,7 +100,10 @@ the session that last wrote the brief, or, when nobody has, the session it is
 named after. When the owner is not running, the reply waits and reaches it the
 next time that session starts or ends a turn; it never lands in the open
 session, and a notice says where it went. Only a brief with no owner at all
-takes the reply in the open session, which then owns it.
+takes the reply in the open session, which then owns it. A reply still waiting
+shows under its question as "Waiting for session …", with buttons to withdraw it
+or to send it to the open session by hand, marked as a reply on a brief that
+session does not own.
 
 The installer adds the plugin's folder to
 `CLAUDE_CODE_PLUGIN_DIRS` in the `env` block of `~/.claude/settings.json`;
