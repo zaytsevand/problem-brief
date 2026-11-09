@@ -21,12 +21,27 @@ const WRITES = /json\.dumps?\b|JSON\.stringify|writeFile|write_text|\.write\(|op
 // The skill's own scripts write briefs through the same validation; let them run.
 const OURS = /\b(brief|brief-withdraw|brief-retire|brief-memory|extract-brief)\.mjs\b/;
 
+// Text a command only carries — a heredoc body for cat or gh, a commit message, an issue body — writes nothing,
+// whatever it names (#37). A heredoc on a line that runs an interpreter is code and stays.
+const HEREDOC = /<<-?[ \t]*(['"]?)([\w-]+)\1([^\n]*)\n[\s\S]*?\n[ \t]*\2[ \t]*(?=\n|$)/g;
+const RUNS_CODE = /\b(python\d*(\.\d+)?|node|deno|bun|bash|sh|zsh|perl|ruby|jq|awk|sed|tee|sponge)\b/;
+const MESSAGE = /(\s(?:-m|--message|--body|--title|--notes)(?:\s+|=))("(?:[^"\\]|\\.)*"|'[^']*')/g;
+
+export function prose(cmd) {
+  const bodies = cmd.replace(HEREDOC, (all, q, tag, rest, at) => {
+    const line = cmd.slice(cmd.lastIndexOf("\n", at) + 1, at) + rest;
+    // shortcut: judged by the heredoc's own line; a body piped on through a later line is missed — tighten if seen.
+    return RUNS_CODE.test(line) ? all : `<<${q}${tag}${q}${rest}\n${tag}`;
+  });
+  return bodies.replace(MESSAGE, "$1''");
+}
+
 export function refusal(tool, input) {
   if (["Write", "Edit", "MultiEdit", "NotebookEdit"].includes(tool)) {
     return BRIEF_FILE.test(String(input?.file_path ?? input?.notebook_path ?? "")) ? "edit" : null;
   }
   if (tool === "Bash") {
-    const cmd = String(input?.command ?? "");
+    const cmd = prose(String(input?.command ?? ""));
     // shortcut: a command that both runs one of our scripts and hand-writes a brief slips through; tighten if seen.
     return BRIEF_FILE.test(cmd) && WRITES.test(cmd) && !OURS.test(cmd) ? "shell" : null;
   }
