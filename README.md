@@ -79,6 +79,15 @@ beside the prompt fell from 2 blocking, 3 open to 1 blocking, 2 open.*
 Both captures are of a real run in a terminal, not a mock-up; rows listing the
 author's unrelated briefs and a usage meter are blanked out.
 
+A brief you are done looking at can be closed from the pane: **Close this
+brief**, under the open brief's goal, takes it off the pane and out of the
+reminder the mod adds to each prompt. The file is left alone, and the brief
+comes back if the session writes it again.
+
+![The pane with this repo's example brief open, the "Close this brief" button under its goal](docs/brief-sidebar-close.png)
+
+![The same pane after pressing it: the brief is gone](docs/brief-sidebar-closed.png)
+
 `./install.sh --sidebar` (`.\install.ps1 -Sidebar`) also loads a Claude Code
 plugin in every session, from the next one on. It shows the open questions of
 the session's own briefs in a pane beside the conversation, each in full with

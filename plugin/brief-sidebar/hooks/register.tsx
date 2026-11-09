@@ -20,6 +20,8 @@ const inPlay = atom({ plugin: 'brief-sidebar', key: 'inPlay' } as const, [])
 const paths = atom({ plugin: 'brief-sidebar', key: 'paths' } as const, [])
 const openBrief = atom({ plugin: 'brief-sidebar', key: 'openBrief' } as const, '')
 const folded = atom({ plugin: 'brief-sidebar', key: 'folded' } as const, [])
+// Briefs the person closed: not loaded, not shown, until this session writes one again.
+const closed = atom({ plugin: 'brief-sidebar', key: 'closed' } as const, [])
 const sent = atom({ plugin: 'brief-sidebar', key: 'sent' } as const, {})
 const upkeep = atom(
   { plugin: 'brief-sidebar', key: 'upkeep' } as const,
@@ -289,8 +291,10 @@ async function reload($: EngineInterface): Promise<void> {
     .filter(f => f.kind === 'file' && f.name.endsWith('.brief.json'))
     .map(f => `${dir}/${f.name}`)
   const loaded: BriefView[] = []
+  const shut = await read($, closed)
   for (const path of [...new Set([...found, ...(await read($, paths))])]) {
     const slug = slugOf(path)
+    if (shut.includes(slug)) continue
     try {
       loaded.push(toBrief(slug, path, JSON.parse(await $.fs.read(path)) as Raw))
     } catch {
@@ -435,6 +439,9 @@ export const register: Register = on => {
       // A file tool aimed at a brief is a certain write; a shell command waits for the stamp check at turn end.
       if (touched.length > 0 && WRITES_FILE.has(e.tool)) {
         await addInPlay($, touched)
+        if ((await read($, closed)).some(s => touched.includes(s))) {
+          await update($, closed, l => l.filter(s => !touched.includes(s)))
+        }
       } else if (touched.length === 0 && (WRITES_FILE.has(e.tool) || (isShell && SHELL_WORK.test(command)))) {
         didWork = true
       }
@@ -518,6 +525,14 @@ export const register: Register = on => {
       void update($, openBrief, () => (slug === current ? NONE : slug))
     const toggleQuestion = (k: string) =>
       void update($, folded, l => (l.includes(k) ? l.filter(x => x !== k) : [...l, k]))
+
+    const close = (b: BriefView) =>
+      void (async () => {
+        await update($, closed, l => [...new Set([...l, b.slug])])
+        await update($, inPlay, l => l.filter(s => s !== b.slug))
+        await update($, paths, l => l.filter(p => p !== b.path))
+        await reload($)
+      })().catch(err => $.ui.toast(`Brief not closed: ${String(err)}`))
 
     const send = (brief: BriefView, k: string, prompt: string, shownText: string) =>
       void (async () => {
@@ -729,6 +744,9 @@ export const register: Register = on => {
       <Box flexDirection="column">
         {b.goal && <Text dimColor>Goal: {b.goal}</Text>}
         {b.url && <Link href={b.url} label="Open the brief's page" />}
+        <Box>
+          <Button key={`k:${b.slug}`} label="Close this brief" variant="secondary" onPress={() => close(b)} />
+        </Box>
         {GROUPS.map(g => {
           const qs = b.open.filter(q => q.group === g.key)
           if (qs.length === 0) return null
