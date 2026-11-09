@@ -341,7 +341,9 @@ export const register: Register = on => {
 
   on('tool.call', async ($, e, next) => {
     const text = JSON.stringify(e)
-    const touched = slugsIn(text)
+    const raw = e as unknown as Raw
+    // A file tool writes only its target; a brief named in its content (a fixture, a note) is not written (#37).
+    const touched = slugsIn(WRITES_FILE.has(e.tool) ? String(raw.file_path ?? raw.notebook_path ?? '') : text)
     const files = filesIn(text, (await $.env.get('HOME').catch(() => undefined)) ?? '')
     if (files.length > 0) await update($, paths, l => [...new Set([...l, ...files])])
     const isShell = e.tool === 'Bash'

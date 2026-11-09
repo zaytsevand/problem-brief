@@ -218,6 +218,31 @@ test('a write records this session as the brief\'s last writer, so its own repli
   expect(sends).toEqual([])
 })
 
+test('a write that only names a brief in its content does not make it this session\'s (#37)', async ($, on) => {
+  seedDisk(on, { [`author:${PATH}`]: 's-other' })
+  const seen: string[] = []
+  const sends: string[] = []
+  on('prompt.submit', async (_$, e) => {
+    seen.push((e.context ?? []).join('\n'))
+    return { text: e.text, context: e.context }
+  })
+  on('session.send', async (_$, e) => {
+    sends.push(e.to)
+    return { isDelivered: true }
+  })
+  await $.tool.call({ tool: 'Write', file_path: '/home/x/code/fixture.test.ts', content: `const p = '${PATH}'` } as never)
+  await $.tool.call({ tool: 'Edit', file_path: '/home/x/code/notes.md', old_string: 'a', new_string: `see ${PATH}` })
+
+  await $.prompt.submit({ text: 'go on', ...USER } as never)
+  expect(seen[0]).not.toContain('Briefs in play this session')
+
+  await $.tool.call({ tool: 'Read', file_path: PATH })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'f:demo' })
+  await ui.input({ key: 'c:demo#Q-1:0', text: 'Route to its writer' })
+  expect(sends).toEqual(['s-other'])
+})
+
 test('a reply goes to the session that last wrote the brief, not the open one', async ($, on) => {
   seedDisk(on, { [`author:${PATH}`]: 's-other' })
   const texts: string[] = []
