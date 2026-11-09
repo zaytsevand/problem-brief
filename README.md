@@ -219,8 +219,8 @@ A brief whose work is done, or that was only a test, is retired with
 cleared, stamped `retired`, and its published pages listed. The pages are
 never deleted without the operator's say-so. With the hooks installed, a
 SessionEnd hook does this on its own for the briefs the ending session owns and
-needs no ruling to retire (throwaway ones, and ones with nothing live and no
-standing ruling), and the next session start says what it retired.
+left finished (throwaway ones, and ones with nothing live), and the next
+session start says what it retired.
 
 `./install.sh --claude-md` (`.\install.ps1 -ClaudeMd`) adds one line to
 `~/.claude/CLAUDE.md` making a brief the default channel for findings,

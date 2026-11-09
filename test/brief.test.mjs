@@ -1048,7 +1048,7 @@ test("a throwaway brief is one line at every session start, with its pages, unti
   assert.doesNotMatch(start(), /Throwaway brief/);
 });
 
-test("at session end only the ending session's briefs that need no ruling are retired, and the next start says so once", () => {
+test("at session end only the ending session's finished briefs are retired, and the next start says so once", () => {
   const dir = mkdtempSync(join(tmpdir(), "brief-"));
   execFileSync("git", ["init", "-q", "-b", "feat", dir]);
   execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "start"]);
@@ -1071,16 +1071,17 @@ test("at session end only the ending session's briefs that need no ruling are re
   const input = JSON.stringify({ hook_event_name: "SessionEnd", session_id: "S-9", cwd: dir, transcript_path: join(dir, "project", "s.jsonl") });
   node("brief-end.mjs", ["--hook"], input);
   const retired = (name) => !!JSON.parse(readFileSync(join(dir, `${name}.brief.json`), "utf8")).retired;
-  assert.deepEqual(Object.keys(briefs).filter(retired), ["toy", "over"]);
+  assert.deepEqual(Object.keys(briefs).filter(retired), ["toy", "over", "ruled"]);
   assert.ok(!existsSync(join(mem, "problem-brief-toy.md")));
-  assert.ok(existsSync(join(mem, "problem-brief-ruled.md")));
+  assert.ok(existsSync(join(mem, "problem-brief-busy.md")));
+  assert.equal(JSON.parse(readFileSync(join(dir, "ruled.brief.json"), "utf8")).rulings.length, 1);
 
   const start = () => JSON.parse(node("brief-context.mjs", ["--hook"], JSON.stringify({ transcript_path: join(dir, "project", "s.jsonl") })))
     .hookSpecificOutput.additionalContext;
   const text = start();
   assert.match(text, /Retired at the end of session S-9 \(feat, .*Their pages were not deleted/);
   assert.match(text, /"Toy" — \S*toy\.brief\.json \(throwaway\)/);
-  assert.match(text, /"Over" — \S*over\.brief\.json \(nothing live, no standing ruling\)/);
+  assert.match(text, /"Over" — \S*over\.brief\.json \(nothing live\)/);
   assert.doesNotMatch(start(), /Retired at the end of session/);
   assert.doesNotThrow(() => node("brief-end.mjs", ["--hook"], "not json"));
 });

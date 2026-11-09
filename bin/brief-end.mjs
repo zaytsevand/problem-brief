@@ -11,9 +11,9 @@
  * `owner` is the session's git branch):
  *
  *   - a throwaway brief, and
- *   - a brief with nothing live and no standing ruling. A brief that still
- *     holds standing rulings stays registered: those answers are what stops a
- *     settled question being asked again, so retiring it is the operator's call.
+ *   - a brief with nothing live. Every brief is throwaway once its work is
+ *     done: its rulings are written back into the project's spec suite (#38),
+ *     and the retired JSON keeps them for the record.
  *
  * It never deletes a published page. What it retired is kept under the hooks'
  * state, and the next SessionStart in the project says so once, with how to
@@ -32,9 +32,7 @@ import { briefsFor, currentBranch, endedFile, finished, memoryDirOf } from "./br
 
 const RETIRE = join(dirname(fileURLToPath(import.meta.url)), "brief-retire.mjs");
 
-export const dueAtEnd = (brief) =>
-  !brief.retired && (brief.throwaway === true ||
-    (finished(brief) && !(brief.rulings ?? []).some((r) => (r.status ?? "active") === "active")));
+export const dueAtEnd = (brief) => !brief.retired && (brief.throwaway === true || finished(brief));
 
 function hook() {
   const input = JSON.parse(readFileSync(0, "utf8") || "{}");
@@ -47,7 +45,7 @@ function hook() {
     if (brief.owner !== branch || !dueAtEnd(brief)) continue;
     try {
       const out = execFileSync("node", [RETIRE, path, "--memory-dir", memoryDir], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-      retired.push({ title: brief.title, path, why: brief.throwaway ? "throwaway" : "nothing live, no standing ruling", out: out.trim() });
+      retired.push({ title: brief.title, path, why: brief.throwaway ? "throwaway" : "nothing live", out: out.trim() });
     } catch { /* left registered: the SessionStart digest still offers it */ }
   }
   if (!retired.length) return;
