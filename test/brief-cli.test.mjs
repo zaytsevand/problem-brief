@@ -146,6 +146,10 @@ test("the guard refuses hand edits of brief JSON and lets the commands through",
   assert.equal(refusal("Bash", { command: "git commit -m 'load brief.json and <slug>.brief.json once'" }), null);
   assert.equal(refusal("Bash", { command: "echo '{}' > x.brief.json" }), "shell");
   assert.equal(refusal("Bash", { command: "echo '{}'>brief.json" }), "shell");
+  assert.equal(refusal("Bash", { command: "ls ~/.claude/briefs/<slug>/brief.json" }), null);
+  // A heredoc or an input redirect right before the `>` is no placeholder.
+  assert.equal(refusal("Bash", { command: "cat <<EOF>brief.json\n{}\nEOF" }), "shell");
+  assert.equal(refusal("Bash", { command: "jq . <old.json>brief.json" }), "shell");
   assert.equal(refusal("Read", { file_path: "brief.json" }), null);
   // A brief named in a message or a heredoc body is text, not a write (#37); a heredoc fed to an interpreter still is.
   const issue = "gh issue create --title 'x' --body \"$(cat <<'EOF'\nThe guard should refuse sed -i or tee on session-a.brief.json, or > brief.json.\nEOF\n)\"";
