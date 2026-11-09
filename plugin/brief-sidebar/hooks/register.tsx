@@ -180,7 +180,7 @@ function commentPrompt(brief: BriefView, q: Entry, text: string): string {
     text,
     '',
     `Record this in ${brief.path} this turn (on ${q.id}: decision, status or a ruling,`,
-    'as the problem-brief skill says), act on it if this session owns the brief, and republish the brief page.',
+    "with the skill's brief.mjs commands, never a hand edit), act on it if this session owns the brief, and republish the brief page.",
   ].join('\n')
 }
 
@@ -188,7 +188,7 @@ function rulingPrompt(brief: BriefView, q: Entry, o: Option): string {
   return [
     `Ruling on ${q.id} ("${q.title}") in the problem brief "${brief.title}": take "${o.label}".`,
     '',
-    `Record it in ${brief.path} this turn: the decision on ${q.id}, status decided,`,
+    `Record it in ${brief.path} this turn with the skill's brief.mjs: decide ${brief.path} ${q.id} --chose <that option's id>,`,
     'then carry it out if this session owns the brief, as the problem-brief skill says, and republish the brief page.',
   ].join('\n')
 }
@@ -239,8 +239,24 @@ async function reload($: EngineInterface): Promise<void> {
     }
   }
   loaded.sort((a, b) => (b.updated ?? '').localeCompare(a.updated ?? ''))
-  await update($, briefs, () => loaded)
+  // Every write redraws the pane, and a redraw pulls its window back to the focused element:
+  // write only when something changed, so the pane can scroll and a reply field keeps focus.
+  const before = await read($, briefs)
+  if (JSON.stringify(before) !== JSON.stringify(loaded)) await update($, briefs, () => loaded)
   await refreshStatus($)
+}
+
+// Add to a list only what it lacks, so a repeat leaves the pane undrawn (see reload).
+// One per atom: the engine's scan needs each read and update to name its atom.
+const lacks = (have: readonly string[], items: string[]) => items.some(i => !have.includes(i))
+const withAll = (items: string[]) => (l: readonly string[]) => [...new Set([...l, ...items])]
+
+async function addInPlay($: EngineInterface, items: string[]): Promise<void> {
+  if (lacks(await read($, inPlay), items)) await update($, inPlay, withAll(items))
+}
+
+async function addPaths($: EngineInterface, items: string[]): Promise<void> {
+  if (lacks(await read($, paths), items)) await update($, paths, withAll(items))
 }
 
 // This session's briefs: the one named after the session, then those it wrote or answered.
@@ -345,15 +361,15 @@ export const register: Register = on => {
     // A file tool writes only its target; a brief named in its content (a fixture, a note) is not written (#37).
     const touched = slugsIn(WRITES_FILE.has(e.tool) ? String(raw.file_path ?? raw.notebook_path ?? '') : text)
     const files = filesIn(text, (await $.env.get('HOME').catch(() => undefined)) ?? '')
-    if (files.length > 0) await update($, paths, l => [...new Set([...l, ...files])])
     const isShell = e.tool === 'Bash'
     const command = isShell ? String((e as unknown as Raw).command ?? '') : ''
 
     try {
+      await addPaths($, files)
       touched.forEach(slug => named.add(slug))
       // A file tool aimed at a brief is a certain write; a shell command waits for the stamp check at turn end.
       if (touched.length > 0 && WRITES_FILE.has(e.tool)) {
-        await update($, inPlay, l => [...new Set([...l, ...touched])])
+        await addInPlay($, touched)
       } else if (touched.length === 0 && (WRITES_FILE.has(e.tool) || (isShell && SHELL_WORK.test(command)))) {
         didWork = true
       }
@@ -372,7 +388,7 @@ export const register: Register = on => {
     await reload($).catch(() => undefined)
     const verdict = judgeTurn(stampsAtStart, stampsOf(await read($, briefs)), named, await ownSlugs($))
     if (verdict.claimed.length > 0) {
-      await update($, inPlay, l => [...new Set([...l, ...verdict.claimed])])
+      await addInPlay($, verdict.claimed)
       await markAuthor($, verdict.claimed).catch(() => undefined)
     }
     if (verdict.wrote) {
@@ -438,8 +454,16 @@ export const register: Register = on => {
     const send = (brief: BriefView, k: string, prompt: string, shownText: string) =>
       void (async () => {
         const at = await $.clock.now()
-        await update($, sent, m => ({ ...m, [k]: [...(m[k] ?? []), { text: shownText, at }] }))
-        await update($, inPlay, l => [...new Set([...l, brief.slug])])
+        // Counted inside the write, so two quick sends each see the thread their own write made.
+        let count = 0
+        await update($, sent, m => {
+          const thread = [...(m[k] ?? []), { text: shownText, at }]
+          count = thread.length
+          return { ...m, [k]: thread }
+        })
+        // The field is keyed by the thread's length, so the send drew a fresh, empty one: hand it the ring.
+        void $.ui.focus({ requestId: PANE, key: `c:${k}:${count}` }).catch(() => undefined)
+        await addInPlay($, [brief.slug])
         const author = await $.store.get(authorKey(brief.path)).catch(() => undefined)
         if (typeof author === 'string' && author !== (await $.session.id())) {
           const r = await $.session.send({ to: { sessionId: author }, text: prompt })
@@ -510,7 +534,8 @@ export const register: Register = on => {
       )
 
     const question = (brief: BriefView, q: Entry) => {
-      const k = `${brief.slug}#${q.id}`
+      // Keyed by path, not slug: two briefs may share a slug, and every control needs its own key.
+      const k = `${brief.path}#${q.id}`
       const isOpen = !shut.includes(k)
       const thread = notes[k] ?? []
       const last = thread[thread.length - 1]
@@ -606,7 +631,7 @@ export const register: Register = on => {
           const qs = b.open.filter(q => q.group === g.key)
           if (qs.length === 0) return null
           return (
-            <Box key={`g:${b.slug}:${g.key}`} flexDirection="column" marginTop={1}>
+            <Box key={`g:${b.path}:${g.key}`} flexDirection="column" marginTop={1}>
               {label(`${g.heading}  ${qs.length}`)}
               {qs.map(q => question(b, q))}
             </Box>
@@ -624,12 +649,12 @@ export const register: Register = on => {
       const isOpen = b.slug === current
       const blocks = b.open.some(q => q.group === 'blocks')
       return (
-        <Box key={`b:${b.slug}`} flexDirection="column" marginTop={isOpen ? 1 : 0}>
+        <Box key={`b:${b.path}`} flexDirection="column" marginTop={isOpen ? 1 : 0}>
           {item(
-            `bi:${b.slug}`,
+            `bi:${b.path}`,
             <Text dimColor>{isOpen ? '⌄' : '›'}</Text>,
             <Box justifyContent="space-between">
-              <Button key={`f:${b.slug}`} plain label={b.title} onPress={() => toggleBrief(b.slug)} />
+              <Button key={`f:${b.path}`} plain label={b.title} onPress={() => toggleBrief(b.slug)} />
               {!isOpen && (
                 <Text color={blocks ? 'red' : undefined} dimColor={!blocks}>
                   {countsLine(b)}

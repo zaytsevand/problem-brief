@@ -4,7 +4,7 @@
 #   ./install.sh                 copy into ~/.claude/skills/problem-brief
 #   ./install.sh --link          symlink instead, so a git pull updates the skill
 #   ./install.sh --dir DIR       install into a different skills directory
-#   ./install.sh --hook          also add the hooks: restore briefs after a summary, summarise each publish
+#   ./install.sh --hook          also add the hooks: restore briefs after a summary, summarise each publish, refuse hand edits of brief JSON
 #   ./install.sh --claude-md     also add one line to ~/.claude/CLAUDE.md: a brief is the default channel
 #   ./install.sh --sidebar       also load the brief sidebar plugin in every session
 #   ./install.sh --uninstall     remove it again (and the hook)
@@ -117,8 +117,9 @@ fi
 if [ "$HOOK" -eq 1 ]; then
   node "$TARGET/bin/install-hook.mjs" && ok "briefs come back into view at every session start and after every summary"
 else
-  say  "  Optional: ./install.sh --hook adds two hooks: one puts each brief's rulings back"
-  say  "  after a session is summarised, one computes the chat summary on every publish."
+  say  "  Optional: ./install.sh --hook adds hooks: one puts each brief's rulings back"
+  say  "  after a session is summarised, one computes the chat summary on every publish,"
+  say  "  one refuses hand edits of a brief's JSON."
 fi
 
 # ── the line in CLAUDE.md ─────────────────────────────────────────────────
