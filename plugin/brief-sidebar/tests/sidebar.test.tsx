@@ -283,3 +283,25 @@ test('above the terminal prompt the pane refuses loudly instead of drawing a dea
   expect(await docked.find({ type: 'Button', text: /Should the job retry/ })).toBeDefined()
   await docked.unmount()
 })
+
+test('closing a brief unloads it from the pane and the nudge; writing it again brings it back', async ($, on) => {
+  seedDisk(on)
+  const seen: string[] = []
+  on('prompt.submit', async (_$, e) => {
+    seen.push((e.context ?? []).join('\n'))
+    return { text: e.text, context: e.context }
+  })
+  await $.tool.call({ tool: 'Edit', file_path: PATH, old_string: 'a', new_string: 'b' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Button', text: 'Demo brief' })).toBeDefined()
+
+  await ui.press({ key: 'k:demo' })
+  expect(await ui.find({ type: 'Button', text: 'Demo brief' })).toBeUndefined()
+  expect(await ui.find({ type: 'Button', text: 'Other brief' })).toBeDefined()
+  await $.prompt.submit({ text: 'go on', ...USER } as never)
+  expect(seen[0]).not.toContain(PATH)
+
+  await $.tool.call({ tool: 'Edit', file_path: PATH, old_string: 'a', new_string: 'b' })
+  expect(await ui.find({ type: 'Button', text: 'Demo brief' })).toBeDefined()
+  await ui.unmount()
+})
