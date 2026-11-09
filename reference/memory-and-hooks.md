@@ -36,6 +36,7 @@ the repository, not in the installed skill directory. If `~/.claude/settings.jso
 | Hook | Script | Does |
 |---|---|---|
 | SessionStart | `brief-context.mjs --hook` | Default-channel line; each registered brief's goal, active rulings, live entries, closed ids. At startup, resume, clear and after every summary. |
+| SessionEnd | `brief-end.mjs --hook` | Retires the briefs the ending session owns (`owner` is its branch) and left finished: throwaway ones, and ones with nothing live and no standing ruling. Never deletes a page. The next SessionStart lists what it retired, once. |
 | PostToolUse `Artifact` | `brief-delta.mjs --hook` | After a brief is published: the computed chat summary of what moved since the last publish at that same page. No summary when the brief's `url` names a different page. |
 | UserPromptSubmit | `brief-comments.mjs` | A comment notification or a message citing a brief's ids gets the brief's path, the cited items' state, and "record the answer now". |
 | PostToolUse `ArtifactComments` | `brief-comments.mjs` | Notes when a brief's comments were read. |
@@ -70,12 +71,18 @@ node ~/.claude/skills/problem-brief/bin/brief-retire.mjs brief.json --memory-dir
 Removes the pointer and `MEMORY.md` line, clears hook state, stamps `retired` in the JSON,
 lists the pages it was published at. The JSON stays.
 
-- **Offer it** when the SessionStart hook shows the brief as having nothing live. Retire
+- **At session end** the SessionEnd hook retires, on its own, the briefs that session owns
+  and that need no ruling to retire: throwaway ones, and ones with nothing live and no
+  standing ruling. When the next SessionStart says it did, tell the operator once.
+- **Offer it** when the SessionStart hook shows the brief as having nothing live. A brief
+  that still holds standing rulings keeps them in front of every session, which is how a
+  settled question is not asked again; retire it only when the operator says so. Retire
   unasked only a test brief or one the operator called finished.
 - **Never delete the page unasked.** Deleting is permanent and breaks shared links. Ask,
   naming the page; delete with the `Artifact` `delete` action only on a yes.
 - **Throwaway briefs**: set `"throwaway": true` on any brief made to try something out.
-  When the test is over, offer the full cleanup (retire, delete pages on a yes, remove
-  temporary hooks/files) at the next opportunity — no hook can do it at session end.
+  The SessionEnd hook retires it when the owning session ends. Deleting its pages and
+  removing temporary hooks/files still needs the operator's yes, so offer that cleanup
+  when the test is over, or when the next SessionStart reports it retired.
 - **Nothing live left behind**: close, retract or move open/ruled entries before retiring.
 - **Bring one back** by removing `retired` and registering again.

@@ -23,7 +23,7 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -40,6 +40,11 @@ export const stateHome = () => process.env.PROBLEM_BRIEF_HOME || join(homedir(),
    stamps repeat when a brief is started from another's JSON. */
 export const snapshotFile = (url) =>
   join(stateHome(), "published", `${createHash("sha1").update(String(url)).digest("hex").slice(0, 16)}.json`);
+
+/* Where the briefs a SessionEnd hook retired (brief-end.mjs) wait, per project,
+   for that project's next SessionStart to say so. */
+export const endedFile = (memoryDir) =>
+  join(stateHome(), "ended", `${createHash("sha1").update(String(memoryDir)).digest("hex").slice(0, 16)}.json`);
 
 /* A brief's page is its own url field; the memory pointer's only when it has none. */
 export const pageOf = (brief, pointerUrl) => brief?.url || pointerUrl || null;
@@ -182,6 +187,16 @@ function hook() {
   const branch = input.cwd ? currentBranch(input.cwd) : null;
 
   const parts = process.env.PROBLEM_BRIEF_REMINDER === "off" ? [] : [REMINDER];
+  if (memoryDir) {
+    const ended = endedFile(memoryDir);
+    let log = [];
+    try { log = JSON.parse(readFileSync(ended, "utf8")); unlinkSync(ended); } catch { /* none */ }
+    for (const s of log) {
+      parts.push(`Retired at the end of session ${s.session ?? "?"} (${s.branch}, ${s.at}), which owned them and needed no ruling: ` +
+        s.retired.map((r) => `"${r.title}" — ${r.path} (${r.why})`).join("; ") +
+        `. Their pages were not deleted. Tell the operator once; to bring one back, remove "retired" from its JSON and register it again with brief-memory.mjs.`);
+    }
+  }
   for (const p of memoryDir ? pointers(memoryDir) : []) {
     try {
       const brief = JSON.parse(readFileSync(p.brief, "utf8"));
