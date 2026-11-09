@@ -278,8 +278,8 @@ test('a write that only names a brief in its content does not make it this sessi
 
   await $.tool.call({ tool: 'Read', file_path: PATH })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  await ui.press({ key: 'f:demo' })
-  await ui.input({ key: 'c:demo#Q-1:0', text: 'Route to its writer' })
+  await ui.press({ key: `f:${PATH}` })
+  await ui.input({ key: `c:${PATH}#Q-1:0`, text: 'Route to its writer' })
   expect(sends).toEqual(['s-other'])
 })
 
