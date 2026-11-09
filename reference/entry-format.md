@@ -27,8 +27,10 @@ number. Give every entry a `short` label of two to five words; bare ids in text 
 **Binding.** When the work runs under a tracker item (task, spec, ADR), set `binding`
 (`ref`, kind, title, link) from where the work is already bound — branch name, spec being
 implemented, task the operator named. Never invent one. Ids are then cited as `JOB-42/Q-3`;
-the file keeps them bare. Once a ruling is made, record it in the project's own decision
-log too and cite that record in the entry's `resolution`.
+the file keeps them bare. Once a ruling is made, write it back into the project's spec
+suite or decision log (SKILL.md, answer step 5) and name the paths in `decision.specs` or
+the ruling's `specs`; with no spec suite, save it as a `project` memory and name the file
+in `memory`.
 
 **Pricing an option.** `cost.work` says what the work consists of — what changes, how much,
 what it needs from the operator (review, decision, access, migration window). Never "two

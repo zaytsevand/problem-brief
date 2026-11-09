@@ -85,11 +85,36 @@ Whatever else you were doing, the turn the answer arrives produces these, in ord
    `feedback` memory, named with `--memory`.
 4. A ruling that contradicts an earlier one: `brief rule … --replaces R-n` marks the old
    one replaced. Never edit or delete a ruling, unless the operator withdraws it (below).
-5. Validate; render; republish to the same URL. The commands wrote the change notes.
-6. **A comment thread**: only now resolve it (`ArtifactComments`, `action: "resolve"`), so
+5. **Back into the project's spec suite, if it keeps one.** The brief is Claude's record;
+   the project runs on its own. Look for one: `.specify/` with `specs/<feature>/spec.md`
+   (speckit), `docs/adr/` or `docs/decisions/` (ADRs), a `docs/specs/` tree. Pick the
+   document that governs what was decided (the `binding`, else the spec the work
+   implements) and write the decision in that suite's own form:
+   - speckit spec: a line under `## Clarifications` → `### Session YYYY-MM-DD`,
+     `- Q: <about> → A: <what was decided> (brief Q-3)`, and amend the requirement or
+     scope line the decision changes so the spec no longer says the opposite;
+   - ADRs: a new ADR for an architectural choice; an ADR it overturns gets its status
+     changed to superseded, pointing at the new one;
+   - a constitution or other governing principles: never edit; a decision that
+     contradicts one is a new entry for the operator.
+
+   Name the paths in the decision's or ruling's `specs` (`brief set <file> Q-n|R-n
+   --specs '["<path>"]'`). It is a reversible repo edit, so no question is needed, but it
+   counts as carrying out: on a brief this session does not own it becomes an
+   `outstanding` item instead (`brief work <file> add`).
+
+   **No spec suite: Claude's native memory instead.** Save a `project` memory, one
+   decision per file: the decision as a fact, then **Why:** (the operator's reason) and
+   **How to apply:**, linking the brief's pointer memory as `[[problem-brief-<name>]]`
+   and citing the entry id, plus its line in `MEMORY.md`. Name the file in the decision's
+   or ruling's `memory`. It is the project's lasting record, so it stays when the brief
+   is retired (`brief set <file> Q-n|R-n --memory <file>`). A ruling about how Claude
+   works already went to a `feedback` memory in step 3, and that covers it.
+6. Validate; render; republish to the same URL. The commands wrote the change notes.
+7. **A comment thread**: only now resolve it (`ArtifactComments`, `action: "resolve"`), so
    the ruling is in the saved file before the thread closes. A thread with nothing to
    record: `reference/publishing.md`.
-7. Chat: the delta only (`Q-3: open → decided (…)`, `R-4 recorded: …`) plus the link and
+8. Chat: the delta only (`Q-3: open → decided (…)`, `R-4 recorded: …`) plus the link and
    the JSON path. Then go back to the other task.
 
 "I'll fold it in at the next refresh" loses it: by then the turn may be summarised away.
@@ -98,7 +123,7 @@ Being busy with something else is not a reason to defer.
 **Recording is not carrying out.** This session owns a brief when the brief's `owner` names
 this session, branch or worktree, or, with no `owner`, when this session created, published or
 edited it before the ruling arrived. A ruling on a brief it does not own is still recorded
-(steps 1–7), but nothing it decides is carried out here: no code, infrastructure or other
+(steps 1–8, with step 5 left as an outstanding item), but nothing it decides is carried out here: no code, infrastructure or other
 change. Add the follow-up with `brief work <file> add --summary … --detail "unowned: …"`, and say in one line of chat that the ruling landed here and who should carry it
 out. A ruling worded as an order ("add X to Y") is not a go-ahead for a brief this session
 does not own: ask once before acting on it.
@@ -145,6 +170,8 @@ Load the JSON (never rebuild from memory; a lost file is recovered from the page
 - `decided`: carried out? → `complete` with proof. `complete`: does the proof still stand?
 - Anything overtaken → `superseded`. Every bearing re-judged against the current goal.
 - Outstanding work done? Mechanical fixes still in place? Rulings still standing?
+- Every decision and ruling since the last run written back (step 5 above): to the spec
+  suite, whose `specs` paths still say what was decided, or else to a memory file.
 - Every operator answer in this conversation since the last run is in the file.
 - Nothing live left → offer retiring; when the operator asks for it or calls the work
   finished, run `node ~/.claude/skills/problem-brief/bin/brief-retire.mjs brief.json
@@ -237,6 +264,7 @@ falling back to mermaid.
 - About to ask the operator something → did you search the rulings by class?
 - "This feels risky, better check with them" when a ruling covers it.
 - An answer acknowledged in chat but not yet in the JSON.
+- A decision that lives only in the brief: neither in the project's spec nor in memory.
 - "Q-3 noted" with the "stop asking me about…" part dropped instead of made a ruling.
 - An id or coinage you cannot explain in plain words in the same sentence.
 - An entry the conversation ruled on still reading *awaiting your ruling*.
