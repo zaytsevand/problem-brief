@@ -611,6 +611,8 @@ test("installing the hook keeps every other hook, never duplicates, and removes 
   assert.equal(s.hooks.SessionStart.length, 2);
   assert.deepEqual(s.hooks.SessionStart[0], other);
   assert.match(s.hooks.SessionStart[1].hooks[0].command, /brief-context\.mjs" --hook$/);
+  assert.equal(s.hooks.SessionEnd.length, 1);
+  assert.match(s.hooks.SessionEnd[0].hooks[0].command, /brief-end\.mjs" --hook$/);
   run("install-hook.mjs", ["--settings", settings, "--remove"]);
   s = JSON.parse(readFileSync(settings, "utf8"));
   assert.deepEqual(s.hooks.SessionStart, [other]);
@@ -1062,6 +1064,44 @@ test("a throwaway brief is one line at every session start, with its pages, unti
   assert.doesNotMatch(text, /Standing rulings|Live entries/);
   assert.match(node("brief-retire.mjs", [path, "--memory-dir", mem]), /throwaway, so its pages are due for deletion too/);
   assert.doesNotMatch(start(), /Throwaway brief/);
+});
+
+test("at session end only the ending session's finished briefs are retired, and the next start says so once", () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  execFileSync("git", ["init", "-q", "-b", "feat", dir]);
+  execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "start"]);
+  const mem = join(dir, "project", "memory");
+  mkdirSync(mem, { recursive: true });
+  const env = { ...process.env, PROBLEM_BRIEF_HOME: join(dir, "home") };
+  const node = (script, args, input) => execFileSync("node", [bin(script), ...args], { encoding: "utf8", env, input });
+  const done = entry("Q-1", { status: "complete", resolution: { date: "2026-09-15", note: "Done." } });
+  const briefs = {
+    toy: brief([entry("Q-1", live)], { title: "Toy", throwaway: true, owner: "feat" }),
+    over: brief([done], { title: "Over", owner: "feat" }),
+    ruled: brief([done], { title: "Ruled", owner: "feat", rulings: [ruling("R-1")] }),
+    theirs: brief([done], { title: "Theirs", owner: "main" }),
+    busy: brief([entry("Q-1", live)], { title: "Busy", owner: "feat" }),
+  };
+  for (const [name, b] of Object.entries(briefs)) {
+    writeFileSync(join(dir, `${name}.brief.json`), JSON.stringify(b));
+    node("brief-memory.mjs", [join(dir, `${name}.brief.json`), "--memory-dir", mem]);
+  }
+  const input = JSON.stringify({ hook_event_name: "SessionEnd", session_id: "S-9", cwd: dir, transcript_path: join(dir, "project", "s.jsonl") });
+  node("brief-end.mjs", ["--hook"], input);
+  const retired = (name) => !!JSON.parse(readFileSync(join(dir, `${name}.brief.json`), "utf8")).retired;
+  assert.deepEqual(Object.keys(briefs).filter(retired), ["toy", "over", "ruled"]);
+  assert.ok(!existsSync(join(mem, "problem-brief-toy.md")));
+  assert.ok(existsSync(join(mem, "problem-brief-busy.md")));
+  assert.equal(JSON.parse(readFileSync(join(dir, "ruled.brief.json"), "utf8")).rulings.length, 1);
+
+  const start = () => JSON.parse(node("brief-context.mjs", ["--hook"], JSON.stringify({ transcript_path: join(dir, "project", "s.jsonl") })))
+    .hookSpecificOutput.additionalContext;
+  const text = start();
+  assert.match(text, /Retired at the end of session S-9 \(feat, .*Their pages were not deleted/);
+  assert.match(text, /"Toy" — \S*toy\.brief\.json \(throwaway\)/);
+  assert.match(text, /"Over" — \S*over\.brief\.json \(nothing live\)/);
+  assert.doesNotMatch(start(), /Retired at the end of session/);
+  assert.doesNotThrow(() => node("brief-end.mjs", ["--hook"], "not json"));
 });
 
 test("the already-fixed section is folded by default, with its count in the heading", () => {
