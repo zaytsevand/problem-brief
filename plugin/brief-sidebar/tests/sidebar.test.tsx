@@ -48,7 +48,17 @@ const PANE = {
 function seedDisk(on: On, store: Record<string, unknown> = {}) {
   mock.env(on, { HOME: '/home/x' })
   mock.clock(on)
-  mock.store(on, store)
+  // The store answered from `store` itself, so a test reads back what the plugin kept there.
+  on('store.get', async (_$, e) => ({ value: store[e.key] }))
+  on('store.set', async (_$, e) => {
+    store[e.key] = JSON.parse(JSON.stringify(e.value))
+    return { value: undefined }
+  })
+  on('store.delete', async (_$, e) => {
+    delete store[e.key]
+    return { value: undefined }
+  })
+  on('store.keys', async () => ({ value: Object.keys(store) }))
   on('session.id', async () => ({ value: 's-me' }))
   on('fs.list', async (_$, e) => ({
     value: Object.keys(FILES)
@@ -258,6 +268,31 @@ test('a write records this session as the brief\'s last writer, so its own repli
   expect(sends).toEqual([])
 })
 
+test('a write that only names a brief in its content does not make it this session\'s (#37)', async ($, on) => {
+  seedDisk(on, { [`author:${PATH}`]: 's-other' })
+  const seen: string[] = []
+  const sends: string[] = []
+  on('prompt.submit', async (_$, e) => {
+    seen.push((e.context ?? []).join('\n'))
+    return { text: e.text, context: e.context }
+  })
+  on('session.send', async (_$, e) => {
+    sends.push(e.to)
+    return { isDelivered: true }
+  })
+  await $.tool.call({ tool: 'Write', file_path: '/home/x/code/fixture.test.ts', content: `const p = '${PATH}'` } as never)
+  await $.tool.call({ tool: 'Edit', file_path: '/home/x/code/notes.md', old_string: 'a', new_string: `see ${PATH}` })
+
+  await $.prompt.submit({ text: 'go on', ...USER } as never)
+  expect(seen[0]).not.toContain('Briefs in play this session')
+
+  await $.tool.call({ tool: 'Read', file_path: PATH })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: `f:${PATH}` })
+  await ui.input({ key: `c:${PATH}#Q-1:0`, text: 'Route to its writer' })
+  expect(sends).toEqual(['s-other'])
+})
+
 test('a reply goes to the session that last wrote the brief, not the open one', async ($, on) => {
   seedDisk(on, { [`author:${PATH}`]: 's-other' })
   const texts: string[] = []
@@ -288,12 +323,15 @@ test('a reply goes to the session that last wrote the brief, not the open one', 
   expect(toasts.join('\n')).toContain('s-other')
 })
 
-test('a reply whose writer cannot be reached falls back to the open session and says so', async ($, on) => {
-  seedDisk(on, { [`author:${PATH}`]: 's-gone' })
+test('a reply whose owner cannot be reached waits for it, and never lands in the open session', async ($, on) => {
+  const store: Record<string, unknown> = { [`author:${PATH}`]: 's-gone' }
+  seedDisk(on, store)
   const texts: string[] = []
+  const contexts: string[] = []
   const toasts: string[] = []
   on('prompt.submit', async (_$, e) => {
     texts.push(e.text)
+    contexts.push((e.context ?? []).join('\n'))
     return { text: e.text, context: e.context }
   })
   on('session.send', async () => ({ isDelivered: false, reason: 'the recipient is gone' }))
@@ -306,8 +344,98 @@ test('a reply whose writer cannot be reached falls back to the open session and 
   await ui.press({ key: `f:${PATH}` })
 
   await ui.input({ key: `c:${PATH}#Q-1:0`, text: 'Yes, once, after a pause' })
-  expect(texts.some(t => t.includes('Comment on Q-1'))).toBe(true)
+  expect(texts.some(t => t.includes('Comment on Q-1'))).toBe(false)
   expect(toasts.join('\n')).toContain('the recipient is gone')
+  const held = store[`pending:${PATH}`] as { owner: string; text: string }[]
+  expect(held).toHaveLength(1)
+  expect(held[0]?.owner).toBe('s-gone')
+  expect(held[0]?.text).toContain('Yes, once, after a pause')
+  // The foreign brief did not become this session's: no upkeep nudge names it.
+  await $.prompt.submit({ text: 'carry on with my work', ...USER } as never)
+  expect(contexts.at(-1)).toBe('')
+})
+
+test('a held reply shows under its question, and can be withdrawn or sent here by hand', async ($, on) => {
+  const store: Record<string, unknown> = { [`author:${PATH}`]: 's-gone' }
+  seedDisk(on, store)
+  const texts: string[] = []
+  on('prompt.submit', async (_$, e) => {
+    texts.push(e.text)
+    return { text: e.text, context: e.context }
+  })
+  on('session.send', async () => ({ isDelivered: false, reason: 'the recipient is gone' }))
+  on('ui.toast', async () => ({ value: undefined }))
+  await $.tool.call({ tool: 'Read', file_path: PATH })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: `f:${PATH}` })
+
+  await ui.input({ key: `c:${PATH}#Q-1:0`, text: 'first answer' })
+  await ui.input({ key: `c:${PATH}#Q-1:1`, text: 'second answer' })
+  expect(await ui.find({ type: 'Text', text: /Waiting for session s-gone: first answer/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Waiting for session s-gone: second answer/ })).toBeDefined()
+
+  await ui.press({ key: `hw:${PATH}#Q-1:0` })
+  expect(await ui.find({ type: 'Text', text: /Waiting for session s-gone: first answer/ })).toBeUndefined()
+  expect((store[`pending:${PATH}`] as unknown[]).length).toBe(1)
+  expect(texts.some(t => t.includes('first answer'))).toBe(false)
+
+  await ui.press({ key: `hs:${PATH}#Q-1:0` })
+  expect(store[`pending:${PATH}`]).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Waiting for session/ })).toBeUndefined()
+  const handed = texts.find(t => t.includes('second answer')) ?? ''
+  expect(handed).toContain('Sent here by hand')
+  expect(handed).toContain('s-gone')
+})
+
+test('a brief named after another session, with no writer on record, holds the reply for that session', async ($, on) => {
+  const FOREIGN = `${DIR}/session-93849256.brief.json`
+  FILES[FOREIGN] = { title: 'Foreign brief', decisions: [{ id: 'Q-1', title: 'Which risk tier', short: 'risk tier', status: 'open' }] }
+  try {
+    const store: Record<string, unknown> = {}
+    seedDisk(on, store)
+    const texts: string[] = []
+    const sends: unknown[] = []
+    on('prompt.submit', async (_$, e) => {
+      texts.push(e.text)
+      return { text: e.text, context: e.context }
+    })
+    on('session.send', async (_$, e) => {
+      sends.push(e.to)
+      return { isDelivered: true }
+    })
+    on('ui.toast', async () => ({ value: undefined }))
+    await $.tool.call({ tool: 'Read', file_path: FOREIGN })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    await ui.press({ key: `f:${FOREIGN}` })
+
+    await ui.input({ key: `c:${FOREIGN}#Q-1:0`, text: 'cosmetic changes are medium' })
+    expect(sends).toEqual([])
+    expect(texts.some(t => t.includes('cosmetic changes are medium'))).toBe(false)
+    const held = store[`pending:${FOREIGN}`] as { owner: string }[]
+    expect(held?.[0]?.owner).toBe('session-93849256')
+  } finally {
+    delete FILES[FOREIGN]
+  }
+})
+
+test('a held reply reaches its owner when that session starts, and leaves the queue', async ($, on) => {
+  const store: Record<string, unknown> = {
+    [`pending:${PATH}`]: [{ owner: 's-me', text: 'Comment on Q-1: held reply' }, { owner: 's-else', text: 'not mine' }],
+  }
+  seedDisk(on, store)
+  const texts: string[] = []
+  on('prompt.submit', async (_$, e) => {
+    texts.push(e.text)
+    return { text: e.text, context: e.context }
+  })
+  on('command.register', () => ({ value: { command: 'brief-sidebar' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(texts.some(t => t.includes('held reply'))).toBe(true)
+  expect(texts.some(t => t.includes('not mine'))).toBe(false)
+  expect(store[`pending:${PATH}`]).toEqual([{ owner: 's-else', text: 'not mine' }])
 })
 
 test('above the terminal prompt the pane refuses loudly instead of drawing a dead brief', async ($, on) => {

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
-import type { BriefView, Entry, Evidence, Group, Option } from '../types'
+import type { BriefView, Entry, Evidence, Group, HeldReply, Option } from '../types'
 
 import { judgeTurn } from './turn'
 import type { Stamps } from './turn'
@@ -149,6 +149,65 @@ async function markAuthor($: EngineInterface, slugs: string[]): Promise<void> {
   for (const b of await read($, briefs)) if (slugs.includes(b.slug)) await $.store.set(authorKey(b.path), me)
 }
 
+// Replies held for an owner that was not running, by brief path, until that session starts again.
+const PENDING = 'pending:'
+type Pending = HeldReply
+const held = atom({ plugin: 'brief-sidebar', key: 'held' } as const, {})
+
+// Mirrors the held replies into the pane; written only when they changed, so the 3 s tick causes no redraw.
+async function refreshHeld($: EngineInterface): Promise<void> {
+  const map: Record<string, Pending[]> = {}
+  for (const key of await $.store.keys()) {
+    if (!key.startsWith(PENDING)) continue
+    const waiting = list(await $.store.get(key)) as Pending[]
+    if (waiting.length > 0) map[key.slice(PENDING.length)] = waiting
+  }
+  if (JSON.stringify(map) !== JSON.stringify(await read($, held))) await update($, held, () => map)
+}
+
+// Takes one held reply out of the queue, matched by owner and text: the owner may have taken others meanwhile.
+async function unhold($: EngineInterface, path: string, p: Pending): Promise<boolean> {
+  const waiting = list(await $.store.get(PENDING + path)) as Pending[]
+  const at = waiting.findIndex(w => w.owner === p.owner && w.text === p.text)
+  if (at >= 0) waiting.splice(at, 1)
+  await (waiting.length > 0 ? $.store.set(PENDING + path, waiting) : $.store.delete(PENDING + path))
+  await refreshHeld($)
+  return at >= 0
+}
+
+// A brief's owner: its last writer's session id, else the session it is named after (`session-<id prefix>`).
+async function ownerOf($: EngineInterface, b: BriefView): Promise<string | undefined> {
+  const author = await $.store.get(authorKey(b.path)).catch(() => undefined)
+  if (typeof author === 'string' && author !== '') return author
+  return /^session-[0-9a-f]{8}$/.test(b.slug) ? b.slug : undefined
+}
+
+async function hold($: EngineInterface, path: string, p: Pending): Promise<void> {
+  const waiting = list(await $.store.get(PENDING + path)) as Pending[]
+  await $.store.set(PENDING + path, [...waiting, p])
+  await refreshHeld($)
+}
+
+// The owner's side: a session that starts or ends a turn takes the replies held for it and its briefs.
+async function deliverHeld($: EngineInterface): Promise<void> {
+  const me = await $.session.id()
+  const own = await read($, sessionSlug)
+  for (const key of await $.store.keys()) {
+    if (!key.startsWith(PENDING)) continue
+    const path = key.slice(PENDING.length)
+    const held = list(await $.store.get(key)) as Pending[]
+    const ours = held.filter(p => p.owner === me || p.owner === own || slugOf(path) === own)
+    if (ours.length === 0) continue
+    const rest = held.filter(p => !ours.includes(p))
+    await (rest.length > 0 ? $.store.set(key, rest) : $.store.delete(key))
+    await update($, inPlay, l => [...new Set([...l, slugOf(path)])])
+    for (const p of ours) {
+      await $.prompt.submit({ text: `${p.text}\n\n(Sent from the brief sidebar while this session was not running.)`, asUser: true })
+    }
+  }
+  await refreshHeld($)
+}
+
 function slugOf(path: string): string {
   const parts = path.split('/')
   const name = parts.pop() ?? ''
@@ -247,6 +306,7 @@ async function reload($: EngineInterface): Promise<void> {
   // write only when something changed, so the pane can scroll and a reply field keeps focus.
   const before = await read($, briefs)
   if (JSON.stringify(before) !== JSON.stringify(loaded)) await update($, briefs, () => loaded)
+  await refreshHeld($).catch(() => undefined)
   await refreshStatus($)
 }
 
@@ -306,7 +366,8 @@ async function upkeepNote($: EngineInterface): Promise<string | null> {
   if (others.length > 0) {
     lines.push(
       `Other sessions' briefs: ${others.map(b => b.title).join('; ')}.`,
-      'A ruling on one of these is recorded, not carried out here: say which session should carry it out.',
+      'These belong to their own sessions: do not edit or republish them here. The sidebar sends a reply on one to its',
+      'session and holds it until that session runs; for a reply typed in chat, say which session owns that brief.',
     )
   }
   if (turnsWithWork > 0) {
@@ -325,12 +386,14 @@ function stampsOf(list: readonly BriefView[]): Stamps {
 
 export const register: Register = on => {
   let stampsAtStart: Stamps = {}
+  let startedAt = 0
   let named = new Set<string>()
   let didWork = false
 
   on('turn.start', async ($, e, next) => {
     await reload($).catch(() => undefined)
     stampsAtStart = stampsOf(await read($, briefs))
+    startedAt = await $.clock.now()
     named = new Set()
     didWork = false
 
@@ -345,7 +408,9 @@ export const register: Register = on => {
     const id = await $.session.id().catch(() => '')
     await update($, sessionSlug, () => (id ? `session-${id.slice(0, 8)}` : ''))
     await reload($)
-    $.clock.every(3_000, () => void refreshIfChanged($).catch(() => undefined))
+    await deliverHeld($).catch(() => undefined)
+    // Held replies live in the store, not on disk: another session taking one shows here within a tick.
+    $.clock.every(3_000, () => void refreshIfChanged($).then(() => refreshHeld($)).catch(() => undefined))
     void $.ui.open({ id: PANE, title: TITLE })
 
     return next(e)
@@ -361,7 +426,9 @@ export const register: Register = on => {
 
   on('tool.call', async ($, e, next) => {
     const text = JSON.stringify(e)
-    const touched = slugsIn(text)
+    const raw = e as unknown as Raw
+    // A file tool writes only its target; a brief named in its content (a fixture, a note) is not written (#37).
+    const touched = slugsIn(WRITES_FILE.has(e.tool) ? String(raw.file_path ?? raw.notebook_path ?? '') : text)
     const files = filesIn(text, (await $.env.get('HOME').catch(() => undefined)) ?? '')
     const isShell = e.tool === 'Bash'
     const command = isShell ? String((e as unknown as Raw).command ?? '') : ''
@@ -391,7 +458,7 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     await reload($).catch(() => undefined)
-    const verdict = judgeTurn(stampsAtStart, stampsOf(await read($, briefs)), named, await ownSlugs($))
+    const verdict = judgeTurn(stampsAtStart, stampsOf(await read($, briefs)), named, await ownSlugs($), startedAt)
     if (verdict.claimed.length > 0) {
       await addInPlay($, verdict.claimed)
       await markAuthor($, verdict.claimed).catch(() => undefined)
@@ -404,6 +471,8 @@ export const register: Register = on => {
     }
     didWork = false
     await refreshStatus($)
+    // An owner already running but unreachable when the reply was sent picks it up here.
+    await deliverHeld($).catch(() => undefined)
 
     return next(e)
   })
@@ -435,6 +504,7 @@ export const register: Register = on => {
     const chosen = await read($, openBrief)
     const shut = await read($, folded)
     const notes = await read($, sent)
+    const waitingAll = await read($, held)
 
     const ours = all
       .filter(b => mine.includes(b.slug))
@@ -476,15 +546,37 @@ export const register: Register = on => {
         })
         // The field is keyed by the thread's length, so the send drew a fresh, empty one: hand it the ring.
         void $.ui.focus({ requestId: PANE, key: `c:${k}:${count}` }).catch(() => undefined)
-        await addInPlay($, [brief.slug])
-        const author = await $.store.get(authorKey(brief.path)).catch(() => undefined)
-        if (typeof author === 'string' && author !== (await $.session.id())) {
-          const r = await $.session.send({ to: { sessionId: author }, text: prompt })
-          if (r.isDelivered) return void (await $.ui.toast(`Reply sent to session ${author}, which last wrote this brief`))
-          await $.ui.toast(`Session ${author} not reached (${r.reason}); reply sent here instead`)
+        const owner = await ownerOf($, brief)
+        const me = await $.session.id()
+        // Another session's brief: the reply reaches that session or waits for it, never this one.
+        if (owner && owner !== me && owner !== own) {
+          let why = 'it is not running'
+          if (owner !== brief.slug) {
+            const r = await $.session.send({ to: { sessionId: owner }, text: prompt })
+            if (r.isDelivered) return void (await $.ui.toast(`Reply sent to session ${owner}, which owns this brief`))
+            why = r.reason ?? why
+          }
+          await hold($, brief.path, { owner, text: prompt, entry: k.slice(k.indexOf('#') + 1), said: shownText })
+          return void (await $.ui.toast(`Session ${owner} not reached (${why}); the reply waits for it and arrives when it runs`))
         }
+        await addInPlay($, [brief.slug])
         await $.prompt.submit({ text: prompt, asUser: true })
       })().catch(err => $.ui.toast(`Reply not sent: ${String(err)}`))
+
+    const withdraw = (brief: BriefView, p: Pending) =>
+      void unhold($, brief.path, p)
+        .then(took => $.ui.toast(took ? 'Reply withdrawn' : `Session ${p.owner} already took that reply`))
+        .catch(err => $.ui.toast(`Not withdrawn: ${String(err)}`))
+
+    // Your explicit choice to hand a stuck reply to this session, marked so the model records it, not adopts it.
+    const sendHere = (brief: BriefView, p: Pending) =>
+      void (async () => {
+        if (!(await unhold($, brief.path, p))) return void (await $.ui.toast(`Session ${p.owner} already took that reply`))
+        await $.prompt.submit({
+          text: `${p.text}\n\n(Sent here by hand from the brief sidebar: the brief belongs to session ${p.owner}, which had not picked this reply up. Record it as the problem-brief skill says for a brief this session does not own.)`,
+          asUser: true,
+        })
+      })().catch(err => $.ui.toast(`Not sent: ${String(err)}`))
 
     // Laid out like the Claude app's own sidebar: grey section labels, a fixed icon column, and every
     // child aligned to its parent's text column, so each level of the brief sits one step further in.
@@ -556,6 +648,7 @@ export const register: Register = on => {
       const evidence = q.evidence ?? []
       const options = q.options ?? []
       const isBlocking = q.group === 'blocks'
+      const waiting = (waitingAll[brief.path] ?? []).filter(p => p.entry === q.id)
 
       const head = (
         <Box>
@@ -606,6 +699,17 @@ export const register: Register = on => {
               {thread.length > 1 ? ` (and ${thread.length - 1} earlier)` : ''}
             </Text>
           )}
+          {waiting.map((p, i) => (
+            <Box key={`h:${k}:${i}`} flexDirection="column" marginTop={1}>
+              <Text color="yellow" wrap="truncate-end">
+                Waiting for session {p.owner}: {p.said ?? 'a reply'}
+              </Text>
+              <Box gap={1}>
+                <Button key={`hw:${k}:${i}`} label="Withdraw" variant="secondary" onPress={() => withdraw(brief, p)} />
+                <Button key={`hs:${k}:${i}`} label="Send here instead" variant="secondary" onPress={() => sendHere(brief, p)} />
+              </Box>
+            </Box>
+          ))}
           {Input && (
             <Box width="100%" borderStyle="round" borderDimColor paddingX={1}>
               <Input

@@ -44,6 +44,9 @@ export type SentComment = { text: string; at: number }
 
 export type Upkeep = { turnsWithWork: number; lastWriteAt: number | null }
 
+// A reply held for a brief's owner that was not running: the prompt it gets, and what the pane shows.
+export type HeldReply = { owner: string; text: string; entry?: string; said?: string }
+
 declare module 'claude-code' {
   interface PluginState {
     'brief-sidebar': {
@@ -58,6 +61,8 @@ declare module 'claude-code' {
       closed: string[]
       sent: Record<string, SentComment[]>
       upkeep: Upkeep
+      // Replies waiting in the shared store for another session, by brief path.
+      held: Record<string, HeldReply[]>
     }
   }
 }
