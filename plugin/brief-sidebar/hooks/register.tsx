@@ -239,7 +239,13 @@ async function reload($: EngineInterface): Promise<void> {
     }
   }
   loaded.sort((a, b) => (b.updated ?? '').localeCompare(a.updated ?? ''))
-  await update($, briefs, () => loaded)
+  // One brief per slug (a folder may hold both brief.json and <slug>.brief.json): the newest wins,
+  // else two briefs share every Button and Input key and the focus ring cannot tell them apart.
+  const unique = loaded.filter((b, i) => loaded.findIndex(x => x.slug === b.slug) === i)
+  // Every write redraws the pane, and a redraw pulls its window back to the focused element:
+  // write only when something changed, so the pane can scroll and a reply field keeps focus.
+  const before = await read($, briefs)
+  if (JSON.stringify(before) !== JSON.stringify(unique)) await update($, briefs, () => unique)
   await refreshStatus($)
 }
 
@@ -343,11 +349,12 @@ export const register: Register = on => {
     const text = JSON.stringify(e)
     const touched = slugsIn(text)
     const files = filesIn(text, (await $.env.get('HOME').catch(() => undefined)) ?? '')
-    if (files.length > 0) await update($, paths, l => [...new Set([...l, ...files])])
     const isShell = e.tool === 'Bash'
     const command = isShell ? String((e as unknown as Raw).command ?? '') : ''
 
     try {
+      const kept = await read($, paths)
+      if (files.some(f => !kept.includes(f))) await update($, paths, l => [...new Set([...l, ...files])])
       touched.forEach(slug => named.add(slug))
       // A file tool aimed at a brief is a certain write; a shell command waits for the stamp check at turn end.
       if (touched.length > 0 && WRITES_FILE.has(e.tool)) {
@@ -436,7 +443,10 @@ export const register: Register = on => {
     const send = (brief: BriefView, k: string, prompt: string, shownText: string) =>
       void (async () => {
         const at = await $.clock.now()
+        const count = ((await read($, sent))[k] ?? []).length + 1
         await update($, sent, m => ({ ...m, [k]: [...(m[k] ?? []), { text: shownText, at }] }))
+        // The field is keyed by the thread's length, so the send drew a fresh, empty one: hand it the ring.
+        void $.ui.focus({ requestId: PANE, key: `c:${k}:${count}` }).catch(() => undefined)
         await update($, inPlay, l => [...new Set([...l, brief.slug])])
         const author = await $.store.get(authorKey(brief.path)).catch(() => undefined)
         if (typeof author === 'string' && author !== (await $.session.id())) {

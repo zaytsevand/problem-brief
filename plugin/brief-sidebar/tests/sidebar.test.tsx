@@ -198,6 +198,34 @@ test('a brief named by path outside the folder is kept as session metadata and l
   expect(seen[0]).toContain('Q-18 (kept elsewhere)')
 })
 
+test('a folder holding brief.json and <slug>.brief.json shows the brief once', async ($, on) => {
+  const twin = '/home/x/.claude/briefs/coord/coord.brief.json'
+  FILES[twin] = FILES[ELSEWHERE]
+  seedDisk(on)
+  await $.tool.call({ tool: 'Edit', file_path: ELSEWHERE, old_string: 'a', new_string: 'b' })
+  await $.tool.call({ tool: 'Edit', file_path: twin, old_string: 'a', new_string: 'b' })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.findAll({ type: 'Button', text: /Coordinator brief/ })).toHaveLength(1)
+  await ui.unmount()
+  delete FILES[twin]
+})
+
+test('a reload that finds nothing changed writes nothing, so the pane is not redrawn', async ($, on) => {
+  seedDisk(on)
+  let writes = 0
+  on('state.set', { plugin: 'brief-sidebar', key: 'briefs' }, async (_$, e, next) => {
+    writes++
+    return next(e)
+  })
+  await $.tool.call({ tool: 'Edit', file_path: PATH, old_string: 'a', new_string: 'b' })
+  expect(writes).toBeGreaterThan(0)
+  writes = 0
+  await $.tool.call({ tool: 'Edit', file_path: PATH, old_string: 'a', new_string: 'b' })
+  await $.tool.call({ tool: 'Bash', command: `node validate.mjs ${PATH}` } as never)
+  expect(writes).toBe(0)
+})
+
 test('a write records this session as the brief\'s last writer, so its own replies stay here', async ($, on) => {
   seedDisk(on, { [`author:${PATH}`]: 's-other' })
   const texts: string[] = []
