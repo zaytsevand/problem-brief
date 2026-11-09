@@ -151,6 +151,14 @@ test("the guard refuses hand edits of brief JSON and lets the commands through",
   assert.equal(refusal("Bash", { command: "cat <<EOF>brief.json\n{}\nEOF" }), "shell");
   assert.equal(refusal("Bash", { command: "jq . <old.json>brief.json" }), "shell");
   assert.equal(refusal("Read", { file_path: "brief.json" }), null);
+  // A brief named in a message or a heredoc body is text, not a write (#37); a heredoc fed to an interpreter still is.
+  const issue = "gh issue create --title 'x' --body \"$(cat <<'EOF'\nThe guard should refuse sed -i or tee on session-a.brief.json, or > brief.json.\nEOF\n)\"";
+  assert.equal(refusal("Bash", { command: issue }), null);
+  assert.equal(refusal("Bash", { command: `git commit -m "fix: rm stale x.brief.json > note"` }), null);
+  assert.equal(refusal("Bash", { command: `gh pr create --body 'writes brief.json with writeFile'` }), null);
+  assert.equal(refusal("Bash", { command: "python3 - <<'EOF'\nimport json; json.dump({}, open('x.brief.json','w'))\nEOF" }), "shell");
+  assert.equal(refusal("Bash", { command: "cat <<'EOF' > x.brief.json\n{}\nEOF" }), "shell");
+  assert.equal(refusal("Bash", { command: "git commit -m 'notes' && sed -i 's/a/b/' brief.json" }), "shell");
 
   const r = spawnSync("node", [join(ROOT, "bin", "brief-guard.mjs"), "--hook"], {
     input: JSON.stringify({ tool_name: "Write", tool_input: { file_path: "brief.json" } }), encoding: "utf8",
