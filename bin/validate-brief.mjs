@@ -29,8 +29,8 @@
  * ones the bundled schema uses. Node 18+.
  */
 
-import { readFileSync, realpathSync } from "node:fs";
-import { dirname, resolve, join } from "node:path";
+import { readFileSync, realpathSync, statSync } from "node:fs";
+import { dirname, extname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -247,8 +247,44 @@ function patternHint(p) {
 
 /* ── the rules a schema cannot state ───────────────────────────────────────── */
 
-function semanticErrors(brief) {
+/* ── pictures the page carries ─────────────────────────────────────────────
+   The renderer embeds each image in the page, so a file it cannot read or a
+   file that is too heavy has to be refused here, before anything is rendered. */
+
+export const IMAGE_TYPES = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
+const IMAGE_MAX_BYTES = 1024 * 1024;
+const IMAGES_WARN_BYTES = 6 * 1024 * 1024;   // about 8 MB once embedded, half the publish limit
+
+// Returns the bytes the image adds to the page. Without a baseDir only the type is checked.
+function checkImage(im, path, baseDir, out) {
+  let bytes = 0;
+  for (const key of ["file", "fileDark"]) {
+    const file = im?.[key];
+    if (typeof file !== "string") continue;
+    if (!IMAGE_TYPES[extname(file).toLowerCase()]) {
+      out.push({ path: `${path} → ${key}`, message: `"${file}" is not a PNG, JPEG or WebP picture`,
+        hint: "save the screenshot as .png, .jpg or .webp. An HTML mockup has to be opened and captured first: the reader cannot open it" });
+      continue;
+    }
+    if (!baseDir) continue;
+    let size;
+    try { size = statSync(resolve(baseDir, file)).size; } catch {
+      out.push({ path: `${path} → ${key}`, message: `"${file}" could not be read`,
+        hint: "the path is relative to the brief's JSON file; keep the picture next to it" });
+      continue;
+    }
+    if (size > IMAGE_MAX_BYTES) {
+      out.push({ path: `${path} → ${key}`, message: `"${file}" is ${(size / 1024 / 1024).toFixed(1)} MB; one picture may be 1 MB at most`,
+        hint: "resize it to 1600 pixels wide or less, crop it to the part the reader has to see, or save it as JPEG or WebP" });
+    }
+    bytes += size;
+  }
+  return bytes;
+}
+
+function semanticErrors(brief, baseDir) {
   const out = [];
+  let imageBytes = 0;
   const at = (e, i) => `decisions[${i}]${e?.id ? ` (${e.id})` : ""}`;
   const seen = new Map();
 
@@ -309,12 +345,30 @@ function semanticErrors(brief) {
         hint: "ask whether a picture would make this answerable: an exchange over time → sequenceDiagram, states and transitions → stateDiagram-v2, today versus proposed → a drawing of each. Draw it, or say in unwound.noDiagram in one line why none helps" });
     }
 
+    const live = ["open", "decided"].includes(e?.status ?? "open");
+    const shown = (e?.unwound?.diagrams ?? []).some((d) => d?.kind === "image" || d?.kind === "svg") ||
+      (e?.evidence ?? []).some((ev) => ev?.image);
+    const told = [e?.problem, e?.brief, e?.unwound?.now, e?.unwound?.whyWrong, e?.unwound?.target,
+      ...(e?.evidence ?? []).flatMap((ev) => [ev?.ref, ev?.url, ev?.note])].filter(Boolean).join("\n");
+    const pointer = told.match(/[\w./-]*\.(?:html?|png|jpe?g|webp|gif|svg)\b|\b(?:mock-?ups?|screenshots?|wireframes?)\b/i);
+    if (live && !shown && pointer) {
+      out.push({ path: where, severity: "warning", message: `points the reader at "${pointer[0]}" and carries no picture`,
+        hint: 'the reader works from the published page and cannot open a file. If they have to see it to answer, attach the screenshot: a drawing {"kind":"image","file":…,"alt":…,"caption":…} or an "image" on the evidence item. A line of markup is not evidence for what a page looks like' });
+    }
+    (e?.evidence ?? []).forEach((ev, j) => {
+      if (ev?.image) imageBytes += checkImage(ev.image, `${where} → evidence[${j}] → image`, baseDir, out);
+    });
+    (e?.resolution?.evidence ?? []).forEach((ev, j) => {
+      if (ev?.image) imageBytes += checkImage(ev.image, `${where} → resolution → evidence[${j}] → image`, baseDir, out);
+    });
+
     (e?.unwound?.diagrams ?? []).forEach((d, j) => {
       const p = `${where} → unwound → diagrams[${j}]`;
+      if (d?.kind === "image") imageBytes += checkImage(d, p, baseDir, out);
       if (d?.kind === "mermaid" && !d.source) {
         out.push({ path: p, message: 'is a mermaid drawing with no "source"', hint: "put the diagram text in source" });
       }
-      if ((d?.kind === "archify" || d?.kind === "svg") && !d.file) {
+      if (["archify", "svg", "image"].includes(d?.kind) && !d.file) {
         out.push({ path: p, message: `is ${article(d.kind)} drawing with no "file"`,
           hint: "point file at the rendered page or the .svg" });
       }
@@ -324,6 +378,11 @@ function semanticErrors(brief) {
       }
     });
   });
+
+  if (imageBytes > IMAGES_WARN_BYTES) {
+    out.push({ path: "", severity: "warning", message: `carries ${(imageBytes / 1024 / 1024).toFixed(1)} MB of pictures, which makes the page about a third larger than that`,
+      hint: "a page may be 16 MB at most. Resize or crop the largest pictures, or drop the ones the reader does not need to answer" });
+  }
 
   const byId = new Map((brief.decisions ?? []).map((e) => [e?.id, e]));
   (brief.outstanding ?? []).forEach((o, i) => {
@@ -846,10 +905,11 @@ const ordinal = (n) => ["", "first", "second", "third", "fourth", "fifth"][n] ??
 
 /* ── public entry point ─────────────────────────────────────────────────── */
 
-export function validateBrief(brief, schema) {
+// baseDir is the folder of the brief's JSON. With it, the pictures the brief names are checked on disk.
+export function validateBrief(brief, schema, baseDir) {
   const v = new Validator(schema ?? JSON.parse(readFileSync(SCHEMA_PATH, "utf8")));
   v.check(brief, v.root, "");
-  const all = [...v.errors, ...semanticErrors(brief)];
+  const all = [...v.errors, ...semanticErrors(brief, baseDir)];
   return {
     ok: all.every((e) => e.severity === "warning"),
     errors: all.filter((e) => e.severity !== "warning"),
@@ -900,7 +960,7 @@ if (process.argv[1] && invokedDirectly()) {
     console.error(`${file} is not valid JSON.\n  ${err.message}`);
     process.exit(1);
   }
-  const result = validateBrief(brief);
+  const result = validateBrief(brief, undefined, dirname(resolve(file)));
   if (asJson) console.log(JSON.stringify(result, null, 2));
   else console.log(formatReport(result, file));
   process.exit(result.ok ? 0 : 1);

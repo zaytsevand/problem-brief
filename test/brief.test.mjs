@@ -1149,3 +1149,55 @@ test("a work item can wait on another brief, and the page links it with what is 
   assert.match(page(item("spec.json#Q-3", "in-progress")), /In progress · follows from <a [^>]+>Spec 17 questions <span class="n">Q-3<\/span><\/a>/);
   assert.match(page(item("missing.json")), /Blocked · waits on <code>missing\.json<\/code>/);
 });
+
+/* ── issues #46 and #47: screenshots travel inside the page ────────────── */
+
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+const shotDir = () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  mkdirSync(join(dir, "shots"));
+  writeFileSync(join(dir, "shots", "wide.png"), PNG);
+  writeFileSync(join(dir, "shots", "wide-dark.png"), PNG);
+  return dir;
+};
+const shotBrief = (extra = {}) => brief([entry("Q-1", {
+  ...live,
+  evidence: [{ kind: "document", ref: "the settings page", note: "The new wording, in place.", image: { file: "shots/wide.png", alt: "The settings page with the new wording." } }],
+  unwound: { now: "The page says Save.", diagrams: [{ kind: "image", file: "shots/wide.png", fileDark: "shots/wide-dark.png", alt: "The page at full width.", caption: "The button reads Save changes." }] },
+  ...extra,
+})]);
+
+test("a screenshot is embedded in the page with its alt text, and comes back out on extract", () => {
+  const dir = shotDir(), b = shotBrief();
+  writeFileSync(join(dir, "b.json"), JSON.stringify(b));
+  execFileSync("node", [bin("render-brief.mjs"), join(dir, "b.json"), join(dir, "b.html")], { stdio: "pipe" });
+  const html = readFileSync(join(dir, "b.html"), "utf8");
+  assert.equal(html.match(/<img data-brief-file="shots\/wide\.png" src="data:image\/png;base64,/g).length, 2, "the drawing and the evidence");
+  assert.match(html, /class="shot-dark" alt="The page at full width\."/);
+  assert.match(html, /<div class="shots"><figure class="dgm"><button type="button" class="shot"/);
+
+  const back = mkdtempSync(join(tmpdir(), "brief-"));
+  execFileSync("node", [bin("extract-brief.mjs"), join(dir, "b.html"), join(back, "b.json")], { stdio: "pipe" });
+  assert.deepEqual(JSON.parse(readFileSync(join(back, "b.json"), "utf8")), b);
+  assert.deepEqual(readFileSync(join(back, "shots", "wide-dark.png")), PNG);
+});
+
+test("a picture that is missing, not a raster image, or has no alt text is refused", () => {
+  const dir = shotDir();
+  const errors = (b) => validateBrief(b, undefined, dir).errors.map((e) => `${e.path} ${e.message}`);
+  const pic = (d) => shotBrief({ unwound: { now: "x", diagrams: [{ kind: "image", caption: "c", alt: "a picture", ...d }] } });
+  assert.deepEqual(errors(pic({ file: "shots/wide.png" })), []);
+  assert.ok(errors(pic({ file: "shots/gone.png" })).some((m) => m.includes("could not be read")));
+  assert.ok(errors(pic({ file: "mockups/settings.html" })).some((m) => m.includes("is not a PNG, JPEG or WebP picture")));
+  assert.ok(errors(pic({ file: "shots/wide.png", alt: undefined })).some((m) => m.includes("alt")));
+  writeFileSync(join(dir, "shots", "huge.png"), Buffer.alloc(1024 * 1024 + 1));
+  assert.ok(errors(pic({ file: "shots/huge.png" })).some((m) => m.includes("1 MB at most")));
+});
+
+test("an entry that sends the reader to a mockup file with no picture is flagged", () => {
+  const flagged = (e) => messages(brief([e])).warnings.some((m) => m.includes("carries no picture"));
+  const pointing = { evidence: [{ kind: "code", ref: "web/mockups/settings.html:42", note: "The new wording." }] };
+  assert.ok(flagged(entry("Q-1", { ...live, ...pointing })));
+  assert.ok(!flagged(entry("Q-1", { ...live, ...pointing, unwound: { now: "x", diagrams: [{ kind: "image", file: "a.png", alt: "the page", caption: "c" }] } })));
+  assert.ok(!flagged(entry("Q-1", live)), "an ordinary code citation is not a visual pointer");
+});

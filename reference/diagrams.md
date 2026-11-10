@@ -23,6 +23,33 @@ The choice is about who draws it, not about looks.
 | `mermaid` | A shape stated in a few lines: a sequence, a branch, a divergence. | Diagram text in `source`; artefacts render mermaid natively. |
 | `archify` | A real architecture, lifecycle, data-flow or workflow view. | Render with the `archify` skill, then embed the rendered page. |
 | `svg` | A picture that already exists as a self-contained file, and only then. | Path in `file`; the renderer inlines it. |
+| `image` | A screenshot: a mockup, a layout, wording shown in place. | PNG, JPEG or WebP path in `file`, plus `alt` and `caption`; the renderer embeds it. |
+
+## Screenshots
+
+Use a screenshot when the reader has to see something to answer: what a page looks like,
+or what it says in place. The reader cannot open a mockup file, so a path to one, a link to
+an HTML file or a line of its markup does not help them. Capture the picture and attach it.
+
+```json
+{ "kind": "image", "file": "shots/q2-wide.png", "fileDark": "shots/q2-wide-dark.png",
+  "alt": "The settings page with the button reading Save changes.",
+  "caption": "The new wording fits on one line at full width." }
+```
+
+- Put a screenshot of the evidence itself on the evidence item:
+  `{"kind":"document","ref":"settings page","note":"…","image":{"file":"…","alt":"…"}}`.
+  The note is its caption.
+- Several pictures on one entry are shown as a row that wraps. A tap opens one at full
+  size. For a layout question, attach a wide shot and a phone-width shot.
+- `fileDark` is optional. When it is there, the page shows the picture that matches the
+  reader's theme.
+- `file` is relative to the brief's JSON. Keep the pictures in a folder beside it.
+- One picture may be 1 MB at most; the validator refuses a larger one. Crop to the part
+  that matters and keep the width at 1600 pixels or less. The renderer does not resize.
+- An HTML mockup has to be opened and captured first. The Chrome browser tools can do
+  this: open the file, set the window width, and save a screenshot.
+- `extract-brief.mjs page.html brief.json` writes the pictures back next to the JSON.
 
 If archify is not installed, say so rather than silently downgrading every picture to
 mermaid — the reader will assume the simpler drawing was a choice. Install:

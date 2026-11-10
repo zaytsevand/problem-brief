@@ -283,7 +283,7 @@ the whole brief.
 
 ## Drawings
 
-Three kinds:
+Four kinds:
 
 - **mermaid** — inline, rendered natively by the page. For a shape you can state
   in a few lines.
@@ -295,6 +295,10 @@ Three kinds:
   large enough that page size matters. A drawing that cannot be carried becomes
   a visible note naming its source, never an empty frame.
 - **svg** — a self-contained file, inlined, centred and scaled.
+- **image** — a screenshot (PNG, JPEG or WebP) embedded in the page, with alt text and
+  a caption. Use it for anything the reader has to see: a mockup, a layout, wording in
+  place. An evidence item can carry one too. The reader cannot open a file, so the
+  picture goes in the page.
 
 Keep the archify source file. The next refresh edits the drawing rather than
 redrawing it, which is what loses the fallbacks and the error paths.

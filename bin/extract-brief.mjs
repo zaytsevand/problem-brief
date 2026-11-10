@@ -14,7 +14,8 @@
  * Zero dependencies. Node 18+.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 
 const [, , inPath, outPath] = process.argv;
 if (!inPath) {
@@ -36,6 +37,24 @@ if (outPath) {
   writeFileSync(outPath, text, "utf8");
   const n = (k) => (brief[k] ?? []).length;
   console.log(`wrote ${outPath}  (${n("decisions")} entries, ${n("rulings")} standing rulings, updated ${brief.updated})`);
+  /* The JSON names each picture by path; the page carries the bytes. Write them
+     back next to the JSON, so the recovered brief renders again. A path that
+     climbs out of that folder is not followed: the page may not be ours. */
+  const base = dirname(resolve(outPath));
+  const pics = new Map();
+  for (const [, file, b64] of html.matchAll(/<img data-brief-file="([^"]+)" src="data:image\/[a-z]+;base64,([^"]+)"/g)) {
+    pics.set(file.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"), b64);
+  }
+  for (const [file, b64] of pics) {
+    const dest = resolve(base, file);
+    if (relative(base, dest).startsWith("..") || isAbsolute(relative(base, dest))) {
+      console.warn(`  ! skipped ${file}: it points outside ${base}`);
+      continue;
+    }
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, Buffer.from(b64, "base64"));
+    console.log(`  wrote picture ${file}`);
+  }
 } else {
   process.stdout.write(text);
 }

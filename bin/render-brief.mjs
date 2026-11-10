@@ -15,8 +15,8 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { validateBrief, formatReport } from "./validate-brief.mjs";
+import { dirname, extname, resolve } from "node:path";
+import { validateBrief, formatReport, IMAGE_TYPES } from "./validate-brief.mjs";
 
 /* One drawing bigger than this is not worth carrying inside the page. */
 const INLINE_MAX_BYTES = 4 * 1024 * 1024;
@@ -144,8 +144,25 @@ const stamps = (x, first = "added") =>
 
 /* ── diagrams ───────────────────────────────────────────────────────────── */
 
+/* A screenshot travels inside the page as a data URI: the reader works from the
+   published page and cannot open a file. The validator has already checked that
+   each file exists, is a picture and is small enough. data-brief-file keeps the
+   path, so extract-brief can write the picture back out. A button, so a tap or
+   the keyboard opens it at full size. */
+function shot(im, baseDir) {
+  const one = (file, cls) => {
+    const buf = readFileSync(resolve(baseDir, file));
+    notes.inlined += Math.ceil(buf.length * 4 / 3);
+    return `<img data-brief-file="${esc(file)}" src="data:${IMAGE_TYPES[extname(file).toLowerCase()]};base64,${buf.toString("base64")}"` +
+      `${cls ? ` class="${cls}"` : ""} alt="${esc(im.alt)}">`;
+  };
+  return `<button type="button" class="shot" title="Show at full size">` +
+    one(im.file, im.fileDark ? "shot-light" : "") + (im.fileDark ? one(im.fileDark, "shot-dark") : "") + `</button>`;
+}
+
 function diagram(d, baseDir) {
   const cap = `<figcaption>${inline(d.caption)}</figcaption>`;
+  if (d.kind === "image") return `<figure class="dgm">${shot(d, baseDir)}${cap}</figure>`;
   if (d.kind === "mermaid") {
     // Artifacts render mermaid natively — no library to load.
     return `<figure class="dgm"><pre class="mermaid">${esc(d.source.trim())}</pre>${cap}</figure>`;
@@ -343,7 +360,7 @@ const EV_LABEL = {
   run: "Run", commit: "Commit", test: "Test", measurement: "Measurement",
 };
 
-function evidence(list) {
+function evidence(list, baseDir) {
   const rows = list.map((ev) => {
     const unproven = ev.verified === false ? `<span class="tag tag-warn">not yet proven</span>` : "";
     const ref = ev.url
@@ -351,7 +368,8 @@ function evidence(list) {
       : `<code>${esc(ev.ref)}</code>`;
     return `<li><span class="ev-kind">${esc(EV_LABEL[ev.kind] ?? ev.kind)}</span>` +
       `<span class="ev-ref">${ref}${unproven}</span>` +
-      `<span class="ev-note">${inline(ev.note)}</span></li>`;
+      `<span class="ev-note">${inline(ev.note)}</span>` +
+      (ev.image ? `<span class="ev-note">${shot(ev.image, baseDir)}</span>` : "") + `</li>`;
   }).join("");
   return `<ul class="ev">${rows}</ul>`;
 }
@@ -408,7 +426,9 @@ function dependencies(e) {
 
 function entry(e, baseDir) {
   const u = e.unwound ?? {};
-  const dgms = (u.diagrams ?? []).map((d) => diagram(d, baseDir)).join("");
+  const pics = (u.diagrams ?? []).filter((d) => d.kind === "image").map((d) => diagram(d, baseDir)).join("");
+  const dgms = (u.diagrams ?? []).filter((d) => d.kind !== "image").map((d) => diagram(d, baseDir)).join("") +
+    (pics ? `<div class="shots">${pics}</div>` : "");
 
   const unwound = (u.now || u.target || dgms)
     ? `<section class="part"><h3>How it works today${u.whyWrong ? ", and why that is a problem" : ""}</h3>` +
@@ -443,7 +463,7 @@ function entry(e, baseDir) {
           (a.ruled ? `<div><dt>Ruled</dt><dd>${inline(a.ruled)}</dd></div>` : "") +
           `<div><dt>Done instead</dt><dd>${inline(a.done)}</dd></div>` +
           (a.why ? `<div><dt>Why</dt><dd>${inline(a.why)}</dd></div>` : "") + `</dl>`).join("") + `</div>` : "") +
-      (r.evidence?.length ? evidence(r.evidence) : "") + `</div>`
+      (r.evidence?.length ? evidence(r.evidence, baseDir) : "") + `</div>`
     : e.status === "superseded"
       ? `<div class="ruled ruled-old">Retracted — the problem went away or was overtaken, so nothing was carried out. Kept for the record.</div>`
       : "";
@@ -474,7 +494,7 @@ function entry(e, baseDir) {
   ${status}
   <section class="part part-problem"><h3>The problem</h3>${prose(e.problem)}</section>
   <section class="part"><h3>Why it matters</h3>${prose(e.brief)}</section>
-  <section class="part"><h3>Evidence</h3>${evidence(e.evidence)}${assume}</section>
+  <section class="part"><h3>Evidence</h3>${evidence(e.evidence, baseDir)}${assume}</section>
   ${unwound}
   <section class="part part-sol"><h3>Options</h3>${solutions(e.solutions)}</section>
   ${rolled}
@@ -742,6 +762,22 @@ ul.ev li:first-child{border-top:0;padding-top:0;}
   background:var(--bg);overflow-x:auto;margin:0;}
 .dgm figcaption{font-size:.88rem;color:var(--ink-2);margin-top:.6em;
   font-family:ui-sans-serif,system-ui,sans-serif;}
+/* Screenshots: a row that wraps; a tap opens one at full size. */
+.shots{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;margin:18px 0;}
+.shots .dgm{margin:0;flex:1 1 260px;min-width:0;}
+.shots .dgm:has(.zoom){flex-basis:100%;}
+.shot{display:block;max-width:100%;padding:0;margin:0;font:inherit;color:inherit;cursor:zoom-in;
+  border:1px solid var(--line);border-radius:var(--radius);background:var(--bg);overflow:hidden;}
+.shot img{display:block;max-width:100%;height:auto;}
+.shot.zoom{cursor:zoom-out;overflow-x:auto;}
+.shot.zoom img{max-width:none;}
+.shot .shot-dark{display:none;}
+:root[data-theme="dark"] .shot .shot-light{display:none;}
+:root[data-theme="dark"] .shot .shot-dark{display:block;}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .shot .shot-light{display:none;}
+  :root:not([data-theme="light"]) .shot .shot-dark{display:block;}
+}
 .dgm-src{font-size:.78rem;color:var(--ink-3);margin:.35em 0 0;}
 .dgm-absent .absent{border:1px dashed var(--line-2);border-radius:var(--radius);
   padding:14px 16px;background:var(--bg);color:var(--ink-2);font-size:.92rem;
@@ -1092,6 +1128,7 @@ function page(brief, baseDir) {
 </div>
 ${data}
 <script>${THEME_SCRIPT}</script>
+<script>document.addEventListener('click',function(e){var s=e.target.closest&&e.target.closest('.shot');if(s)s.classList.toggle('zoom');});</script>
 <script>var DEFAULT_FILTER = '${defaultFilter}';${FILTER_SCRIPT}</script>
 ${history.length ? `<script>${CHANGES_SCRIPT}</script>` : ""}
 `;
@@ -1115,7 +1152,7 @@ try {
 
 /* Nothing renders unvalidated. A brief is usually written by a machine, and a
    silently dropped field produces a page that looks finished and is not. */
-const result = validateBrief(brief);
+const result = validateBrief(brief, undefined, baseDir);
 if (!result.ok) {
   console.error(formatReport(result, inPath));
   process.exit(1);
@@ -1128,7 +1165,7 @@ writeFileSync(dest, html, "utf8");
 const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
 console.log(`wrote ${dest}  (${brief.decisions.length} entries, ${kb(html.length)})`);
 if (notes.inlined) {
-  console.log(`  ${kb(notes.inlined)} of that is drawings carried inside the page — nothing needs publishing alongside it.`);
+  console.log(`  ${kb(notes.inlined)} of that is drawings and pictures carried inside the page — nothing needs publishing alongside it.`);
 }
 if (notes.companions.size) {
   console.log("  these drawings are companion files and must be published alongside the page:");

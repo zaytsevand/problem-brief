@@ -85,7 +85,10 @@
     "withdrawnIds": {
       "type": "array",
       "uniqueItems": true,
-      "items": { "type": "string", "pattern": "^[QR]-\\d+$" },
+      "items": {
+        "type": "string",
+        "pattern": "^[QR]-\\d+$"
+      },
       "description": "Ids of entries and rulings deleted because the operator withdrew them as wrong from the start. Only the bare ids are kept, so a number is never issued again; nothing about them is shown, and any citation of one left in the brief is an error. Git history keeps the deleted content."
     },
     "generated": {
@@ -305,7 +308,9 @@
               "type": "string",
               "description": "The reasoning, in the operator's words where they gave it."
             },
-            "specs": { "$ref": "#/$defs/specRefs" },
+            "specs": {
+              "$ref": "#/$defs/specRefs"
+            },
             "memory": {
               "type": "string",
               "description": "The Claude memory file this decision was saved to, when the project keeps no spec suite to write it back into. e.g. export-keeps-utc-timestamps.md."
@@ -512,6 +517,30 @@
           "type": "boolean",
           "default": true,
           "description": "False marks the claim as unproven on the page. Say in the note what would settle it."
+        },
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "alt"
+          ],
+          "description": "A screenshot shown under the note, for evidence the reader has to see: what a page looks like or says. The note is its caption.",
+          "properties": {
+            "file": {
+              "type": "string",
+              "description": "Local path of the picture (PNG, JPEG, WebP), relative to the brief's JSON. The renderer embeds it."
+            },
+            "alt": {
+              "type": "string",
+              "minLength": 3,
+              "description": "What the picture shows, for a reader who cannot see it."
+            },
+            "fileDark": {
+              "type": "string",
+              "description": "A second file of the same picture taken in the dark theme. The page shows the one that matches the reader's theme."
+            }
+          }
         }
       }
     },
@@ -568,9 +597,10 @@
           "enum": [
             "mermaid",
             "archify",
-            "svg"
+            "svg",
+            "image"
           ],
-          "description": "mermaid renders natively in the page. archify embeds a rendered archify page. svg inlines a self-contained file."
+          "description": "mermaid renders natively in the page. archify embeds a rendered archify page. svg inlines a self-contained file. image embeds a screenshot or other raster picture (PNG, JPEG, WebP) in the page."
         },
         "caption": {
           "type": "string",
@@ -582,7 +612,7 @@
         },
         "file": {
           "type": "string",
-          "description": "kind=archify: published path of the rendered archify page, e.g. diagrams/q1-flow.html. kind=svg: local path of the .svg file to inline."
+          "description": "kind=archify: published path of the rendered archify page, e.g. diagrams/q1-flow.html. kind=svg: local path of the .svg file to inline. kind=image: local path of the picture, relative to the brief's JSON; the renderer embeds it, so the page needs nothing published beside it."
         },
         "spec": {
           "type": "string",
@@ -614,6 +644,15 @@
           "maximum": 1400,
           "default": 520,
           "description": "kind=archify: force a fixed frame height in pixels. Leave it out — the renderer works the height out from the drawing's own proportions, which is what stops it being cropped."
+        },
+        "alt": {
+          "type": "string",
+          "minLength": 3,
+          "description": "kind=image: what the picture shows, for a reader who cannot see it."
+        },
+        "fileDark": {
+          "type": "string",
+          "description": "kind=image: a second file of the same picture taken in the dark theme. the page shows the one that matches the reader's theme."
         }
       },
       "allOf": [
@@ -640,7 +679,8 @@
               "kind": {
                 "enum": [
                   "archify",
-                  "svg"
+                  "svg",
+                  "image"
                 ]
               }
             },
@@ -651,6 +691,23 @@
           "then": {
             "required": [
               "file"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "image"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "alt"
             ]
           }
         }
@@ -810,7 +867,10 @@
     },
     "specRefs": {
       "type": "array",
-      "items": { "type": "string", "minLength": 3 },
+      "items": {
+        "type": "string",
+        "minLength": 3
+      },
       "description": "Where this decision was written back into the project's own spec suite, when the project keeps one: a path, optionally with #section. e.g. specs/012-export/spec.md#clarifications, docs/adr/0007-queue.md. Absent when the project has no spec suite, or the brief does not own the work (the write-back is then an outstanding item)."
     },
     "timestamp": {
@@ -884,7 +944,9 @@
           "type": "string",
           "description": "The Claude memory file this ruling was also saved to, when it is about how to work in general (a preference, a standing instruction) rather than about this brief's subject (a feedback memory), or, when the project keeps no spec suite, the project memory it was written back to. e.g. feedback-fix-wording-without-asking.md."
         },
-        "specs": { "$ref": "#/$defs/specRefs" }
+        "specs": {
+          "$ref": "#/$defs/specRefs"
+        }
       },
       "allOf": [
         {
