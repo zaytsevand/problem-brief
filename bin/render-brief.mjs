@@ -876,6 +876,19 @@ details.rolled ul{margin-top:.6em;}
 .unblocks{font-family:ui-sans-serif,system-ui,sans-serif;font-size:.8em;color:var(--ink-3);}
 .done-mark{color:var(--rec);font-weight:650;margin-right:.4em;}
 
+/* Wide screens: navigation and history become a sticky left column that
+   scrolls on its own, and the entries take the rest of the width. */
+@media (min-width:1100px){
+  .wrap{max-width:92rem;display:grid;grid-template-columns:minmax(19rem,23rem) minmax(0,1fr);
+    grid-template-areas:"side top" "side body";column-gap:44px;align-items:start;padding-top:0;}
+  .top{grid-area:top;padding-top:40px;}
+  .body{grid-area:body;min-width:0;}
+  .side{grid-area:side;position:sticky;top:0;max-height:100vh;overflow-y:auto;
+    overscroll-behavior:contain;padding:40px 20px 32px 0;scrollbar-width:thin;}
+  .side .context{margin-top:16px;padding:2px 14px 10px;font-size:.9rem;}
+  .side nav.toc{margin:24px 0 0;font-size:.86rem;}
+  .side .recap{margin-top:24px;}
+}
 @media (max-width:640px){
   .wrap{padding-block:26px 48px;}
   .entry{padding:20px 17px;}
@@ -1059,10 +1072,10 @@ function page(brief, baseDir) {
     ? `<details class="background"><summary>Background</summary>${prose(brief.background)}` +
       (brief.source ? `<p class="source">These findings come from ${inline(brief.source)}.</p>` : "") + `</details>` : "";
   /* What asks the reader to act comes first; the history is for catching up. */
-  const summary = `<div class="context"><section><h2>Waiting on you</h2>${waiting}</section>` +
-    changes +
-    (brief.context ? `<section>${prose(brief.context)}</section>` : "") +
-    background + `</div>`;
+  const summary = `<div class="context"><section><h2>Waiting on you</h2>${waiting}</section></div>`;
+  /* Catching up comes after the index: the reader acts first, then reads history. */
+  const catchUp = changes + (brief.context ? `<section>${prose(brief.context)}</section>` : "") + background;
+  const recap = catchUp ? `<div class="context recap">${catchUp}</div>` : "";
 
   /* Work that waits on another brief's questions: read that brief for its link
      and how many of the questions it waits on are still open. open is null
@@ -1163,14 +1176,19 @@ function page(brief, baseDir) {
       (brief.binding.system ? ` · ${esc(brief.binding.system)}` : "") + (brief.binding.title ? ` — ${inline(brief.binding.title, { refs: false })}` : "") + `</p>` : ""}
     ${brief.goal ? `<p class="goal"><span class="goal-k">Goal</span>${inline(brief.goal)}</p>` : ""}
     <p class="provenance">${provenance}</p>
+  </header>
+  <aside class="side" aria-label="Navigation and history">
     ${filters}
     ${summary}
-  </header>
-  ${toc}
+    ${toc}
+    ${recap}
+  </aside>
+  <main class="body">
   ${entries.map((e) => entry(e, baseDir)).join("\n")}
   ${mechSec}
   ${outSec}
   ${rulSec}
+  </main>
 </div>
 ${data}
 <script>${THEME_SCRIPT}</script>
