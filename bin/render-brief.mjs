@@ -16,14 +16,14 @@
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
-import { validateBrief, formatReport, IMAGE_TYPES } from "./validate-brief.mjs";
+import { validateBrief, formatReport, IMAGE_TYPES, pictureProblem } from "./validate-brief.mjs";
 
 /* One drawing bigger than this is not worth carrying inside the page. */
 const INLINE_MAX_BYTES = 4 * 1024 * 1024;
 /* Past this the whole page is heavy, well before the 16 MB ceiling. */
 const PAGE_WARN_BYTES = 6 * 1024 * 1024;
 
-const notes = { inlined: 0, companions: new Set(), problems: [] };
+const notes = { inlined: 0, shots: 0, companions: new Set(), problems: [] };
 const mb = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 
 /* ── text ──────────────────────────────────────────────────────────────────
@@ -145,19 +145,37 @@ const stamps = (x, first = "added") =>
 /* ── diagrams ───────────────────────────────────────────────────────────── */
 
 /* A screenshot travels inside the page as a data URI: the reader works from the
-   published page and cannot open a file. The validator has already checked that
-   each file exists, is a picture and is small enough. data-brief-file keeps the
-   path, so extract-brief can write the picture back out. A button, so a tap or
-   the keyboard opens it at full size. */
+   published page and cannot open a file. Each file passes the same picture rule
+   the validator applies; one that fails becomes a visible note in its place, so
+   the rest of the brief still publishes. data-brief-file keeps the path, so
+   extract-brief can write the picture back out. The picture is a button with a
+   visible cue: a tap or the keyboard opens it fitted, full screen, where the
+   reader can pinch to zoom. */
+function readPicture(file, baseDir) {
+  let buf;
+  try { buf = readFileSync(resolve(baseDir, file)); } catch { return { why: `${file} could not be read` }; }
+  const problem = pictureProblem(file, buf);
+  return problem ? { why: problem.message.replace(/^"([^"]+)"/, "$1") } : { buf };
+}
 function shot(im, baseDir) {
-  const one = (file, cls) => {
-    const buf = readFileSync(resolve(baseDir, file));
-    notes.inlined += Math.ceil(buf.length * 4 / 3);
+  const light = readPicture(im.file, baseDir);
+  const dark = im.fileDark ? readPicture(im.fileDark, baseDir) : null;
+  for (const p of [light, dark]) if (p?.why) notes.problems.push(`${p.why} — the page shows a note in its place`);
+  if (!light.buf) return missingPicture(im.file, light.why);
+  const one = (file, buf, cls) => {
+    notes.inlined += Math.ceil(buf.length / 3) * 4;
     return `<img data-brief-file="${esc(file)}" src="data:${IMAGE_TYPES[extname(file).toLowerCase()]};base64,${buf.toString("base64")}"` +
       `${cls ? ` class="${cls}"` : ""} alt="${esc(im.alt)}">`;
   };
-  return `<button type="button" class="shot" title="Show at full size">` +
-    one(im.file, im.fileDark ? "shot-light" : "") + (im.fileDark ? one(im.fileDark, "shot-dark") : "") + `</button>`;
+  const both = dark?.buf;
+  notes.shots++;
+  return `<button type="button" class="shot" aria-label="Enlarge: ${esc(im.alt)}">` +
+    one(im.file, light.buf, both ? "shot-light" : "") + (both ? one(im.fileDark, dark.buf, "shot-dark") : "") +
+    `<span class="shot-cue" aria-hidden="true">Enlarge</span></button>`;
+}
+function missingPicture(file, why) {
+  return `<div class="absent"><strong>This picture could not be included.</strong> <span>${esc(why)}.</span> ` +
+    `<span>It is named <code>${esc(file)}</code> in the brief.</span></div>`;
 }
 
 function diagram(d, baseDir) {
@@ -357,7 +375,7 @@ const amendmentsOf = (e) => (e?.status === "complete" ? e.resolution?.amendments
 
 const EV_LABEL = {
   code: "Code", document: "Document", finding: "Earlier finding",
-  run: "Run", commit: "Commit", test: "Test", measurement: "Measurement",
+  run: "Run", commit: "Commit", test: "Test", measurement: "Measurement", visual: "Shown",
 };
 
 function evidence(list, baseDir) {
@@ -762,15 +780,15 @@ ul.ev li:first-child{border-top:0;padding-top:0;}
   background:var(--bg);overflow-x:auto;margin:0;}
 .dgm figcaption{font-size:.88rem;color:var(--ink-2);margin-top:.6em;
   font-family:ui-sans-serif,system-ui,sans-serif;}
-/* Screenshots: a row that wraps; a tap opens one at full size. */
+/* Screenshots: a row that wraps, each fitted to its column with a visible
+   Enlarge cue; a tap opens it fitted in a full-screen viewer (pinch to zoom). */
 .shots{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;margin:18px 0;}
 .shots .dgm{margin:0;flex:1 1 260px;min-width:0;}
-.shots .dgm:has(.zoom){flex-basis:100%;}
-.shot{display:block;max-width:100%;padding:0;margin:0;font:inherit;color:inherit;cursor:zoom-in;
+.shot{position:relative;display:block;max-width:100%;padding:0;margin:0;font:inherit;color:inherit;cursor:zoom-in;
   border:1px solid var(--line);border-radius:var(--radius);background:var(--bg);overflow:hidden;}
 .shot img{display:block;max-width:100%;height:auto;}
-.shot.zoom{cursor:zoom-out;overflow-x:auto;}
-.shot.zoom img{max-width:none;}
+.shot-cue{position:absolute;right:8px;bottom:8px;padding:.25em .6em;border-radius:999px;
+  background:rgba(16,21,29,.78);color:#fff;font:600 .75rem/1.4 ui-sans-serif,system-ui,sans-serif;}
 .shot .shot-dark{display:none;}
 :root[data-theme="dark"] .shot .shot-light{display:none;}
 :root[data-theme="dark"] .shot .shot-dark{display:block;}
@@ -778,11 +796,17 @@ ul.ev li:first-child{border-top:0;padding-top:0;}
   :root:not([data-theme="light"]) .shot .shot-light{display:none;}
   :root:not([data-theme="light"]) .shot .shot-dark{display:block;}
 }
+dialog.viewer{width:100vw;height:100vh;max-width:none;max-height:none;margin:0;padding:0;border:0;
+  background:#0b0d11;overflow:auto;touch-action:pinch-zoom;}
+dialog.viewer::backdrop{background:#0b0d11;}
+dialog.viewer img{display:block;max-width:100%;max-height:100%;margin:auto;position:absolute;inset:0;object-fit:contain;}
+dialog.viewer button{position:fixed;top:12px;right:12px;z-index:1;padding:.5em 1em;border:0;border-radius:999px;
+  background:#fff;color:#10151d;font:600 .95rem/1.2 ui-sans-serif,system-ui,sans-serif;cursor:pointer;}
 .dgm-src{font-size:.78rem;color:var(--ink-3);margin:.35em 0 0;}
-.dgm-absent .absent{border:1px dashed var(--line-2);border-radius:var(--radius);
+.absent{border:1px dashed var(--line-2);border-radius:var(--radius);
   padding:14px 16px;background:var(--bg);color:var(--ink-2);font-size:.92rem;
   font-family:ui-sans-serif,system-ui,sans-serif;}
-.dgm-absent .absent strong{color:var(--ink);}
+.absent strong{color:var(--ink);}
 
 /* solutions */
 .sol{border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin:0 0 12px;}
@@ -886,6 +910,28 @@ const CHANGES_SCRIPT = `
   try { saved = localStorage.getItem(KEY); } catch (_) {}
   apply(saved, false);
   nav.hidden = false;
+})();
+`;
+
+/* The full-screen picture viewer. It shows the copy that matches the reader's
+   theme, fitted to the screen; the reader pinches to zoom, and Close, Escape or
+   a tap on the dark area returns to the page. */
+const VIEWER_SCRIPT = `
+(function(){
+  var v = document.querySelector('dialog.viewer');
+  if (!v) return;
+  var img = v.querySelector('img');
+  function close(){ if (v.open) v.close(); img.removeAttribute('src'); }
+  document.addEventListener('click', function(e){
+    var s = e.target.closest && e.target.closest('.shot');
+    if (!s) return;
+    var shown = [].slice.call(s.querySelectorAll('img')).filter(function(i){ return i.offsetParent !== null; })[0] || s.querySelector('img');
+    img.src = shown.src; img.alt = shown.alt;
+    if (v.showModal) v.showModal(); else v.setAttribute('open', '');
+  });
+  v.querySelector('[data-close]').addEventListener('click', close);
+  v.addEventListener('click', function(e){ if (e.target === v) close(); });
+  v.addEventListener('close', function(){ img.removeAttribute('src'); });
 })();
 `;
 
@@ -1128,7 +1174,8 @@ function page(brief, baseDir) {
 </div>
 ${data}
 <script>${THEME_SCRIPT}</script>
-<script>document.addEventListener('click',function(e){var s=e.target.closest&&e.target.closest('.shot');if(s)s.classList.toggle('zoom');});</script>
+${notes.shots ? `<dialog class="viewer" aria-label="Picture"><button type="button" data-close>Close</button><img alt=""></dialog>
+<script>${VIEWER_SCRIPT}</script>` : ""}
 <script>var DEFAULT_FILTER = '${defaultFilter}';${FILTER_SCRIPT}</script>
 ${history.length ? `<script>${CHANGES_SCRIPT}</script>` : ""}
 `;

@@ -207,12 +207,13 @@ The page prints that line; the validator warns when neither is there.
 **Show what the reader has to see.** The reader works from the published page, often on a
 phone, and cannot open a file. When the question is about how something looks or what it
 says in place (a mockup, a layout, new wording on a page), take a screenshot and attach
-it: `{"kind":"image","file":"shots/q2-wide.png","alt":…,"caption":…}` in
-`unwound.diagrams`, or an `image` on the evidence item. The renderer embeds it in the page.
-Attach a wide shot and a phone-width shot when layout matters. A path, a link to an HTML
-file or a line of markup is never the thing to look at, and it is not evidence for a
-visual question. The validator warns when an entry names such a file and carries no
-picture. To add a picture later: `brief set <file> Q-n --diagram '{…}'`.
+it. Evidence the reader has to see is kind `visual` and carries the picture in `image`;
+the validator refuses a visual item without one. A picture of how it works today goes in
+`unwound.diagrams` as `{"kind":"image","file":"shots/q2-wide.png","alt":…,"caption":…}`.
+The renderer embeds it in the page. Attach a wide shot and a phone-width shot when layout
+matters. A path, a link to an HTML file or a line of markup is never the thing to look
+at, and it is not evidence for a visual question. To add a picture later:
+`brief set <file> Q-n --diagram '{…}'`. Limits and capture: `reference/diagrams.md`.
 
 Ids are `Q-n`, permanent, next free number for a new entry. Full field list, states and
 the summary box: `reference/entry-format.md`.

@@ -303,11 +303,13 @@ function run(command, file, pos, flags) {
     stamp(after);
 
     const here = dirname(path);   // pictures are named relative to the brief, and checked on disk
-    const was = before ? validateBrief(before, undefined, here) : { errors: [], warnings: [] };
+    // A bad picture is refused here, where the author adds it; a render of the same brief shows a note instead.
+    const strict = { pictures: "refuse" };
+    const was = before ? validateBrief(before, undefined, here, strict) : { errors: [], warnings: [] };
     const known = new Set([...was.errors, ...was.warnings].map(key));
     // A new brief has no entries until the first raise.
-    if (command === "new") for (const e of validateBrief(after, undefined, here).errors) if (e.path === "decisions") known.add(key(e));
-    const result = validateBrief(after, undefined, here);
+    if (command === "new") for (const e of validateBrief(after, undefined, here, strict).errors) if (e.path === "decisions") known.add(key(e));
+    const result = validateBrief(after, undefined, here, strict);
     const fresh = result.errors.filter((e) => !known.has(key(e)));
     if (fresh.length) {
       fail(`${command} refused; nothing was written.\n${formatReport({ ok: false, errors: fresh, warnings: [] }, file)}`);

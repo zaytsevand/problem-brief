@@ -297,8 +297,10 @@ Four kinds:
 - **svg** — a self-contained file, inlined, centred and scaled.
 - **image** — a screenshot (PNG, JPEG or WebP) embedded in the page, with alt text and
   a caption. Use it for anything the reader has to see: a mockup, a layout, wording in
-  place. An evidence item can carry one too. The reader cannot open a file, so the
-  picture goes in the page.
+  place. Evidence of kind `visual` must carry one. The reader cannot open a file, so
+  the picture goes in the page: fitted to the column, and full screen with pinch-zoom on
+  a tap. A picture that cannot be used is refused when it is added, and shows as a
+  visible note when an existing brief is rendered.
 
 Keep the archify source file. The next refresh edits the drawing rather than
 redrawing it, which is what loses the fallbacks and the error paths.

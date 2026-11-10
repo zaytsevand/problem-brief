@@ -176,4 +176,10 @@ test("set --diagram adds a picture and keeps the drawings already there; a missi
   const r = brief("set", f, "Q-1", "--diagram", JSON.stringify({ ...pic, file: "gone.png" }));
   assert.equal(r.status, 1);
   assert.match(r.stderr, /could not be read/);
+
+  // raise merges --diagram into --unwound's own drawings, and refuses a bad picture the same way.
+  const drawn = { kind: "mermaid", source: "flowchart LR\n  a --> b", caption: "A leads to b." };
+  ok(raise(f, "--unwound", JSON.stringify({ now: "A retry re-runs everything.", diagrams: [drawn] }), "--diagram", JSON.stringify(pic)));
+  assert.deepEqual(read(f).decisions.at(-1).unwound.diagrams, [drawn, pic]);
+  assert.equal(raise(f, "--diagram", JSON.stringify({ ...pic, file: "gone.png" })).status, 1);
 });

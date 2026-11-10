@@ -497,9 +497,10 @@
             "commit",
             "test",
             "measurement",
-            "ruling"
+            "ruling",
+            "visual"
           ],
-          "description": "What sort of thing is being cited."
+          "description": "What sort of thing is being cited. visual: something the reader has to see to answer (a page, a mockup, a layout, wording in place); it must carry the picture in image."
         },
         "ref": {
           "type": "string",
@@ -525,7 +526,7 @@
             "file",
             "alt"
           ],
-          "description": "A screenshot shown under the note, for evidence the reader has to see: what a page looks like or says. The note is its caption.",
+          "description": "The screenshot, shown under the note; required for kind=visual. The note is its caption.",
           "properties": {
             "file": {
               "type": "string",
@@ -542,7 +543,26 @@
             }
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "visual"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "image"
+            ]
+          }
+        }
+      ]
     },
     "unwound": {
       "type": "object",

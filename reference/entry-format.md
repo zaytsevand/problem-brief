@@ -15,7 +15,7 @@ Every entry, in this order. The order is the deliverable.
 |---|---|---|
 | **a. Problem** | One or two plain sentences naming what is wrong. No preamble. | 1–2 sentences |
 | **b. Brief explanation** | Why that matters, in the operator's terms. | 2–8 sentences |
-| **c. Evidences** | Verified evidence grounded in real artefacts: code lines, documents, prior findings. For a question about how something looks or reads, the evidence is the screenshot (`image` on the item), never a line of markup or a path to a mockup. | 1–4 items |
+| **c. Evidences** | Verified evidence grounded in real artefacts: code lines, documents, prior findings. For a question about how something looks or reads, the evidence is the screenshot: kind `visual` with its picture in `image`, never a line of markup or a path to a mockup. | 1–4 items |
 | **d. The unwound explanation** | How it works today, with a diagram where one helps (or `noDiagram`: one line on why none does; `reference/diagrams.md`), and references (file:line, commit SHAs, run IDs, spec paths). Then why that is wrong. With no defect, state the target state instead. | as long as it needs |
 | **e. Solutions** | At least one, better two or more. **The first is the recommendation**, labelled as such. Each carries its cost (work, risk, what it forecloses) and says whether it can be undone. | 2+ options |
 
