@@ -165,3 +165,21 @@ test("the guard refuses hand edits of brief JSON and lets the commands through",
   });
   assert.equal(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision, "deny");
 });
+
+test("set --diagram adds a picture and keeps the drawings already there; a missing file is refused", () => {
+  const f = copy();
+  const before = read(f).decisions[0].unwound?.diagrams ?? [];
+  writeFileSync(join(dirname(f), "wide.png"), Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64"));
+  const pic = { kind: "image", file: "wide.png", alt: "The page at full width.", caption: "The button reads Save changes." };
+  ok(brief("set", f, "Q-1", "--diagram", JSON.stringify(pic)));
+  assert.deepEqual(read(f).decisions[0].unwound.diagrams, [...before, pic]);
+  const r = brief("set", f, "Q-1", "--diagram", JSON.stringify({ ...pic, file: "gone.png" }));
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /could not be read/);
+
+  // raise merges --diagram into --unwound's own drawings, and refuses a bad picture the same way.
+  const drawn = { kind: "mermaid", source: "flowchart LR\n  a --> b", caption: "A leads to b." };
+  ok(raise(f, "--unwound", JSON.stringify({ now: "A retry re-runs everything.", diagrams: [drawn] }), "--diagram", JSON.stringify(pic)));
+  assert.deepEqual(read(f).decisions.at(-1).unwound.diagrams, [drawn, pic]);
+  assert.equal(raise(f, "--diagram", JSON.stringify({ ...pic, file: "gone.png" })).status, 1);
+});

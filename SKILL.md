@@ -204,6 +204,17 @@ or states, and would a picture make it answerable? Parties exchanging messages o
 drawing of each. Draw it, or write one line in `unwound.noDiagram` on why no picture helps.
 The page prints that line; the validator warns when neither is there.
 
+**Show what the reader has to see.** The reader works from the published page, often on a
+phone, and cannot open a file. When the question is about how something looks or what it
+says in place (a mockup, a layout, new wording on a page), take a screenshot and attach
+it. Evidence the reader has to see is kind `visual` and carries the picture in `image`;
+the validator refuses a visual item without one. A picture of how it works today goes in
+`unwound.diagrams` as `{"kind":"image","file":"shots/q2-wide.png","alt":…,"caption":…}`.
+The renderer embeds it in the page. Attach a wide shot and a phone-width shot when layout
+matters. A path, a link to an HTML file or a line of markup is never the thing to look
+at, and it is not evidence for a visual question. To add a picture later:
+`brief set <file> Q-n --diagram '{…}'`. Limits and capture: `reference/diagrams.md`.
+
 Ids are `Q-n`, permanent, next free number for a new entry. Full field list, states and
 the summary box: `reference/entry-format.md`.
 
@@ -252,7 +263,7 @@ falling back to mermaid.
 
 4. Publish with the `Artifact` tool, republishing to the same URL; read comments first.
    Comments, the chat summary, `AskUserQuestion` and freshness: `reference/publishing.md`.
-   Diagrams (mermaid, archify): `reference/diagrams.md`.
+   Diagrams (mermaid, archify) and screenshots: `reference/diagrams.md`.
 5. First publish: register the brief in memory and store its `url`
    (`reference/memory-and-hooks.md`). Registering sets `owner` to the current git branch
    (`--owner` to name another); the session-start digest warns a session on a different branch.
@@ -284,7 +295,7 @@ falling back to mermaid.
 | `reference/entry-format.md` | Entry shape, ids, states, timestamps, grouping, summary box, validate/render. |
 | `reference/publishing.md` | Publishing, comments, chat summary, freshness, `AskUserQuestion`. |
 | `reference/memory-and-hooks.md` | Memory registration, hooks, recovery, retiring. |
-| `reference/diagrams.md` | Mermaid and archify diagrams. |
+| `reference/diagrams.md` | Mermaid and archify diagrams, and screenshots. |
 | `bin/brief.mjs` | Every write to a brief: new, raise, decide, complete, retract, rule, work, fix, note, set, refresh, stamp. |
 | `bin/*.mjs` | Validator, renderer, delta, context, comments, memory, retire, withdraw, extract, guard hook — run with `node`. |
 

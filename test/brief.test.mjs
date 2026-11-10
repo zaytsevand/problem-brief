@@ -1,8 +1,8 @@
 // Run with: node --test test/*.test.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1148,4 +1148,104 @@ test("a work item can wait on another brief, and the page links it with what is 
   assert.match(page(item("spec.json")), /Waits on <a href="https:\/\/claude\.ai\/artifact\/spec17">Spec 17 questions<\/a> · 2 open/);
   assert.match(page(item("spec.json#Q-3", "in-progress")), /In progress · follows from <a [^>]+>Spec 17 questions <span class="n">Q-3<\/span><\/a>/);
   assert.match(page(item("missing.json")), /Blocked · waits on <code>missing\.json<\/code>/);
+});
+
+/* ── issues #46 and #47: screenshots travel inside the page ────────────── */
+
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+const PNG_DARK = Buffer.concat([PNG, Buffer.from("dark")]);   // still a PNG, different bytes
+const shotDir = () => {
+  const dir = mkdtempSync(join(tmpdir(), "brief-"));
+  mkdirSync(join(dir, "shots"));
+  writeFileSync(join(dir, "shots", "a&b.png"), PNG);
+  writeFileSync(join(dir, "shots", "a&b-dark.png"), PNG_DARK);
+  return dir;
+};
+const shotBrief = (extra = {}) => brief([entry("Q-1", {
+  ...live,
+  evidence: [{ kind: "visual", ref: "the settings page", note: "The new wording, in place.", image: { file: "shots/a&b.png", alt: "The settings page with the new wording." } }],
+  unwound: { now: "The page says Save.", diagrams: [{ kind: "image", file: "shots/a&b.png", fileDark: "shots/a&b-dark.png", alt: "The page at full width.", caption: "The button reads Save changes." }] },
+  ...extra,
+})]);
+const renderIn = (dir, b) => {
+  writeFileSync(join(dir, "b.json"), JSON.stringify(b));
+  const r = spawnSync("node", [bin("render-brief.mjs"), join(dir, "b.json"), join(dir, "b.html")], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  return { html: readFileSync(join(dir, "b.html"), "utf8"), stderr: r.stderr };
+};
+
+test("a screenshot is embedded with a visible enlarge cue, and light and dark come back out on extract", () => {
+  const dir = shotDir(), b = shotBrief();
+  const { html } = renderIn(dir, b);
+  assert.equal(html.match(/<img data-brief-file="shots\/a&amp;b\.png" src="data:image\/png;base64,/g).length, 2, "the drawing and the evidence");
+  assert.match(html, /class="shot-dark" alt="The page at full width\."/);
+  assert.match(html, /<div class="shots"><figure class="dgm"><button type="button" class="shot" aria-label="Enlarge: /);
+  assert.match(html, /<span class="shot-cue" aria-hidden="true">Enlarge<\/span>/);
+  assert.match(html, /<dialog class="viewer"[^>]*><button type="button" data-close>Close<\/button>/);
+  assert.match(html, /<span class="ev-kind">Shown<\/span>/);
+
+  const back = mkdtempSync(join(tmpdir(), "brief-"));
+  execFileSync("node", [bin("extract-brief.mjs"), join(dir, "b.html"), join(back, "b.json")], { stdio: "pipe" });
+  assert.deepEqual(JSON.parse(readFileSync(join(back, "b.json"), "utf8")), b);
+  assert.deepEqual(readFileSync(join(back, "shots", "a&b.png")), PNG);
+  assert.deepEqual(readFileSync(join(back, "shots", "a&b-dark.png")), PNG_DARK, "light and dark are not swapped");
+
+  const printed = spawnSync("node", [bin("extract-brief.mjs"), join(dir, "b.html")], { encoding: "utf8" });
+  assert.match(printed.stderr, /2 pictures on the page were not written/);
+});
+
+test("a bad picture is refused when added with brief raise or set, and is a warning otherwise", () => {
+  const dir = shotDir();
+  mkdirSync(join(dir, "shots", "folder.png"));
+  writeFileSync(join(dir, "shots", "huge.png"), Buffer.concat([PNG, Buffer.alloc(1024 * 1024)]));
+  writeFileSync(join(dir, "shots", "fake.png"), Buffer.from("<html>not a picture</html>"));
+  const pic = (d) => shotBrief({ unwound: { now: "x", diagrams: [{ kind: "image", caption: "c", alt: "a picture", ...d }] } });
+  const strict = (b) => validateBrief(b, undefined, dir, { pictures: "refuse" }).errors.map((e) => `${e.path} ${e.message}`);
+  const loose = (b) => validateBrief(b, undefined, dir);
+  assert.deepEqual(strict(pic({ file: "shots/a&b.png" })), []);
+  for (const [file, says] of [["shots/gone.png", "could not be read"], ["shots/folder.png", "could not be read"],
+    ["mockups/settings.html", "is not a PNG, JPEG or WebP picture"], ["shots/huge.png", "1 MB at most"],
+    ["shots/fake.png", "does not hold PNG data"], ["../a&b.png", "not a plain path"], [".claude/x.png", "not a plain path"]]) {
+    assert.ok(strict(pic({ file })).some((m) => m.includes(says)), `${file}: ${says}`);
+    const r = loose(pic({ file }));
+    assert.ok(r.ok && r.warnings.some((w) => w.message.includes(says)), `${file} is only a warning outside raise/set`);
+  }
+  assert.ok(strict(pic({ file: "shots/a&b.png", alt: undefined })).some((m) => m.includes("alt")));
+});
+
+test("a picture that cannot be used becomes a visible note, and the rest of the page renders", () => {
+  const dir = shotDir();
+  const { html, stderr } = renderIn(dir, shotBrief({ unwound: { now: "x", diagrams: [{ kind: "image", file: "shots/gone.png", alt: "a picture", caption: "c" }] } }));
+  assert.match(html, /This picture could not be included\.<\/strong> <span>shots\/gone\.png could not be read\.<\/span>/);
+  assert.match(html, /<span class="ev-kind">Shown<\/span>/, "the rest of the entry is still there");
+  assert.match(stderr, /shots\/gone\.png could not be read — the page shows a note in its place/);
+});
+
+test("something the reader has to see is declared as visual evidence and must carry its picture", () => {
+  const refused = (ev) => messages(brief([entry("Q-1", { ...live, evidence: [ev] })])).errors;
+  assert.ok(refused({ kind: "visual", ref: "settings page", note: "The new wording." }).some((m) => m.includes("image")));
+  assert.deepEqual(refused({ kind: "visual", ref: "settings page", note: "The new wording.", image: { file: "shots/a.png", alt: "The page." } }), []);
+  const html = messages(brief([entry("Q-1", { ...live, evidence: [{ kind: "code", ref: "web/templates/settings.html:42", note: "Where the label is set." }] })]));
+  assert.deepEqual(html.warnings.filter((w) => w.includes("picture")), [], "citing a template is not a request to show it");
+});
+
+test("extract writes back only the page's real pictures, inside the folder, and never over a file already there", () => {
+  const out = mkdtempSync(join(tmpdir(), "brief-")), away = mkdtempSync(join(tmpdir(), "brief-away-"));
+  mkdirSync(join(out, "shots"));
+  writeFileSync(join(out, "shots", "keep.png"), PNG_DARK);
+  symlinkSync(away, join(out, "linked"));
+  const b64 = (buf) => Buffer.from(buf).toString("base64");
+  const img = (file, buf) => `<img data-brief-file="${file}" src="data:image/png;base64,${b64(buf)}" alt="x">`;
+  const page = join(out, "hostile.html");
+  writeFileSync(page, `<script type="application/json" id="problem-brief-data">${JSON.stringify(shotBrief())}</script>` + [
+    img("../escape.png", PNG), img(`${away}/abs.png`, PNG), img(".claude/settings.json", '{"hooks":{}}'),
+    img("sub/settings.json", "{}"), img("shots/fake.png", "<html>"), img("linked/x.png", PNG),
+    img("shots/keep.png", PNG), img("shots/ok.png", PNG)].join(""));
+  const r = spawnSync("node", [bin("extract-brief.mjs"), page, join(out, "b.json")], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(readFileSync(join(out, "shots", "ok.png")), PNG);
+  assert.deepEqual(readFileSync(join(out, "shots", "keep.png")), PNG_DARK, "an existing file is not overwritten");
+  assert.deepEqual(readdirSync(away), [], "nothing is written through a symlink or an absolute path");
+  for (const f of ["../escape.png", ".claude", "sub", "shots/fake.png"]) assert.ok(!existsSync(join(out, f)), `${f} is not written`);
+  assert.match(r.stderr, /7 pictures not written/);
 });

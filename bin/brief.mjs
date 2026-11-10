@@ -6,7 +6,7 @@
  *
  *   node brief.mjs new      <brief.json> --title … --subject … [--goal …]
  *   node brief.mjs raise    <brief.json> --title … --short … --problem … --brief …
- *                           --evidence '{…}'… --solution '{…}'… [--unwound '{…}']
+ *                           --evidence '{…}'… --solution '{…}'… [--unwound '{…}'] [--diagram '{…}'…]
  *                           [--bearing blocks-goal|escalated --bearing-reason …] [--id Q-n]
  *   node brief.mjs decide   <brief.json> <Q-n> --chose <solution id> [--note …]
  *                           [--add-solution '{…}']
@@ -19,6 +19,7 @@
  *   node brief.mjs fix      <brief.json> --summary … [--detail …] [--reversible true]
  *   node brief.mjs note     <brief.json> [Q-n] <text> [--kind changed|note|…]
  *   node brief.mjs set      <brief.json> <brief|Q-n|R-n|W-n|mechanical.N> --field value…
+ *                           set Q-n --diagram '{…}' adds a picture and keeps the ones already there
  *   node brief.mjs refresh  <brief.json>      move current changes into history, once per refresh
  *   node brief.mjs stamp    <brief.json>      raise updated above every item's stamp
  *
@@ -31,7 +32,7 @@
  */
 
 import { closeSync, existsSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { formatReport, validateBrief } from "./validate-brief.mjs";
 
 class Refusal extends Error {}
@@ -69,7 +70,7 @@ const setPath = (o, key, v) => {
 
 /* ── arguments ──────────────────────────────────────────────────────────── */
 
-const LISTS = new Set(["evidence", "solution", "addSolution"]);
+const LISTS = new Set(["evidence", "solution", "addSolution", "diagram"]);
 const camel = (k) => k.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 function value(s, flag) {
   if (!/^\s*[[{]/.test(s) && !["true", "false", "null"].includes(s)) return s;
@@ -141,11 +142,12 @@ const COMMANDS = {
   },
 
   raise(b, [], f) {
-    const { change, evidence, solution, id: given, blockedBy, ...rest } = f;
+    const { change, evidence, solution, id: given, blockedBy, diagram, ...rest } = f;
     const id = given ?? nextId(b, "Q", b.decisions);
     if ((b.decisions ?? []).some((e) => e.id === id)) fail(`${id} is already an entry; raise takes the next free number unless --id names an unused one`);
     const n = now();
-    const { title, short, problem, brief, unwound, ...more } = rest;
+    const { title, short, problem, brief, unwound: stated, ...more } = rest;
+    const unwound = diagram ? { ...stated, diagrams: [...(stated?.diagrams ?? []), ...diagram] } : stated;
     (b.decisions ??= []).push(defined({
       id, created: n, updated: n, title, short, problem, brief,
       evidence: evidence ?? [], unwound, solutions: solution ?? [], status: "open",
@@ -244,13 +246,17 @@ const COMMANDS = {
     return `noted${id ? ` on ${id}` : ""}`;
   },
 
-  set(b, [ref], { change, ...fields }) {
-    if (!Object.keys(fields).length) fail("set needs at least one --field value");
+  set(b, [ref], { change, diagram, ...fields }) {
+    if (!Object.keys(fields).length && !diagram) fail("set needs at least one --field value");
     const x = target(b, ref);
+    if (diagram) {
+      if (!/^Q-\d+$/.test(ref)) fail("--diagram adds a picture to an entry: name it Q-n");
+      ((x.unwound ??= {}).diagrams ??= []).push(...diagram);
+    }
     assign(x, fields);
     if (x !== b) touch(x);
     if (change) addChange(b, "changed", change, /^Q-\d+$/.test(ref) ? ref : undefined);
-    return `set ${Object.keys(fields).join(", ")} on ${ref}`;
+    return `set ${[...Object.keys(fields), ...(diagram ? ["diagram"] : [])].join(", ")} on ${ref}`;
   },
 
   refresh(b) {
@@ -296,11 +302,14 @@ function run(command, file, pos, flags) {
     if (command !== "stamp") after.updated = later(now(), after.updated);
     stamp(after);
 
-    const was = before ? validateBrief(before) : { errors: [], warnings: [] };
+    const here = dirname(path);   // pictures are named relative to the brief, and checked on disk
+    // A bad picture is refused here, where the author adds it; a render of the same brief shows a note instead.
+    const strict = { pictures: "refuse" };
+    const was = before ? validateBrief(before, undefined, here, strict) : { errors: [], warnings: [] };
     const known = new Set([...was.errors, ...was.warnings].map(key));
     // A new brief has no entries until the first raise.
-    if (command === "new") for (const e of validateBrief(after).errors) if (e.path === "decisions") known.add(key(e));
-    const result = validateBrief(after);
+    if (command === "new") for (const e of validateBrief(after, undefined, here, strict).errors) if (e.path === "decisions") known.add(key(e));
+    const result = validateBrief(after, undefined, here, strict);
     const fresh = result.errors.filter((e) => !known.has(key(e)));
     if (fresh.length) {
       fail(`${command} refused; nothing was written.\n${formatReport({ ok: false, errors: fresh, warnings: [] }, file)}`);
