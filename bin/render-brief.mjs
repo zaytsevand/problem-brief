@@ -824,7 +824,7 @@ details.rolled ul{margin-top:.6em;}
   .top{grid-area:top;padding-top:40px;}
   .body{grid-area:body;min-width:0;}
   .side{grid-area:side;position:sticky;top:0;max-height:100vh;overflow-y:auto;
-    overscroll-behavior:contain;padding:40px 6px 32px 0;scrollbar-width:thin;}
+    overscroll-behavior:contain;padding:40px 20px 32px 0;scrollbar-width:thin;}
   .side .context{margin-top:16px;padding:2px 14px 10px;font-size:.9rem;}
   .side nav.toc{margin:24px 0 0;font-size:.86rem;}
   .side .recap{margin-top:24px;}
