@@ -827,6 +827,7 @@ details.rolled ul{margin-top:.6em;}
     overscroll-behavior:contain;padding:40px 6px 32px 0;scrollbar-width:thin;}
   .side .context{margin-top:16px;padding:2px 14px 10px;font-size:.9rem;}
   .side nav.toc{margin:24px 0 0;font-size:.86rem;}
+  .side .recap{margin-top:24px;}
 }
 @media (max-width:640px){
   .wrap{padding-block:26px 48px;}
@@ -989,10 +990,10 @@ function page(brief, baseDir) {
     ? `<details class="background"><summary>Background</summary>${prose(brief.background)}` +
       (brief.source ? `<p class="source">These findings come from ${inline(brief.source)}.</p>` : "") + `</details>` : "";
   /* What asks the reader to act comes first; the history is for catching up. */
-  const summary = `<div class="context"><section><h2>Waiting on you</h2>${waiting}</section>` +
-    changes +
-    (brief.context ? `<section>${prose(brief.context)}</section>` : "") +
-    background + `</div>`;
+  const summary = `<div class="context"><section><h2>Waiting on you</h2>${waiting}</section></div>`;
+  /* Catching up comes after the index: the reader acts first, then reads history. */
+  const catchUp = changes + (brief.context ? `<section>${prose(brief.context)}</section>` : "") + background;
+  const recap = catchUp ? `<div class="context recap">${catchUp}</div>` : "";
 
   /* Work that waits on another brief's questions: read that brief for its link
      and how many of the questions it waits on are still open. open is null
@@ -1098,6 +1099,7 @@ function page(brief, baseDir) {
     ${filters}
     ${summary}
     ${toc}
+    ${recap}
   </aside>
   <main class="body">
   ${entries.map((e) => entry(e, baseDir)).join("\n")}
