@@ -427,9 +427,10 @@ export const register: Register = on => {
   on('tool.call', async ($, e, next) => {
     const text = JSON.stringify(e)
     const raw = e as unknown as Raw
-    // A file tool writes only its target; a brief named in its content (a fixture, a note) is not written (#37).
-    const touched = slugsIn(WRITES_FILE.has(e.tool) ? String(raw.file_path ?? raw.notebook_path ?? '') : text)
-    const files = filesIn(text, (await $.env.get('HOME').catch(() => undefined)) ?? '')
+    // A file tool touches only its target: a brief named in its content (a fixture, a note) is neither written nor found (#37).
+    const target = WRITES_FILE.has(e.tool) ? String(raw.file_path ?? raw.notebook_path ?? '') : text
+    const touched = slugsIn(target)
+    const files = filesIn(target, (await $.env.get('HOME').catch(() => undefined)) ?? '')
     const isShell = e.tool === 'Bash'
     const command = isShell ? String((e as unknown as Raw).command ?? '') : ''
 
