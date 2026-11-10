@@ -143,7 +143,7 @@ test("the summary renders as lists: what changed, and what waits on the reader",
     background: "Nine reviewers read the code on 11 September.",
     source: "the nine-advisor review",
   }));
-  const top = html.match(/<header class="top">([^]*?)<\/header>/)[1];
+  const top = html.match(/<aside class="side"[^>]*>([^]*?)<\/aside>/)[1];
   assert.match(top, /<h2>Since the last version<\/h2><div class="tr">/);
   assert.match(top, /<h2>Waiting on you<\/h2>/);
   // Issue #9: what asks the reader to act comes before the history.
@@ -177,7 +177,7 @@ test("a paragraph followed by a list renders both", () => {
 
 test("with a goal and no blocker, the page says nothing blocks it", () => {
   const html = render(brief([entry("Q-1", { bearing: "escalated", bearingReason: "Export only." })]));
-  const top = html.match(/<header class="top">([^]*?)<\/header>/)[1];
+  const top = html.match(/<aside class="side"[^>]*>([^]*?)<\/aside>/)[1];
   assert.match(top, /Nothing blocks the goal\./);
   assert.match(html, /var DEFAULT_FILTER = 'escalated'/);
 });
@@ -268,7 +268,7 @@ test("new additions lead the one change section, blockers first, then escalated,
     { kind: "raised", text: "New work: write the retry test." },
     { kind: "raised", text: "Q-2 raised: invoices post twice." },
   ] }));
-  const top = html.match(/<div class="context">([^]*?)<\/header>/)[1];
+  const top = html.match(/<div class="context">([^]*?)<\/aside>/)[1];
   // Issue #9: one heading for the period, the new items pinned first inside it.
   assert.doesNotMatch(top, /New since the last version/);
   assert.equal([...top.matchAll(/<h2>Since the last version<\/h2>/g)].length, 1);
