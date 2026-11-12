@@ -370,3 +370,38 @@ test('closing a brief unloads it from the pane and the nudge; writing it again b
   expect(await ui.find({ type: 'Button', text: 'Demo brief' })).toBeDefined()
   await ui.unmount()
 })
+
+test('a closed brief stays closed through later turns that only name it', async ($, on) => {
+  seedDisk(on)
+  on('command.register', async () => ({ value: undefined }))
+  on('ui.open', async () => ({ value: { isPlaced: true } }))
+  on('session.start', async (_$, e) => ({ cwd: (e as { cwd: string }).cwd }))
+  on('turn.start', async () => ({ turnId: 't1' }))
+  on('turn.complete', async () => ({ text: '' }))
+  on('prompt.submit', async (_$, e) => ({ text: e.text, context: e.context }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true } as never)
+  await $.tool.call({ tool: 'Edit', file_path: ELSEWHERE, old_string: 'a', new_string: 'b' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Button', text: 'Coordinator brief' })).toBeDefined()
+
+  await ui.press({ key: 'k:coord' })
+  expect(await ui.find({ type: 'Button', text: 'Coordinator brief' })).toBeUndefined()
+
+  await $.turn.start({ text: 'go', turnId: 't1' } as never)
+  await $.tool.call({ tool: 'Bash', command: `cat ${ELSEWHERE}` } as never)
+  await $.tool.call({ tool: 'Read', file_path: ELSEWHERE })
+  await $.turn.complete({ reason: 'answer', turnId: 't1', answer: '' } as never)
+  await $.prompt.submit({ text: 'go on', ...USER } as never)
+  expect(await ui.find({ type: 'Button', text: 'Coordinator brief' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a brief closed in an earlier session stays off a new session\'s pane', async ($, on) => {
+  seedDisk(on, { closed: ['demo'] })
+  // What every new session does with the skill's example brief: read it.
+  await $.tool.call({ tool: 'Read', file_path: PATH })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Button', text: 'Other brief' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: 'Demo brief' })).toBeUndefined()
+  await ui.unmount()
+})

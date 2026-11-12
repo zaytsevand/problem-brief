@@ -54,8 +54,6 @@ declare module 'claude-code' {
       paths: string[]
       openBrief: string
       folded: string[]
-      // Slugs of briefs the person closed in the sidebar.
-      closed: string[]
       sent: Record<string, SentComment[]>
       upkeep: Upkeep
     }
