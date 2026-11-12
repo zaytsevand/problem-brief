@@ -1,6 +1,6 @@
 {
   "name": "brief-sidebar",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Sidebar of the problem briefs' open questions, with a comment box under each that sends your note to the model; nudges the model to keep the brief up to date",
   "types": "./types/index.d.ts",
   "author": {

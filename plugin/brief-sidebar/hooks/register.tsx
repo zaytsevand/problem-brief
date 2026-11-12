@@ -159,7 +159,10 @@ async function markAuthor($: EngineInterface, slugs: string[]): Promise<void> {
 function slugOf(path: string): string {
   const parts = path.split('/')
   const name = parts.pop() ?? ''
-  return name === 'brief.json' ? (parts.pop() ?? '') : name.slice(0, -'.brief.json'.length)
+  if (name !== 'brief.json') return name.slice(0, -'.brief.json'.length)
+  // A spec's brief sits at `<spec>/brief/brief.json`: named after the spec, or every spec's brief would be "brief".
+  const parent = parts.pop() ?? ''
+  return parent === 'brief' ? (parts.pop() ?? parent) : parent
 }
 
 function filesIn(text: string, home: string): string[] {
@@ -205,6 +208,14 @@ function rulingPrompt(brief: BriefView, q: Entry, o: Option): string {
 let dir = ''
 // The folder's names, sizes and times when last read: a change in any of them means a brief moved.
 let seen = ''
+// Briefs kept outside the folder, from the list brief.mjs adds to on every write (`.paths` in the folder).
+let listed: string[] = []
+
+async function readListed($: EngineInterface, listing: readonly { name: string }[]): Promise<string[]> {
+  if (!listing.some(f => f.name === '.paths')) return []
+  const text = await $.fs.read(`${dir}/.paths`).catch(() => '')
+  return [...new Set(text.split('\n').map(l => l.trim()).filter(l => l.startsWith('/')))]
+}
 
 function signature(listing: readonly { name: string; size: number; mtimeMs: number }[]): string {
   return listing.map(f => `${f.name}:${f.size}:${f.mtimeMs}`).sort().join('|')
@@ -216,10 +227,10 @@ async function refreshIfChanged($: EngineInterface): Promise<void> {
   if ((await diskSignature($)) !== seen) await reload($)
 }
 
-// The scanned folder plus each kept path's own entry in its folder.
+// The scanned folder plus each kept or listed path's own entry in its folder.
 async function diskSignature($: EngineInterface): Promise<string> {
   const listing = await $.fs.list(dir).catch(() => [])
-  const kept = await read($, paths)
+  const kept = [...new Set([...(await read($, paths)), ...listed])]
   const parts = [signature(listing)]
   for (const path of kept) {
     const at = path.lastIndexOf('/')
@@ -234,13 +245,14 @@ async function reload($: EngineInterface): Promise<void> {
     dir = `${(await $.env.get('HOME')) ?? ''}/.claude/problem-brief/briefs`
   }
   const listing = await $.fs.list(dir).catch(() => [])
+  listed = await readListed($, listing)
   seen = await diskSignature($)
   const found = listing
     .filter(f => f.kind === 'file' && f.name.endsWith('.brief.json'))
     .map(f => `${dir}/${f.name}`)
   const loaded: BriefView[] = []
   const shut = await closedSlugs($)
-  for (const path of [...new Set([...found, ...(await read($, paths))])]) {
+  for (const path of [...new Set([...found, ...listed, ...(await read($, paths))])]) {
     const slug = slugOf(path)
     if (shut.includes(slug)) continue
     try {

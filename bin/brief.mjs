@@ -31,12 +31,29 @@
  * Zero dependencies. Node 18+.
  */
 
-import { closeSync, existsSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { basename, dirname, resolve } from "node:path";
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
 import { formatReport, validateBrief } from "./validate-brief.mjs";
 
 class Refusal extends Error {}
 const fail = (msg) => { throw new Refusal(msg); };
+
+// The sidebar scans one folder; a brief kept anywhere else is found through this list, one absolute path a line.
+// Every brief write passes through here, so the list is the one record of where briefs live.
+const BRIEFS = join(homedir(), ".claude", "problem-brief", "briefs");
+function remember(path) {
+  const abs = resolve(path);
+  if (dirname(abs) === BRIEFS) return;
+  const list = join(BRIEFS, ".paths");
+  try {
+    if (existsSync(list) && readFileSync(list, "utf8").split("\n").includes(abs)) return;
+    mkdirSync(BRIEFS, { recursive: true });
+    appendFileSync(list, abs + "\n", "utf8");
+  } catch {
+    // The brief is written; a sidebar that misses it is the lesser loss.
+  }
+}
 
 const now = () => new Date().toISOString().slice(0, 16) + "Z";
 const today = () => new Date().toISOString().slice(0, 10);
@@ -317,6 +334,7 @@ function run(command, file, pos, flags) {
     if (!flags.dryRun) {
       writeFileSync(`${path}.tmp`, JSON.stringify(after, null, 2) + "\n", "utf8");
       renameSync(`${path}.tmp`, path);
+      remember(path);
     }
     console.log(`${flags.dryRun ? "would have " : ""}${said} — ${file}, updated ${after.updated}`);
     const warned = result.warnings.filter((e) => !known.has(key(e)));
