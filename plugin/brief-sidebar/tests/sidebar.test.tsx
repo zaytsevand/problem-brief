@@ -55,7 +55,10 @@ function seedDisk(on: On, store: Record<string, unknown> = {}) {
       .filter(p => p.slice(0, p.lastIndexOf('/')) === e.path)
       .map(p => ({ name: p.slice(e.path.length + 1), kind: 'file', size: 1, mtimeMs: 0 }) as FsEntry),
   }))
-  on('fs.read', async (_$, e) => ({ value: JSON.stringify(FILES[e.path]) }))
+  on('fs.read', async (_$, e) => {
+    const v = FILES[e.path]
+    return { value: typeof v === 'string' ? v : JSON.stringify(v) }
+  })
   on('ui.status', async () => ({ value: undefined }))
   on('tool.call', async () => ({ deny: 'stub' }))
 }
@@ -369,4 +372,61 @@ test('closing a brief unloads it from the pane and the nudge; writing it again b
   await $.tool.call({ tool: 'Edit', file_path: PATH, old_string: 'a', new_string: 'b' })
   expect(await ui.find({ type: 'Button', text: 'Demo brief' })).toBeDefined()
   await ui.unmount()
+})
+
+test('a closed brief stays closed through later turns that only name it', async ($, on) => {
+  seedDisk(on)
+  on('command.register', async () => ({ value: undefined }))
+  on('ui.open', async () => ({ value: { isPlaced: true } }))
+  on('session.start', async (_$, e) => ({ cwd: (e as { cwd: string }).cwd }))
+  on('turn.start', async () => ({ turnId: 't1' }))
+  on('turn.complete', async () => ({ text: '' }))
+  on('prompt.submit', async (_$, e) => ({ text: e.text, context: e.context }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true } as never)
+  await $.tool.call({ tool: 'Edit', file_path: ELSEWHERE, old_string: 'a', new_string: 'b' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Button', text: 'Coordinator brief' })).toBeDefined()
+
+  await ui.press({ key: 'k:coord' })
+  expect(await ui.find({ type: 'Button', text: 'Coordinator brief' })).toBeUndefined()
+
+  await $.turn.start({ text: 'go', turnId: 't1' } as never)
+  await $.tool.call({ tool: 'Bash', command: `cat ${ELSEWHERE}` } as never)
+  await $.tool.call({ tool: 'Read', file_path: ELSEWHERE })
+  await $.turn.complete({ reason: 'answer', turnId: 't1', answer: '' } as never)
+  await $.prompt.submit({ text: 'go on', ...USER } as never)
+  expect(await ui.find({ type: 'Button', text: 'Coordinator brief' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a brief closed in an earlier session stays off a new session\'s pane', async ($, on) => {
+  seedDisk(on, { closed: ['demo'] })
+  // What every new session does with the skill's example brief: read it.
+  await $.tool.call({ tool: 'Read', file_path: PATH })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Button', text: 'Other brief' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: 'Demo brief' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('briefs on the list brief.mjs keeps show without the session naming them; a spec brief is named for its spec', async ($, on) => {
+  const SPEC = '/home/x/code/app/docs/specs/298-model-spend/brief/brief.json'
+  const LIST = `${DIR}/.paths`
+  FILES[SPEC] = { title: 'Model spend', decisions: [{ id: 'Q-1', title: 'Cap the spend?', short: 'spend cap', status: 'open' }] }
+  FILES[LIST] = `${ELSEWHERE}\n${SPEC}\n`
+  try {
+    seedDisk(on)
+    // A read of an unrelated brief, so the pane loads; neither listed brief is named anywhere.
+    await $.tool.call({ tool: 'Read', file_path: PATH })
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Button', text: 'Coordinator brief' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', text: 'Model spend' })).toBeDefined()
+
+    await ui.press({ key: `f:${SPEC}` })
+    expect(await ui.find({ type: 'Button', key: 'k:298-model-spend' })).toBeDefined()
+    await ui.unmount()
+  } finally {
+    delete FILES[SPEC]
+    delete FILES[LIST]
+  }
 })
