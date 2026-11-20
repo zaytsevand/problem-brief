@@ -194,6 +194,24 @@ work with `brief work <file> update|done W-n`, and anything else with `brief set
 | `unwound` | How it works today (`now`, diagrams, file:line refs), then `whyWrong`. Diagram or `noDiagram` (below). | as needed |
 | `solutions` | Recommended option first, labelled; each priced and marked `reversible`. | 2+ options |
 
+**One problem per entry: the SBAR test.** Before you raise an entry, put its problem
+through SBAR. It must come out as one Situation (`problem`), one Background (`brief`,
+`unwound.now`), one Assessment (`evidence`, `whyWrong`) and one Recommendation
+(`solutions`). If any of the four needs a separate part for a separate defect, the entry
+holds several problems. Raise one entry for each, with its own problem, explanation,
+evidence, current behaviour and at least two priced options. Entries that share a cause
+or a deadline cite each other, but they stay separate entries. When a note on an entry
+turns up a new problem, raise that problem as its own entry instead of adding it to the
+note.
+
+*Anti-example:* "Approve once: five review findings left after three rounds", offered
+as a choice between "waive all" and "stop". It bundled three separate problems: a button
+press that gets replayed later, a 512-character cap on a stored value, and a yes/no
+question where a wrong "no" sends twice. Each had its own fix and alternatives. The
+operator could not rule on one without ruling on all, and the ruling could not be traced
+back to any one of them. The validator warns when `problem` or `brief` counts several
+findings or problems, and when every option label is all or nothing.
+
 Raise it with `brief raise <file> --title … --short … --problem … --brief … --evidence
 '{…}' --solution '{…}' --unwound '{…}' --bearing … --bearing-reason …`; it takes the next
 free number and writes the `raised` note.
@@ -279,6 +297,7 @@ falling back to mermaid.
 - "Q-3 noted" with the "stop asking me about…" part dropped instead of made a ruling.
 - An id or coinage you cannot explain in plain words in the same sentence.
 - An entry the conversation ruled on still reading *awaiting your ruling*.
+- One question covering several findings, with options like "waive all" or "stop".
 - Reaching for the HTML instead of the JSON; publishing without sending the link.
 - Opening a brief's JSON in an editor, or writing it from python, `jq` or `sed`, instead of `brief`.
 - Rendering, then humanizing: a render after a prose change is a render thrown away.
