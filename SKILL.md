@@ -198,11 +198,14 @@ work with `brief work <file> update|done W-n`, and anything else with `brief set
 through SBAR. It must come out as one Situation (`problem`), one Background (`brief`,
 `unwound.now`), one Assessment (`evidence`, `whyWrong`) and one Recommendation
 (`solutions`). If any of the four needs a separate part for a separate defect, the entry
-holds several problems. Raise one entry for each, with its own problem, explanation,
-evidence, current behaviour and at least two priced options. Entries that share a cause
-or a deadline cite each other, but they stay separate entries. When a note on an entry
-turns up a new problem, raise that problem as its own entry instead of adding it to the
-note.
+holds several problems. Split it, then treat each problem on its own by the table in
+"Before raising anything": one with an easy fix that can be undone is still handled
+without asking (`mechanical`), and each one left gets its own entry, with its own problem,
+explanation, evidence, current behaviour and at least two priced options. Two findings
+with the same fix are one problem: the second is evidence on the first. Problems with
+separate fixes that share a deadline or a context cite each other and stay separate
+entries. When a note on an entry turns up a problem with a fix of its own, raise it as
+its own entry instead of adding it to the note.
 
 *Anti-example:* "Approve once: five review findings left after three rounds", offered
 as a choice between "waive all" and "stop". It bundled three separate problems: a button
