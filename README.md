@@ -100,8 +100,11 @@ A brief counts as the session's own when the session writes it, when you reply
 in it from the pane, or when it is named after the session
 (`session-<first 8 characters of the session id>.brief.json`), which makes a
 safe place to try it out. A brief stored anywhere else, such as
-`~/.claude/briefs/<slug>/brief.json`, shows once the session names its path in a
-tool call; the session keeps those paths as its own state, not in the context.
+`~/.claude/briefs/<slug>/brief.json` or a spec's `docs/specs/<spec>/brief/brief.json`,
+shows in every session once `brief.mjs` has written it: each write adds the
+brief's path to `~/.claude/problem-brief/briefs/.paths`, which the pane reads.
+A brief the session names by its full path in a tool call shows too. A spec's
+`brief/brief.json` is named after its spec folder.
 
 A reply goes to the session that last wrote the brief, not necessarily the one
 whose pane you typed it in, so the session holding the work records it. When
