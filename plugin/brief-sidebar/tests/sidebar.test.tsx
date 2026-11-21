@@ -376,7 +376,6 @@ test('closing a brief unloads it from the pane and the nudge; writing it again b
 
 test('a closed brief stays closed through later turns that only name it', async ($, on) => {
   seedDisk(on)
-  on('command.register', async () => ({ value: undefined }))
   on('ui.open', async () => ({ value: { isPlaced: true } }))
   on('session.start', async (_$, e) => ({ cwd: (e as { cwd: string }).cwd }))
   on('turn.start', async () => ({ turnId: 't1' }))
