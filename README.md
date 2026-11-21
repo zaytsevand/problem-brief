@@ -100,8 +100,11 @@ A brief counts as the session's own when the session writes it, when you reply
 in it from the pane and no other session owns it, or when it is named after the session
 (`session-<first 8 characters of the session id>.brief.json`), which makes a
 safe place to try it out. A brief stored anywhere else, such as
-`~/.claude/briefs/<slug>/brief.json`, shows once the session names its path in a
-tool call; the session keeps those paths as its own state, not in the context.
+`~/.claude/briefs/<slug>/brief.json` or a spec's `docs/specs/<spec>/brief/brief.json`,
+shows in every session once `brief.mjs` has written it: each write adds the
+brief's path to `~/.claude/problem-brief/briefs/.paths`, which the pane reads.
+A brief the session names by its full path in a tool call shows too. A spec's
+`brief/brief.json` is named after its spec folder.
 
 A reply goes to the session that owns the brief, not necessarily the one whose
 pane you typed it in, so the session holding the work records it. The owner is
@@ -289,7 +292,7 @@ the whole brief.
 
 ## Drawings
 
-Three kinds:
+Four kinds:
 
 - **mermaid** — inline, rendered natively by the page. For a shape you can state
   in a few lines.
@@ -301,6 +304,12 @@ Three kinds:
   large enough that page size matters. A drawing that cannot be carried becomes
   a visible note naming its source, never an empty frame.
 - **svg** — a self-contained file, inlined, centred and scaled.
+- **image** — a screenshot (PNG, JPEG or WebP) embedded in the page, with alt text and
+  a caption. Use it for anything the reader has to see: a mockup, a layout, wording in
+  place. Evidence of kind `visual` must carry one. The reader cannot open a file, so
+  the picture goes in the page: fitted to the column, and full screen with pinch-zoom on
+  a tap. A picture that cannot be used is refused when it is added, and shows as a
+  visible note when an existing brief is rendered.
 
 Keep the archify source file. The next refresh edits the drawing rather than
 redrawing it, which is what loses the fallbacks and the error paths.

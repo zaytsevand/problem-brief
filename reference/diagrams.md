@@ -23,10 +23,54 @@ The choice is about who draws it, not about looks.
 | `mermaid` | A shape stated in a few lines: a sequence, a branch, a divergence. | Diagram text in `source`; artefacts render mermaid natively. |
 | `archify` | A real architecture, lifecycle, data-flow or workflow view. | Render with the `archify` skill, then embed the rendered page. |
 | `svg` | A picture that already exists as a self-contained file, and only then. | Path in `file`; the renderer inlines it. |
+| `image` | A screenshot: a mockup, a layout, wording shown in place. | PNG, JPEG or WebP path in `file`, plus `alt` and `caption`; the renderer embeds it. |
 
 If archify is not installed, say so rather than silently downgrading every picture to
 mermaid — the reader will assume the simpler drawing was a choice. Install:
 `git clone https://github.com/tt-a1i/archify ~/.claude/skills/archify`.
+
+## Screenshots
+
+Use a screenshot when the reader has to see something to answer: what a page looks like,
+or what it says in place. The reader cannot open a mockup file, so a path to one, a link to
+an HTML file or a line of its markup does not help them. Capture the picture and attach it.
+
+When the evidence itself is the thing to see, give it kind `visual`. A visual evidence
+item must carry its picture; the validator refuses one without it. The note is its caption.
+
+```json
+{ "kind": "visual", "ref": "settings page", "note": "The new wording, in place.",
+  "image": { "file": "shots/q2-wide.png", "alt": "The settings page with the button reading Save changes." } }
+```
+
+A picture that explains how something works today goes in `unwound.diagrams`:
+
+```json
+{ "kind": "image", "file": "shots/q2-wide.png", "fileDark": "shots/q2-wide-dark.png",
+  "alt": "The settings page with the button reading Save changes.",
+  "caption": "The new wording fits on one line at full width." }
+```
+
+- On the page, each picture fits its column and shows an Enlarge label. A tap opens it
+  full screen, fitted, where the reader can pinch to zoom; Close returns to the page.
+  Several pictures on one entry sit in a row that wraps. For a layout question, attach a
+  wide shot and a phone-width shot.
+- `fileDark` is optional. When it is there, the page shows the picture that matches the
+  reader's theme.
+- `file` is relative to the brief's JSON. Keep the pictures in a folder beside it, with
+  no `..`, absolute path or hidden folder in the name.
+- A picture must be a real PNG, JPEG or WebP file of 1 MB or less. `brief raise` and
+  `brief set` refuse one that is missing, too large or of the wrong type. When an existing
+  brief is rendered, such a picture becomes a visible note on the page instead, and the
+  renderer names it.
+- To get under 1 MB: crop to the part that matters, or capture again at a narrower window.
+  Where ffmpeg or Python's Pillow is installed, scale to 1600 pixels wide or save as JPEG or
+  WebP. The renderer does not resize.
+- An HTML mockup has to be opened and captured first. The Chrome browser tools can do
+  this: open the file, set the window width, and save a screenshot.
+- `extract-brief.mjs page.html brief.json` writes the pictures back next to the JSON. It
+  writes only real pictures inside that folder, never over a different file already there,
+  and names every picture it skips.
 
 ## Embedding an archify picture
 

@@ -1,0 +1,3606 @@
+{
+  "kind": "run-log",
+  "schema_version": "1.0",
+  "mode": "review",
+  "header": {
+    "date": "2026-11-10",
+    "engine": "2.0.0",
+    "target": "PR #48 screenshot support in problem briefs",
+    "dir": "docs/reviews",
+    "stem": "2026-11-10-chorus-review-pr48",
+    "roster": [
+      {
+        "persona": "eric-evans-advisor",
+        "lens": "DDD"
+      },
+      {
+        "persona": "mark-richards-architect",
+        "lens": "architecture"
+      },
+      {
+        "persona": "alan-cooper-advisor",
+        "lens": "adversarial product"
+      },
+      {
+        "persona": "don-norman-advisor",
+        "lens": "human-centred design"
+      },
+      {
+        "persona": "uncle-bob-architect",
+        "lens": "clean code"
+      },
+      {
+        "persona": "kent-beck-persona",
+        "lens": "TDD"
+      },
+      {
+        "persona": "test-strategy-advisor",
+        "lens": "test strategy"
+      },
+      {
+        "persona": "delivery-and-ops-advisor",
+        "lens": "delivery and ops"
+      },
+      {
+        "persona": "security-and-trust-advisor",
+        "lens": "security"
+      },
+      {
+        "persona": "eliyahu-goldratt-advisor",
+        "lens": "constraint and flow"
+      }
+    ],
+    "bindings": {
+      "ports": [
+        {
+          "port": "decision-sink",
+          "provider": "problem-brief"
+        },
+        {
+          "port": "ruling-lookup",
+          "provider": "problem-brief"
+        },
+        {
+          "port": "record-validator",
+          "provider": "chorus-core"
+        },
+        {
+          "port": "record-renderer",
+          "provider": "chorus-core"
+        },
+        {
+          "port": "arbiter",
+          "provider": "default"
+        },
+        {
+          "port": "fixed-viewpoint",
+          "provider": "default"
+        },
+        {
+          "port": "memory-recall",
+          "provider": "default"
+        }
+      ],
+      "recoveries": []
+    },
+    "review_mode": "pr-design",
+    "round_context": "Mode: design review of the PR's approach, not a line-by-line diff review. PR #48 (branch worktree-fix-46-47-visuals, draft, closes issues #46 and #47) adds screenshot support to problem briefs. Deltas: (1) schema/problem-brief.schema.json — new diagram kind \"image\" (PNG/JPEG/WebP, required alt + caption, optional fileDark) and an optional \"image\" object on evidence items; (2) bin/validate-brief.mjs — checkImage() refuses missing/non-raster/>1 MB pictures when given a baseDir, warns above 6 MB total, and warns when a live entry's prose or evidence mentions .html/.png/.svg/mockup/screenshot and carries no image or svg; validateBrief gains a third baseDir parameter; (3) bin/render-brief.mjs — shot() embeds pictures as base64 data URIs inside a <button class=\"shot\">, images grouped in a wrapping .shots row, a click toggles .zoom, dark/light swap by CSS; (4) bin/brief.mjs — --diagram list flag on raise and set (set appends to unwound.diagrams), validation now receives the brief's folder; (5) bin/extract-brief.mjs — writes embedded pictures back to files beside the recovered JSON, refusing paths that climb out of that folder; (6) SKILL.md, reference/entry-format.md, reference/diagrams.md, README.md — rule: show the reader what they must see; a path or markup line is not evidence for a visual question. Not done: no image resizing (zero-dependency scripts). Tests: 104 pass incl. 4 new. Zero-dependency Node 18+ project; no Python. No prior chorus record exists."
+  },
+  "events": [
+    {
+      "type": "failure",
+      "phase": "rsvp",
+      "persona": "uncle-bob-architect",
+      "failure": "over-length",
+      "reason": "(root): the reply is 82 words; the limit is 80"
+    },
+    {
+      "type": "reply",
+      "phase": "rsvp",
+      "persona": "don-norman-advisor",
+      "data": {
+        "kind": "rsvp",
+        "schema_version": "1",
+        "persona": "don-norman-advisor",
+        "lens": "human-centred design",
+        "round": "2026-11-10",
+        "decision": "JOIN",
+        "applies": [
+          "render-brief shot(): <button class=\"shot\"> click-to-zoom toggle and CSS dark/light swap",
+          "validate-brief checkImage() refusals and the keyword-based 'mentions screenshot but carries no image' warning",
+          "schema image kind: required alt + caption",
+          "extract-brief writing pictures back beside recovered JSON"
+        ],
+        "expected": {
+          "stakes": "🟡",
+          "hook": "zoom affordance is a bare button with no visible signifier; keyword warning may misfire and teach users to ignore it"
+        },
+        "reason": "The PR changes what the brief's reader sees and what feedback the author gets from validation, which is feedback and signifier territory."
+      }
+    },
+    {
+      "type": "failure",
+      "phase": "rsvp",
+      "persona": "mark-richards-architect",
+      "failure": "over-length",
+      "reason": "(root): the reply is 88 words; the limit is 80"
+    },
+    {
+      "type": "reply",
+      "phase": "rsvp",
+      "persona": "eliyahu-goldratt-advisor",
+      "data": {
+        "kind": "rsvp",
+        "schema_version": "1",
+        "persona": "eliyahu-goldratt-advisor",
+        "lens": "constraint and flow",
+        "round": "2026-11-10",
+        "decision": "JOIN",
+        "applies": [
+          "validate-brief.mjs: 1 MB refusal, 6 MB warning, prose-mention heuristic warning",
+          "extract-brief.mjs: picture write-back with path-climb refusal",
+          "one PR bundling two issues (#46, #47) across 11 files"
+        ],
+        "expected": {
+          "stakes": "🟡",
+          "hook": "Several guards (size caps, mention heuristic, extract write-back) may armor a mostly single-operator tool before any brief has carried a screenshot"
+        },
+        "reason": "The core verdict is whether the reader sees the picture; I would sort which of the added guards earn their place and which can be cut."
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "rsvp",
+      "persona": "eric-evans-advisor",
+      "data": {
+        "kind": "rsvp",
+        "schema_version": "1",
+        "persona": "eric-evans-advisor",
+        "lens": "DDD",
+        "round": "2026-11-10",
+        "decision": "JOIN",
+        "applies": [
+          "schema: screenshot added as diagram kind \"image\" and also as evidence.image",
+          "validator word-match heuristic (.png/mockup/screenshot) standing in for 'visual question'"
+        ],
+        "expected": {
+          "stakes": "🟡",
+          "hook": "One concept, a screenshot, gets two homes: it is filed under 'diagram' and attached to evidence, so the brief's language blurs what is evidence and what is illustration."
+        },
+        "reason": "The PR reshapes the brief's Published Language (the schema), and that language now names a screenshot two different ways."
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "rsvp",
+      "persona": "kent-beck-persona",
+      "data": {
+        "kind": "rsvp",
+        "schema_version": "1",
+        "persona": "kent-beck-persona",
+        "lens": "TDD and simple design",
+        "round": "2026-11-10",
+        "decision": "JOIN",
+        "applies": [
+          "4 new tests across 331 changed lines: which of checkImage, shot(), --diagram append, and extract write-back each one corners",
+          "render-to-extract image round-trip: is it tested with both real producers, or is one side a fixture",
+          "image raster/size rule split between schema and validator: can a test see the two disagree"
+        ],
+        "expected": {
+          "stakes": "🟡",
+          "hook": "4 tests for 5 behavioural deltas, one of them a path-escape refusal"
+        },
+        "reason": "New branches went into validator, renderer, CLI and extractor; whether the tests pin each one is my ground."
+      }
+    },
+    {
+      "type": "failure",
+      "phase": "rsvp",
+      "persona": "alan-cooper-advisor",
+      "failure": "over-length",
+      "reason": "(root): the reply is 81 words; the limit is 80"
+    },
+    {
+      "type": "failure",
+      "phase": "rsvp",
+      "persona": "delivery-and-ops-advisor",
+      "failure": "over-length",
+      "reason": "(root): the reply is 90 words; the limit is 80"
+    },
+    {
+      "type": "failure",
+      "phase": "rsvp",
+      "persona": "security-and-trust-advisor",
+      "failure": "over-length",
+      "reason": "(root): the reply is 81 words; the limit is 80"
+    },
+    {
+      "type": "failure",
+      "phase": "rsvp",
+      "persona": "test-strategy-advisor",
+      "failure": "over-length",
+      "reason": "(root): the reply is 94 words; the limit is 80"
+    },
+    {
+      "type": "reply",
+      "phase": "rsvp",
+      "persona": "uncle-bob-architect",
+      "data": {
+        "kind": "rsvp",
+        "schema_version": "1",
+        "persona": "uncle-bob-architect",
+        "lens": "clean code",
+        "round": "2026-11-10",
+        "decision": "JOIN",
+        "applies": [
+          "validateBrief gains baseDir: pure validation now does disk I/O",
+          "checkImage() mixes file refusal, size budget and prose heuristic",
+          "set --diagram silently appends to unwound.diagrams",
+          "extract-brief now writes files"
+        ],
+        "expected": {
+          "stakes": "🟡",
+          "hook": "validateBrief(brief, schema, baseDir) has two reasons to change"
+        },
+        "reason": "New functions and parameters cross the pure/effectful line my lens reviews."
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "rsvp",
+      "persona": "alan-cooper-advisor",
+      "data": {
+        "kind": "rsvp",
+        "schema_version": "1",
+        "persona": "alan-cooper-advisor",
+        "lens": "adversarial product",
+        "round": "2026-11-10",
+        "decision": "JOIN",
+        "applies": [
+          "checkImage(): 1 MB hard refusal, no resizing, excise lands on the brief author",
+          "keyword warning (.png/mockup/screenshot) deciding what the operator must see",
+          "shot(): click-to-zoom and dark/light swap as the operator's viewing experience"
+        ],
+        "expected": {
+          "stakes": "🟡",
+          "hook": "1 MB refusal without resize path; keyword warnings may cry wolf"
+        },
+        "reason": "The PR's goal is what the brief's operator must see; that is my seat."
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "rsvp",
+      "persona": "mark-richards-architect",
+      "data": {
+        "kind": "rsvp",
+        "schema_version": "1",
+        "persona": "mark-richards-architect",
+        "lens": "architecture",
+        "round": "2026-11-10",
+        "decision": "JOIN",
+        "applies": [
+          "schema: new image kind and evidence image (JSON contract)",
+          "validateBrief third baseDir parameter",
+          "picture rules across validate, render, extract: duplicate authority?"
+        ],
+        "expected": {
+          "stakes": "🟡",
+          "hook": "Raster, size and path rules live in three scripts; who owns them?"
+        },
+        "reason": "Schema contract change plus one picture rule spread over three scripts is coupling ground."
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "rsvp",
+      "persona": "test-strategy-advisor",
+      "data": {
+        "kind": "rsvp",
+        "schema_version": "1",
+        "persona": "test-strategy-advisor",
+        "lens": "test strategy",
+        "round": "2026-11-10",
+        "decision": "JOIN",
+        "applies": [
+          "validateBrief baseDir image checks and warnings",
+          "extract-brief path-escape refusal",
+          "render/extract data-URI round trip"
+        ],
+        "expected": {
+          "stakes": "🟡",
+          "hook": "4 new tests for five changed scripts; which risks have a fast check?"
+        },
+        "reason": "New file validation, a path guard and an embed round trip each need a check placed."
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "rsvp",
+      "persona": "security-and-trust-advisor",
+      "data": {
+        "kind": "rsvp",
+        "schema_version": "1",
+        "persona": "security-and-trust-advisor",
+        "lens": "security",
+        "round": "2026-11-10",
+        "decision": "JOIN",
+        "applies": [
+          "extract-brief.mjs writes page pictures to disk; path-climb refusal",
+          "render-brief.mjs shot() puts bytes, alt, caption into HTML",
+          "checkImage()/render embed any baseDir-resolved path in a shared page"
+        ],
+        "expected": {
+          "stakes": "🟡",
+          "hook": "untrusted page content written to disk; local files embedded in published pages"
+        },
+        "reason": "Data crosses two boundaries: page to disk, and disk to a shared page."
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "rsvp",
+      "persona": "delivery-and-ops-advisor",
+      "data": {
+        "kind": "rsvp",
+        "schema_version": "1",
+        "persona": "delivery-and-ops-advisor",
+        "lens": "delivery and ops",
+        "round": "2026-11-10",
+        "decision": "JOIN",
+        "applies": [
+          "shot() base64 embeds inflate the page ~33% past checkImage() caps",
+          "validateBrief baseDir: does every caller pass it?",
+          "extract-brief picture write-back round trip"
+        ],
+        "expected": {
+          "stakes": "🟢",
+          "hook": "6 MB raw warn means ~8 MB page; is it a real gate?"
+        },
+        "reason": "Page size and the validator gate change what publishing costs to run."
+      }
+    },
+    {
+      "type": "ack",
+      "phase": "explore",
+      "persona": "don-norman-advisor"
+    },
+    {
+      "type": "ack",
+      "phase": "explore",
+      "persona": "uncle-bob-architect"
+    },
+    {
+      "type": "ack",
+      "phase": "explore",
+      "persona": "alan-cooper-advisor"
+    },
+    {
+      "type": "ack",
+      "phase": "explore",
+      "persona": "kent-beck-persona"
+    },
+    {
+      "type": "ack",
+      "phase": "explore",
+      "persona": "mark-richards-architect"
+    },
+    {
+      "type": "answer",
+      "phase": "explore",
+      "topic": "interview",
+      "data": {
+        "sessions": 1,
+        "questions": [
+          {
+            "persona": "mark-richards-architect",
+            "scope": "project-wide",
+            "gate": true,
+            "question": "Which quality matters most for problem-brief: (a) the operator can answer an entry from the published page alone, often on a phone; (b) the brief's JSON can be rebuilt from its published page; (c) zero dependencies and portable scripts; (d) the JSON stays readable and diffable?",
+            "answer": "Readable page first: (a) page answerable on a phone > (b) recovery > (c) zero dependencies > (d) diffable JSON."
+          },
+          {
+            "persona": "mark-richards-architect",
+            "scope": "project-wide",
+            "gate": true,
+            "question": "Who should the reviewers judge problem-brief as being built for: one operator, or public users through install.sh?",
+            "answer": "Public users: a tool shipped publicly through install.sh, used by people other than the author."
+          },
+          {
+            "persona": "alan-cooper-advisor",
+            "scope": "lens-specific",
+            "gate": false,
+            "question": "On a phone, when you tap a screenshot in a brief, what should happen? The PR shows it at true pixel size with sideways scrolling.",
+            "answer": "Fit, pinch to zoom: keep it fitted to the screen width; open it fitted in a full-screen view where you pinch to zoom."
+          },
+          {
+            "persona": "don-norman-advisor",
+            "scope": "project-wide",
+            "gate": false,
+            "question": "Should an evidence screenshot have its own required caption, as issue #47 asked? The PR uses the evidence note as the caption.",
+            "answer": "Note is caption: keep the PR's choice; the evidence note already says what the picture shows."
+          },
+          {
+            "persona": "alan-cooper-advisor",
+            "scope": "project-wide",
+            "gate": false,
+            "deferred": true,
+            "question": "Does a typical session have any way to resize an image before the 1 MB refusal?"
+          },
+          {
+            "persona": "alan-cooper-advisor",
+            "scope": "lens-specific",
+            "gate": false,
+            "deferred": true,
+            "question": "How often do live entries mention 'screenshot' or '.png' with no visual question behind them?"
+          },
+          {
+            "persona": "don-norman-advisor",
+            "scope": "lens-specific",
+            "gate": false,
+            "deferred": true,
+            "question": "Does the artifact frame let the click toggle and the page's horizontal scroll work on a phone?"
+          },
+          {
+            "persona": "uncle-bob-architect",
+            "scope": "lens-specific",
+            "gate": false,
+            "deferred": true,
+            "question": "Is refusing a bad screenshot at validation while degrading a bad svg/archify drawing to a note at render time a deliberate split?"
+          },
+          {
+            "persona": "uncle-bob-architect",
+            "scope": "lens-specific",
+            "gate": false,
+            "deferred": true,
+            "question": "Is the data-brief-file markup that extract-brief parses a stable contract between render and extract, or an internal detail?"
+          },
+          {
+            "persona": "kent-beck-persona",
+            "scope": "lens-specific",
+            "gate": false,
+            "deferred": true,
+            "question": "Does the project expect test-first, or only that a test lands with the change?"
+          },
+          {
+            "persona": "kent-beck-persona",
+            "scope": "project-wide",
+            "gate": false,
+            "deferred": true,
+            "question": "Is git show HEAD the intended scope, given local main is behind the PR's parent?"
+          },
+          {
+            "persona": "mark-richards-architect",
+            "scope": "lens-specific",
+            "gate": false,
+            "deferred": true,
+            "question": "Issue #47 asked for a warning when the rendered page passes 8 MB; the PR warns when raw image bytes pass 6 MB. Was that change deliberate?"
+          }
+        ],
+        "degradation": "Eight non-gate questions were deferred. Findings that depend on them state their assumption: no resizing tool exists in a session; the keyword warning's false-positive rate is unknown; phone behaviour in the artifact frame is read from CSS, not run; the refuse-versus-degrade split and the render-extract markup coupling are judged on the code alone; tests are expected to land with the change; scope is the PR's single commit; the 6 MB raw threshold is judged as written."
+      }
+    },
+    {
+      "type": "failure",
+      "phase": "author",
+      "persona": "uncle-bob-architect",
+      "failure": "malformed",
+      "reason": "(root): the report is 728 words of prose; the limit is 700"
+    },
+    {
+      "type": "failure",
+      "phase": "author",
+      "persona": "kent-beck-persona",
+      "failure": "malformed",
+      "reason": "(root): the report is 793 words of prose; the limit is 700"
+    },
+    {
+      "type": "reply",
+      "phase": "author",
+      "persona": "alan-cooper-advisor",
+      "data": {
+        "kind": "finding-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "alan-cooper-advisor",
+        "lens": "adversarial product",
+        "tool_uses": 12,
+        "findings": [
+          {
+            "id": "F1",
+            "lens": "adversarial product",
+            "locator": "bin/validate-brief.mjs:276-278",
+            "claim": "A picture over 1 MB is refused, and because brief.mjs refuses the whole command on any fresh error, the entry is never raised: the operator's question disappears along with the picture. The hint tells the author to resize to 1600px, but the PR ships no resizer and the docs name none (reference/diagrams.md:49 'The renderer does not resize'; :50 names only Chrome for capture). A full-page retina PNG passes 1 MB easily. Bedrock: zero dependencies (ranked c) is beating answering from the page (ranked a). Recovery needs no new dependency: document a capture recipe that fits (set Chrome width, save as JPEG or WebP), or degrade (raise the entry, warn, show a 'picture too large' note). Which one is the operator's call; the mechanism goes to Richards and Norman. Assumption: no resizing tool exists in a session (ruled deferred).",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:276-278",
+                "note": "hard refusal, hint asks for a resize"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/brief.mjs:312-313",
+                "note": "any fresh error refuses the whole raise/set"
+              },
+              {
+                "kind": "file_line",
+                "ref": "reference/diagrams.md:49-50",
+                "note": "renderer does not resize; capture via Chrome only"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "A screenshot over 1 MB doesn't only lose the picture: the operator's question never gets raised, and the fix the hint asks for needs a tool nobody shipped.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F2",
+            "lens": "adversarial product",
+            "locator": "bin/render-brief.mjs:772-773",
+            "claim": "Tapping a screenshot sets max-width:none inside a horizontally scrolling button. On a phone, 'full size' then means a 1600px picture panned sideways inside a 360px frame, and another tap closes it again. This is the top-ranked path (operator on a phone), and the operator has already ruled the opposite behaviour: fitted, full-screen, pinch-zoom. Because it sits on quality (a), I would land the ruled behaviour before merge rather than in a follow-up. Mechanism goes to Norman; behaviour in the artifact frame is unverified (deferred).",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:768-773",
+                "note": "zoom = max-width:none + overflow-x:auto"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:1131",
+                "note": "tap toggles .zoom"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "On a phone, tapping a screenshot to see it better makes it worse: a wide picture you scroll sideways through a narrow slot, the opposite of what the operator ruled.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F3",
+            "lens": "adversarial product",
+            "locator": "bin/validate-brief.mjs:349-353",
+            "claim": "Any svg drawing counts as 'shown', so an entry with an unrelated architecture svg plus a path to an HTML mockup gets no warning. That is the #46 case with one extra drawing. The other way round, a public user's ordinary web-code citation ('src/index.html:42' for a non-visual bug) fires the warning. The test covers only the plain #46 case and a .mjs citation (test/brief.test.mjs:1198-1202), so neither edge is pinned. A warning that misses its own case and cries wolf on web projects teaches authors to ignore it. Count an svg as shown only when it is the visual in question, or drop svg from 'shown' and let a noDiagram-style line silence it.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:349",
+                "note": "svg silences the warning"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:353",
+                "note": "any .html path matches"
+              },
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1198-1202",
+                "note": "edges untested"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "The warning stays quiet on the #46 case as soon as the entry also carries any svg, and it fires on every honest code citation of an .html file.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F4",
+            "lens": "adversarial product",
+            "locator": "bin/extract-brief.mjs:55",
+            "claim": "Extract writes each embedded picture over whatever file has that name beside the output JSON, with no check and no notice. Someone rebuilding a brief from a page into their own folder (quality b, public users) can silently lose their own shots/q2-wide.png to the page's copy. The escape check guards the folder but not the files inside it. User cost: lost local pictures with no warning. Mechanism (skip, refuse or --force) goes to Richards and Uncle Bob.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:50-55",
+                "note": "path-escape refused; existing file overwritten unconditionally"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "Recovering a brief from a page can quietly overwrite the screenshots already sitting in your folder, and nothing tells you it happened.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F5",
+            "lens": "adversarial product",
+            "locator": "reference/diagrams.md:49",
+            "claim": "F-UV (user-value strip). Named outcome: the operator answers a visual entry from the published page alone. v1 after deferrals: images embedded (Full), alt and caption (Full), several per entry (Full), theme pair (Full), phone zoom (Partial, F2), page weight controlled by resizing (None: refuse only, F1). Estimated value ratio ~80%, above the 20% threshold: not delivery theater. Beneficiary of the resize deferral: the zero-dependency rule. Cost: author excise per capture, plus up to ~8 MB of page weight on the operator's mobile data before any warning (validate-brief.mjs:256).",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "reference/diagrams.md:49",
+                "note": "resizing deferred"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:256",
+                "note": "6 MB raw warn threshold"
+              }
+            ],
+            "proposed_severity": "🟢",
+            "pull_quote": "Most of the promise ships; the deferred resizer is paid for by the author on every capture and by the operator's phone data, so price it rather than hide it.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "failure",
+      "phase": "author",
+      "persona": "don-norman-advisor",
+      "failure": "malformed",
+      "reason": "findings[1] → evidence[2] → ref: \"test/brief.test.mjs\" is not the right shape; (root): the report is 822 words of prose; the limit is 700"
+    },
+    {
+      "type": "reply",
+      "phase": "author",
+      "persona": "mark-richards-architect",
+      "data": {
+        "kind": "finding-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "mark-richards-architect",
+        "lens": "architecture",
+        "tool_uses": 11,
+        "findings": [
+          {
+            "id": "F1",
+            "lens": "architecture",
+            "locator": "bin/extract-brief.mjs:45-55",
+            "claim": "Extract writes whatever path a page names, with whatever bytes it carries, anywhere under the output folder. The only check is the folder escape. The raster-type rule the validator owns (IMAGE_TYPES) is not applied, so a page someone else published can plant .claude/settings.json (hooks), .git/hooks/* or a script beside the recovered JSON. I reproduced this: a page with data-brief-file=\".claude/settings.json\" wrote that file. The tool ships publicly, and its own comment says 'the page may not be ours'. That makes this a trust boundary, and it needs the type rule. Duplicate-authority ruling: CONSOLIDATE. extract imports IMAGE_TYPES from validate-brief.mjs, which is safe to import because its CLI is guarded by invokedDirectly. Then it refuses any name whose extension is not a picture, any dot-segment, and any overwrite of an existing file. Fitness function: a test that extracts a hostile page and asserts nothing outside a picture extension is written.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:45-55",
+                "note": "Regex accepts any data-brief-file. Only the relative('..') and isAbsolute checks run before writeFileSync."
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:254",
+                "note": "IMAGE_TYPES is the one picture-type authority. The renderer imports it and extract does not."
+              },
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1170-1183",
+                "note": "Only the happy round trip is tested. No hostile-page or escape-refusal test exists."
+              }
+            ],
+            "proposed_severity": "🔴",
+            "pull_quote": "Extract trusts a stranger's page to name files, and the picture-type rule never reaches it; I got it to write .claude/settings.json.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F2",
+            "lens": "architecture",
+            "locator": "bin/render-brief.mjs:21-24",
+            "claim": "One page-weight budget has two authors that cannot see each other. The validator caps each picture at 1 MB and warns at 6 MB of picture bytes. The renderer caps each drawing at 4 MB and warns at a 6 MB page. The 16 MB ceiling is a string literal in both. The validator's 6 MB counts pictures and ignores inlined SVG and archify, while the renderer's counts the whole page after the fact. So a brief can pass the validator's budget and still break the real constraint, or trip two different warnings for one cause. Ruling: CONSOLIDATE into validate-brief.mjs. The renderer already imports from it, they ship as one unit and one runtime, and the new coupling point costs nothing. Fitness function: a test asserting the renderer holds no byte-limit constants of its own.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:21-24",
+                "note": "INLINE_MAX 4 MB and PAGE_WARN 6 MB, the renderer's copy."
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:255-256",
+                "note": "IMAGE_MAX 1 MB and IMAGES_WARN 6 MB, the validator's copy."
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:382-384",
+                "note": "The 16 MB literal again, counting picture bytes only."
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "The page has one size limit and two scripts guessing at it from different numbers; put the budget in the validator the renderer already imports.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F3",
+            "lens": "architecture",
+            "locator": "bin/validate-brief.mjs:276",
+            "claim": "The 1 MB per-picture refusal stands in for the real constraint, the 16 MB page. Because brief.mjs refuses the whole write on a fresh error, one 1.2 MB retina phone screenshot blocks the raise. The author's recovery is 'resize or save as JPEG', which needs a tool the session does not have (deferred assumption). The top-ranked quality, answering from the page on a phone, is then lost to a limit the platform does not impose. Better cost profile: warn per picture, refuse only on the total that actually threatens the ceiling.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:276-279",
+                "note": "Per-picture error, not a warning."
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/brief.mjs:312-314",
+                "note": "Any fresh error refuses the command and writes nothing."
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "A 1 MB hard stop protects against a limit that lives at 16 MB, and the author has no tool to get under it.",
+            "confidence_on_hand": "low",
+            "need_info": true,
+            "need_info_reason": "Depends on the deferred assumption that no resizing tool is available in a session, and on how big typical phone screenshots really are."
+          },
+          {
+            "id": "F4",
+            "lens": "architecture",
+            "locator": "bin/render-brief.mjs:152-160",
+            "claim": "The render-to-extract seam is a contract written in HTML: attribute order, a data:image/[a-z]+ pattern, and a hand-written inverse of esc(). It has two authors, and nothing calls it a contract. Merging them would mean extract importing render-brief, which runs its CLI at top level, so I rule SANCTIONED DIVERGENCE. Owners: render shot() for the writer, extract for the reader. Reason: extract must stay runnable alone. The round-trip test is the parity detector, but it uses only plain filenames. Extend it with a name that needs escaping, such as an ampersand or quote, so drift fails the build.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:33-35",
+                "note": "esc() is the writer's encoding."
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:45-47",
+                "note": "The reader decodes by hand, in reverse order, and depends on attribute order."
+              },
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1170-1183",
+                "note": "The existing parity test uses only plain names."
+              }
+            ],
+            "proposed_severity": "🟢",
+            "pull_quote": "The img markup is a contract with two authors; keep both, but make the round-trip test use a filename that needs escaping so drift goes red.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "author",
+      "persona": "uncle-bob-architect",
+      "data": {
+        "kind": "finding-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "uncle-bob-architect",
+        "lens": "clean code",
+        "tool_uses": 6,
+        "findings": [
+          {
+            "id": "F1",
+            "lens": "clean code",
+            "locator": "bin/render-brief.mjs:152",
+            "claim": "Picture policy is split across files. The validator owns the type table and the 1 MB cap, and checks the disk only when given a baseDir (validate-brief.mjs:254-285). shot() reads files with no guard and relies on the validator having run. In the same file, the svg/archify path catches a missing or oversized file and degrades to a missingDiagram note under a separate 4 MB cap. So a missing screenshot stops the render while a missing drawing becomes a note. A caller of validateBrief(brief) without baseDir, such as the test helper messages(), passes the check, and shot() then throws ENOENT. Put reading, typing, the size limit and encoding in one place, and choose one failure policy for every drawing kind.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:152-160",
+                "note": "unguarded readFileSync"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:208-219",
+                "note": "svg/archify catch, then missingDiagram, 4 MB cap"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:259-285",
+                "note": "disk check skipped without baseDir"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "A missing screenshot kills the render, but a missing drawing in the same file degrades to an honest note. One rule, two owners, two outcomes: give pictures one home and one failure policy.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F2",
+            "lens": "clean code",
+            "locator": "bin/extract-brief.mjs:50",
+            "claim": "The path-escape refusal guards the trust boundary ('the page may not be ours'), yet no test fails if it is removed. The round-trip test uses only benign paths. Add tests with '../x.png' and with an absolute path that assert nothing is written outside the folder.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:48-56",
+                "note": "the guard"
+              },
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1170-1183",
+                "note": "benign paths only"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "The one line that stops a stranger's page from writing outside the folder has no test that fails without it.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F3",
+            "lens": "clean code",
+            "locator": "bin/extract-brief.mjs:45",
+            "claim": "extract-brief re-parses shot()'s output with a regex that depends on attribute order, plus a hand-written HTML unescape. If shot() reorders its attributes, every picture is silently dropped on extract. Keep the emitter and the parser together, or share the attribute name as a constant.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:45-46",
+                "note": "order-bound regex"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:156-157",
+                "note": "emitter"
+              }
+            ],
+            "proposed_severity": "🟢",
+            "pull_quote": "Render writes a format and extract re-parses it with a regex in another file. That is a contract with no name, and quality (b) rests on it.",
+            "confidence_on_hand": "low",
+            "need_info": true,
+            "need_info_reason": "Whether data-brief-file is a stable contract was deferred; I judged it from the code."
+          },
+          {
+            "id": "F4",
+            "lens": "clean code",
+            "locator": "bin/validate-brief.mjs:353",
+            "claim": "The visual-pointer heuristic adds an authoring-advice job to semanticErrors. Its regex flags any .png, .svg or .html token, so an ordinary citation such as 'src/icons/logo.svg:12' on a live entry warns, and the only negative test uses a .mjs ref. Extract it as a named function with its own false-positive test.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:348-357",
+                "note": "heuristic inline"
+              },
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1197-1203",
+                "note": "non-visual negative only"
+              }
+            ],
+            "proposed_severity": "🟢",
+            "pull_quote": "A heuristic with an unknown false-positive rate is sitting inside the structural validator. Name it, test the noisy case, and keep it apart.",
+            "confidence_on_hand": "low",
+            "need_info": true,
+            "need_info_reason": "The false-positive rate on real briefs is deferred."
+          },
+          {
+            "id": "F5",
+            "lens": "clean code",
+            "locator": "bin/brief.mjs:150",
+            "claim": "'--diagram appends to unwound.diagrams' is written twice: as an immutable spread in raise and as a mutating push in set. Use one addDiagrams helper.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/brief.mjs:150",
+                "note": "raise"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/brief.mjs:254",
+                "note": "set"
+              }
+            ],
+            "proposed_severity": "🟢",
+            "pull_quote": "The append rule for --diagram lives in two places in two shapes. One helper, one rule.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F6",
+            "lens": "clean code",
+            "locator": "bin/validate-brief.mjs:909",
+            "claim": "Disk I/O hides behind an optional third positional argument, and every caller passes 'undefined' for schema to reach it. Leave the argument out and the check silently weakens, which is the gap behind F1. Make the effect explicit: an options object ({ baseDir }) or a separate checkPictures(brief, baseDir).",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:908-913",
+                "note": "signature"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/brief.mjs:305-310",
+                "note": "undefined placeholders"
+              }
+            ],
+            "proposed_severity": "🟢",
+            "pull_quote": "A validator that reads the disk only when you remember a third positional argument hides its effect and fails open when you forget it.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "author",
+      "persona": "kent-beck-persona",
+      "data": {
+        "kind": "finding-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "kent-beck-persona",
+        "lens": "TDD and simple design",
+        "tool_uses": 15,
+        "findings": [
+          {
+            "id": "F1",
+            "lens": "TDD and simple design",
+            "locator": "bin/extract-brief.mjs:50",
+            "claim": "The PR's only trust-boundary refusal has no test. extract-brief skips a picture whose path climbs out of the output folder, and nothing fails if that check is deleted. The page may be someone else's (comment at :40-42), and ruling (b) rests on extract. Why untested? The round trip uses only safe paths, and those come from our own renderer. The risky input is a hand-made page, and no test builds one. Cornering test: HTML with data-brief-file=\"../evil.png\" and an absolute path; assert nothing is written outside the folder and a warning appears. Whether the check is strong enough (symlinks, Windows paths) is another lens's call.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:40-56",
+                "note": "escape check and write-back"
+              },
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1168-1183",
+                "note": "only extract test; safe paths"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "The one refusal between a stranger's page and your disk can be deleted and every test stays green.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F2",
+            "lens": "TDD and simple design",
+            "locator": "test/brief.test.mjs:1155-1182",
+            "claim": "The round trip correctly uses two real producers, renderer and extractor, but its fixture is blind in two places. Light and dark are the same bytes, so a swap passes. The paths need no escaping, so drift between esc() and the extractor's decoder is invisible. Fix: different bytes per file, a path containing & or ', and assert both files come back.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1155-1161",
+                "note": "one PNG for both files"
+              },
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1182",
+                "note": "dark compared to same constant"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "The round trip uses one picture for both light and dark, so it would pass with them swapped.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F3",
+            "lens": "TDD and simple design",
+            "locator": "bin/extract-brief.mjs:45-46",
+            "claim": "The picture tag is one rule with two authors. shot() and esc() write it; a regex tied to the exact attribute order and a hand-written decoder read it back. They agree today, and only F2's sharper fixture would catch a split. The rule is new and has never moved, so the bet is small. Tidy first, structure-only: export the attribute name and an unescape next to esc(), or have extract read file names from the JSON. Where that seam lives is for architecture.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:33-35",
+                "note": "esc()"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:152-161",
+                "note": "shot() writes img"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:45-46",
+                "note": "regex and decoder"
+              }
+            ],
+            "proposed_severity": "🟢",
+            "pull_quote": "The renderer writes the picture tag and the extractor parses it back with its own regex and decoder: one rule, two copies.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F4",
+            "lens": "TDD and simple design",
+            "locator": "bin/brief.mjs:150",
+            "claim": "raise --diagram has its own merge with diagrams passed in --unwound, and no test; only set --diagram is tested. One CLI test passing both, asserting both survive in order, corners it.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/brief.mjs:149-150",
+                "note": "raise merge"
+              },
+              {
+                "kind": "file_line",
+                "ref": "test/brief-cli.test.mjs:169-179",
+                "note": "set only"
+              }
+            ],
+            "proposed_severity": "🟢",
+            "pull_quote": "set --diagram has a test; raise --diagram has its own merge and none.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F5",
+            "lens": "TDD and simple design",
+            "locator": "bin/validate-brief.mjs:382",
+            "claim": "The 6 MB warning is the only signal before the 16 MB publish limit, and no test reaches it. Seven sparse 1 MB files would. Threshold judged as written, per the deferred ruling.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:256",
+                "note": "threshold"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:382-385",
+                "note": "warning"
+              }
+            ],
+            "proposed_severity": "🟢",
+            "pull_quote": "The warning that comes before a too-heavy page has never been made to fire.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F6",
+            "lens": "TDD and simple design",
+            "locator": "bin/validate-brief.mjs:269-271",
+            "claim": "The validator stat()s a picture and the renderer reads it, so a directory named x.png passes validation and crashes the render. Also, without a baseDir the disk check is skipped silently and missing pictures come back ok. Every bin caller passes a baseDir, but a library caller wouldn't know. Fewest elements: drop the no-baseDir mode, or report that the files were not checked.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:269-276",
+                "note": "skip; stat only"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:154",
+                "note": "readFileSync"
+              }
+            ],
+            "proposed_severity": "🟢",
+            "pull_quote": "Without a folder the validator says yes to pictures that are not there, and says nothing about it.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F7",
+            "lens": "TDD and simple design",
+            "locator": "test/brief.test.mjs:1196-1202",
+            "claim": "The pointer warning's only negative case is the a.py:1 fixture. A brief citing templates/base.html:12 for a logic bug matches the regex at :353, and no test pins that boundary. The user cost is the product lenses' call. Mine: add one test so whatever gets ruled becomes the spec.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:348-357",
+                "note": "pointer regex"
+              },
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:20",
+                "note": "only negative case"
+              }
+            ],
+            "proposed_severity": "🟢",
+            "pull_quote": "The warning is tested on a mockup and on a .py file; where its boundary sits for a .html template is unwritten.",
+            "confidence_on_hand": "low",
+            "need_info": true,
+            "need_info_reason": "Whether a .html citation on a non-visual entry should warn is the deferred false-positive ruling."
+          }
+        ]
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "author",
+      "persona": "don-norman-advisor",
+      "data": {
+        "kind": "finding-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "don-norman-advisor",
+        "lens": "human-centred design",
+        "tool_uses": 7,
+        "findings": [
+          {
+            "id": "F1",
+            "lens": "human-centred design",
+            "locator": "bin/render-brief.mjs:159",
+            "claim": "On a phone nothing tells the reader a screenshot can be tapped. The only cues are cursor:zoom-in and a title tooltip, and touch shows neither. A tap widens the picture to true size with sideways scroll, while reference/diagrams.md:43 promises full size, so the documentation and the runtime disagree. The ruling already plans a fitted full-screen view. That fix should also add a visible cue (an icon or 'tap to enlarge') and a visible close control. Without them the reader cannot find the action or tell what state they are in.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:159",
+                "note": "tooltip is the only label"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:769-773",
+                "note": "cursors are the only state cue"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:1131",
+                "note": "toggle shows no state"
+              },
+              {
+                "kind": "file_line",
+                "ref": "reference/diagrams.md:43-44",
+                "note": "promises full size on tap"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "On a phone the screenshot looks like a plain picture: its only zoom cues are a hover cursor and a tooltip, so the reader can neither find the action nor see how to undo it.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F2",
+            "lens": "human-centred design",
+            "locator": "bin/validate-brief.mjs:349-356",
+            "claim": "The warning catches #46, but its idea of 'shown' is not the reader's. Any svg drawing silences it (line 349), so an entry whose evidence is a mockup path still passes if it carries an architecture svg. The pattern also fires on any .png, .svg or .html path and on the bare word screenshot or mockup (line 353), so a public brief about frontend assets gets flagged with no visual question in it. A warning that is often wrong teaches the agent author either to ignore it or to paste an irrelevant screenshot to quiet it. It also names .gif, which IMAGE_TYPES then refuses. Assumption: the false-positive rate is unknown.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:349",
+                "note": "any svg counts as shown"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:353",
+                "note": "any asset path or keyword matches"
+              },
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1197-1203",
+                "note": "no frontend-asset negative case, no svg-silences case"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "The warning treats any svg as shown and any asset path as visual: it misses the reader who still cannot see, and nags authors who were not asking a visual question.",
+            "confidence_on_hand": "low",
+            "need_info": true,
+            "need_info_reason": "False-positive rate is deferred; severity depends on it."
+          },
+          {
+            "id": "F3",
+            "lens": "human-centred design",
+            "locator": "bin/validate-brief.mjs:276-279",
+            "claim": "The over-1 MB refusal is a hard stop, and its hint (resize to 1600 px, re-encode as JPEG or WebP) needs an image tool that a session lacks. The recovery the author can reach goes unsaid: recapture at a narrower window or a cropped region with the browser tools (reference/diagrams.md:50-51). A remedy the author cannot carry out reads as a dead end. Assumption: no resize tool in session.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:276-279",
+                "note": "hint: resize or re-encode"
+              },
+              {
+                "kind": "file_line",
+                "ref": "reference/diagrams.md:49-51",
+                "note": "no resizing; browser can recapture"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "The size refusal tells the author to resize or re-encode, which a session cannot do, and leaves out what it can do: retake the shot narrower or cropped.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          },
+          {
+            "id": "F4",
+            "lens": "human-centred design",
+            "locator": "bin/extract-brief.mjs:51",
+            "claim": "Candidate, for an architecture spot-check. When extract skips a picture whose path climbs out of the folder, it warns but still reports the brief recovered. The next render refuses the whole page (render-brief.mjs:1155-1158), whereas an unreadable archify drawing degrades to a visible note (:212-213). Neither message names the other, so the person meets the failure two commands after its cause. Either the image should degrade the way archify does, or extract should say plainly that the brief will not render until the picture is re-attached.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:51",
+                "note": "skip warns; recovery reports success"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:1155-1158",
+                "note": "exits 1 and writes no page"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:212-213",
+                "note": "archify degrades to a note"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "Extract skips a picture and reports success; the next render refuses the whole page. The cause and the failure sit two commands apart, and neither message names the other.",
+            "confidence_on_hand": "low",
+            "need_info": true,
+            "need_info_reason": "Refuse-vs-degrade is deferred and is the operator's ruling."
+          }
+        ]
+      }
+    },
+    {
+      "type": "failure",
+      "phase": "vote",
+      "persona": "uncle-bob-architect",
+      "failure": "malformed",
+      "reason": "votes[3] → pull_quote: is too short — 0 characters, at least 5; votes[3] → pull_quote: \"\" is not the right shape; votes[6] → pull_quote: is too short — 0 characters, at least 5"
+    },
+    {
+      "type": "failure",
+      "phase": "vote",
+      "persona": "kent-beck-persona",
+      "failure": "malformed",
+      "reason": "votes[2] → pull_quote: is too short — 0 characters, at least 5; votes[2] → pull_quote: \"\" is not the right shape; votes[4] → pull_quote: is too short — 0 characters, at least 5"
+    },
+    {
+      "type": "reply",
+      "phase": "vote",
+      "persona": "alan-cooper-advisor",
+      "data": {
+        "kind": "vote-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "alan-cooper-advisor",
+        "lens": "adversarial product",
+        "tool_uses": 8,
+        "own_findings": [
+          "F5",
+          "F6",
+          "F7",
+          "F8",
+          "F9"
+        ],
+        "votes": [
+          {
+            "finding": "F1",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Subsumes my F8: the same unchecked write that overwrites a user's own screenshot also plants hooks. The recovery doc tells public users to run it on a page they saved (reference/memory-and-hooks.md:57-58).",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:50-55",
+                "note": "I read it: only the folder-escape check"
+              }
+            ],
+            "pull_quote": "The recovery command users are told to run trusts the page with their filesystem; overwriting a screenshot was the mild version of this."
+          },
+          {
+            "finding": "F2",
+            "confidence_on_hand": "low",
+            "vote": "NEED_INFO",
+            "reason": "Whether the two numbers actually let a page past 16 MB is a mechanism question I have not measured.",
+            "evidence": []
+          },
+          {
+            "finding": "F3",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same refusal as my F5, seen from the limit's side.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:276-278",
+                "note": "confirmed"
+              }
+            ],
+            "pull_quote": "Richards and I land in the same place: a 1 MB stop guarding a 16 MB limit, with no way for the author to get under it."
+          },
+          {
+            "finding": "F10",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Hover cursor and title do nothing on a phone; together with my F6, the zoom is both hidden and wrong.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:159",
+                "note": "title/cursor only"
+              }
+            ],
+            "pull_quote": "On a phone the operator can't find the zoom, and when they stumble on it, it scrolls sideways."
+          },
+          {
+            "finding": "F11",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Converges with my F7.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:349-353",
+                "note": "confirmed"
+              }
+            ],
+            "pull_quote": "Norman and I read the same warning: blind to the #46 case once an svg is present, noisy on ordinary web briefs."
+          },
+          {
+            "finding": "F12",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The fix it names (tell the author to retake narrower or cropped) is the recipe I asked for in F5.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:278",
+                "note": "hint names steps a session cannot take"
+              }
+            ],
+            "pull_quote": "The hint should tell the author what they can actually do: retake the shot narrower or cropped."
+          },
+          {
+            "finding": "F13",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Recovery reports success, then the next render refuses. A person following the recovery doc hits a dead end two commands later.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:51",
+                "note": "skip is a console.warn, exit 0"
+              }
+            ]
+          },
+          {
+            "finding": "F14",
+            "confidence_on_hand": "high",
+            "vote": "PRIORITIZE",
+            "reason": "Under the binding ranking (a), the cost is larger than an inconsistency. One missing screenshot holds back every other entry's update, and brief.mjs keeps accepting writes meanwhile. See R2-1.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:1155-1158",
+                "note": "any error, exit 1, no page"
+              }
+            ],
+            "pull_quote": "One lost screenshot doesn't just break one figure: it holds back the whole page, and every ruling the operator is waiting to see."
+          },
+          {
+            "finding": "F15",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Given F1, the guard that protects public users needs a test that goes red without it.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:50",
+                "note": "untested branch"
+              }
+            ]
+          },
+          {
+            "finding": "F17",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The noisy case is my F7; untested, so the noise will not show until public users complain.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1198-1202",
+                "note": "no .html code-citation case"
+              }
+            ]
+          },
+          {
+            "finding": "F19",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "A validator that fails open hands the surprise to whoever renders later.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:269",
+                "note": "skips the disk check without baseDir"
+              }
+            ]
+          }
+        ],
+        "derived": [
+          {
+            "id": "R2-1",
+            "lens": "adversarial product",
+            "locator": "bin/brief.mjs:322-323",
+            "claim": "Once a picture file goes missing (worktree removed, folder not committed, JSON moved), brief.mjs treats it as an earlier problem and keeps writing: it prints one line and exits 0. render-brief refuses the whole page. So the session goes on recording rulings and new entries that the operator, on the published page, never receives. The only signal is a line the author may skim past. User cost: the operator answers stale entries or waits for updates that never publish. Remedy (operator's call): render a visible 'picture missing' placeholder, the way absent drawings already degrade, or make brief.mjs refuse loudly while a picture is missing.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/brief.mjs:322-323",
+                "note": "earlier errors: one line, write proceeds"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:1155-1158",
+                "note": "render refuses on any error"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "After a screenshot goes missing, the tool keeps taking rulings and silently stops publishing them; the operator is left reading yesterday's page.",
+            "confidence_on_hand": "high",
+            "need_info": false,
+            "derived_from": "F14",
+            "graded": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "failure",
+      "phase": "vote",
+      "persona": "mark-richards-architect",
+      "failure": "malformed",
+      "reason": "(root): the report is 678 words of prose; the limit is 600"
+    },
+    {
+      "type": "reply",
+      "phase": "vote",
+      "persona": "don-norman-advisor",
+      "data": {
+        "kind": "vote-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "don-norman-advisor",
+        "lens": "human-centred design",
+        "tool_uses": 5,
+        "own_findings": [
+          "F10",
+          "F11",
+          "F12",
+          "F13"
+        ],
+        "votes": [
+          {
+            "finding": "F1",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Read extract-brief.mjs:45-56. Any data:image/* tag writes bytes to any in-folder path, with no type check. The person recovering their brief cannot see that effect from the command they ran.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:45-56",
+                "note": "no IMAGE_TYPES check before the write"
+              }
+            ],
+            "pull_quote": "Recovering a brief should not quietly write config files; the user asked for a JSON and some pictures, not a side effect."
+          },
+          {
+            "finding": "F2",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "I read render-brief.mjs:21 (4 MB per drawing) and validate-brief.mjs:255-256 (1 MB per picture, 6 MB total). The author gets size messages from two scripts that use different numbers for one page, so they cannot form a single model of the budget.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:255-256",
+                "note": "1 MB and 6 MB"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:21",
+                "note": "4 MB per drawing"
+              }
+            ],
+            "pull_quote": "One page, two budgets, two sets of numbers in the messages: the author cannot learn the real limit from the feedback."
+          },
+          {
+            "finding": "F9",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "reference/diagrams.md:49 says the renderer does not resize, which leaves capture-size discipline to the author on every shot. The cost lands on them and on the reader's phone, and nothing in the page tells the reader why it is heavy.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "reference/diagrams.md:49",
+                "note": "renderer does not resize"
+              }
+            ],
+            "pull_quote": "Deferring the resizer is a fair call, but it should be written down as a cost the author pays every time, not left implicit."
+          },
+          {
+            "finding": "F3",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same refusal and hint as my F12, read at validate-brief.mjs:276-279.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:276-279",
+                "note": "hint needs a tool the session lacks"
+              }
+            ],
+            "pull_quote": "Converges with F12: a refusal whose remedy needs a missing tool is a dead end, whatever the limit is."
+          },
+          {
+            "finding": "F5",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "brief.mjs:311-313 refuses the whole raise on any fresh error, so the question is lost along with the picture. This sharpens my F12.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/brief.mjs:311-313",
+                "note": "nothing was written"
+              }
+            ],
+            "pull_quote": "The picture was meant to help the question reach the operator; refusing it should not stop the question itself."
+          },
+          {
+            "finding": "F6",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same mechanism as my F10. render-brief.mjs:772-773 is true-size sideways scroll, against the ruling.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:772-773",
+                "note": "max-width:none inside overflow-x"
+              }
+            ],
+            "pull_quote": "Converges with F10: the tap makes the picture harder to read on exactly the device the reader uses."
+          },
+          {
+            "finding": "F7",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same as my F11, read at validate-brief.mjs:349-353.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:349-353",
+                "note": "svg silences; any .html fires"
+              }
+            ],
+            "pull_quote": "Converges with F11: the warning both misses the #46 case and cries wolf on ordinary code citations."
+          },
+          {
+            "finding": "F8",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "extract-brief.mjs:54-56 overwrites without checking and prints 'wrote picture', which does not say a file was replaced.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:54-56",
+                "note": "writeFileSync, no exists check"
+              }
+            ],
+            "pull_quote": "'wrote picture' reads the same whether it created a file or destroyed one; the feedback hides the loss."
+          },
+          {
+            "finding": "F14",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Converges with my F13. An image refuses the whole render (render-brief.mjs:1155-1158), while archify degrades to a note (:212-213).",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:212-213",
+                "note": "archify degrades"
+              }
+            ],
+            "pull_quote": "Converges with F13: two drawing kinds, two failure models, so the author cannot predict what one missing file will do."
+          }
+        ],
+        "derived": [
+          {
+            "id": "R2-1",
+            "lens": "human-centred design",
+            "locator": "bin/extract-brief.mjs:58-59",
+            "claim": "Extract's documented first mode, printing the JSON (header line 5), drops every picture without a word. Only the outPath branch writes them back. Someone recovering to stdout gets JSON that names files that do not exist, and the next brief command or render then fails on files they were never told about. The usage line does not mention it either (line 22). The fix is one line: on stdout, warn on stderr that N pictures were not written, and say how to run it with a file.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:58-59",
+                "note": "stdout branch writes JSON only"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:5-6",
+                "note": "print mode documented first"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:22",
+                "note": "usage silent on pictures"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "Printing the recovered JSON quietly leaves the pictures behind, and the user only finds out when the render fails on files nobody mentioned.",
+            "confidence_on_hand": "high",
+            "need_info": false,
+            "derived_from": "F13",
+            "graded": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "vote",
+      "persona": "uncle-bob-architect",
+      "data": {
+        "kind": "vote-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "uncle-bob-architect",
+        "lens": "clean code",
+        "tool_uses": 5,
+        "own_findings": [
+          "F14",
+          "F15",
+          "F16",
+          "F17",
+          "F18",
+          "F19"
+        ],
+        "votes": [
+          {
+            "finding": "F1",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The guard only stops paths that climb out of the folder. Inside base, any name and any bytes are written, and extract never imports IMAGE_TYPES.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:17-18",
+                "note": "imports fs and path only"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:48-56",
+                "note": "writes any name under base"
+              }
+            ],
+            "pull_quote": "I tested the escape and missed the obvious: inside the folder, extract writes anything it is told to. The picture rule never reaches it."
+          },
+          {
+            "finding": "F2",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same split as F14: 4 MB in the renderer, 1 MB and 6 MB in the validator.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:22",
+                "note": "INLINE_MAX_BYTES"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:255-256",
+                "note": "image caps"
+              }
+            ],
+            "pull_quote": "One page budget, three numbers in two files. Same disease as my F14."
+          },
+          {
+            "finding": "F4",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Converges with F16. A filename that needs escaping in the round-trip test is the cheapest way to make drift go red.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:45-46",
+                "note": "order-bound regex and hand-written unescape"
+              }
+            ],
+            "pull_quote": "The same unnamed contract I flagged. An escaping filename in the test is the right cheap pin."
+          },
+          {
+            "finding": "F6",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The .zoom CSS does true-size sideways scroll, against the operator's ruling.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:772-773",
+                "note": "max-width:none, overflow-x"
+              }
+            ]
+          },
+          {
+            "finding": "F7",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Converges with F17. 'shown' counts any svg, and the pointer regex matches any .html token.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:349-353",
+                "note": "read and confirmed"
+              }
+            ],
+            "pull_quote": "Misses the case it was written for and fires on honest citations: the heuristic needs its own name and tests."
+          },
+          {
+            "finding": "F8",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "writeFileSync without the 'wx' flag overwrites existing files. The log line names the file but not that it replaced one.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:55",
+                "note": "plain overwrite"
+              }
+            ],
+            "pull_quote": "A recovery command that overwrites your files without saying it replaced them is a hidden effect."
+          },
+          {
+            "finding": "F11",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same lines as F7, through a different lens.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:349-356",
+                "note": "read"
+              }
+            ]
+          },
+          {
+            "finding": "F13",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "This is the user-facing cost of the refuse-versus-degrade split in F14: extract skips a file, then render refuses the whole page.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:51",
+                "note": "skip with warn"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:270-273",
+                "note": "missing file is an error"
+              }
+            ],
+            "pull_quote": "Two policies for one failure show up here as two commands that blame neither each other nor the cause."
+          },
+          {
+            "finding": "F20",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The light and dark fixtures are the same bytes.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1159-1160",
+                "note": "PNG written to both"
+              }
+            ]
+          },
+          {
+            "finding": "F21",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Converges with F16.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:156-157",
+                "note": "emitter"
+              }
+            ],
+            "pull_quote": "One rule, two copies. Beck and I read it the same way."
+          },
+          {
+            "finding": "F22",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "No test reaches IMAGES_WARN_BYTES.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:382",
+                "note": "untested branch"
+              }
+            ]
+          },
+          {
+            "finding": "F23",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Converges with F19 and F14: the check fails open without baseDir.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:269",
+                "note": "if (!baseDir) continue"
+              }
+            ],
+            "pull_quote": "Fail-open by omitted argument: the same gap from the test side."
+          },
+          {
+            "finding": "F24",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same boundary gap as F17.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1197-1203",
+                "note": "read"
+              }
+            ]
+          }
+        ],
+        "derived": [
+          {
+            "id": "R2-1",
+            "lens": "clean code",
+            "locator": "bin/extract-brief.mjs:45",
+            "claim": "F1 and F8 come from one design gap: extract writes files under a rule it does not own. The extension check, the MIME table and the size cap live in validate-brief.mjs. Extract reimplements only the path rule and checks nothing else: not the extension, not whether the data: MIME matches the name, not whether the target already exists. Move 'which picture paths a brief may name and how they are stored' into one exported function. Validator, renderer and extractor call it, and extract refuses any non-raster name and any existing file unless forced.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:45-56",
+                "note": "own regex, own path rule, writes anything else"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:254-266",
+                "note": "the type rule extract never calls"
+              }
+            ],
+            "proposed_severity": "🔴",
+            "pull_quote": "Extract is the third owner of the picture rule and enforces the smallest part of it. Give the rule one function and make all three scripts call it.",
+            "confidence_on_hand": "high",
+            "need_info": false,
+            "derived_from": "F1",
+            "graded": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "vote",
+      "persona": "kent-beck-persona",
+      "data": {
+        "kind": "vote-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "kent-beck-persona",
+        "lens": "TDD and simple design",
+        "tool_uses": 21,
+        "own_findings": [
+          "F15",
+          "F18",
+          "F20",
+          "F21",
+          "F22",
+          "F23",
+          "F24"
+        ],
+        "votes": [
+          {
+            "finding": "F1",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The escape check at :50 only compares folders. .claude/settings.json is inside the folder, and nothing checks the type.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:45-55",
+                "note": "no IMAGE_TYPES check"
+              }
+            ],
+            "pull_quote": "My F15 tested the wrong edge: the dangerous path stays inside the folder."
+          },
+          {
+            "finding": "F2",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Two budgets that can't see each other, and no test covers either one (my F22).",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:22",
+                "note": "4 MB drawing cap"
+              }
+            ],
+            "pull_quote": "Two page budgets, zero tests on either."
+          },
+          {
+            "finding": "F3",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "brief.mjs refuses the whole write on any new error, so the entry is lost along with the picture.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:276-279",
+                "note": "hard refusal"
+              }
+            ]
+          },
+          {
+            "finding": "F4",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same as my F21. Sanctioned divergence is fine as long as a test is there to catch drift.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1175",
+                "note": "plain path only"
+              }
+            ],
+            "pull_quote": "Keep both authors; make the test use a name that needs escaping."
+          },
+          {
+            "finding": "F5",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same cause as F3, seen from the user's side.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:276",
+                "note": "refusal"
+              }
+            ]
+          },
+          {
+            "finding": "F6",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The operator already ruled what this should do. No test pins the toggle (see R2-2).",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:1131",
+                "note": "click toggle"
+              }
+            ]
+          },
+          {
+            "finding": "F7",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Line 349 counts any svg as 'shown'. Neither edge has a test, which is my F24.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:349",
+                "note": "svg counts as shown"
+              }
+            ],
+            "pull_quote": "Both edges of the warning are unpinned."
+          },
+          {
+            "finding": "F8",
+            "confidence_on_hand": "high",
+            "vote": "PRIORITIZE",
+            "reason": "Silent data loss on the recovery path, which is ranked (b). The writeFile has no existence check and no test.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:55",
+                "note": "unconditional write"
+              }
+            ],
+            "pull_quote": "Overwrite without notice is data loss; it belongs with F1's fix and test."
+          },
+          {
+            "finding": "F10",
+            "confidence_on_hand": "low",
+            "vote": "NEED_INFO",
+            "reason": "Behaviour in the artifact frame is unverified (deferred)."
+          },
+          {
+            "finding": "F11",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Duplicates F7.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:353",
+                "note": "regex"
+              }
+            ]
+          },
+          {
+            "finding": "F12",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The hint asks for a tool that is not there.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:277",
+                "note": "hint"
+              }
+            ]
+          },
+          {
+            "finding": "F13",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Extract warns and exits 0, and the render later fails on the same picture. No test joins the two steps.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:51",
+                "note": "warn and continue"
+              }
+            ]
+          },
+          {
+            "finding": "F14",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The test helper calls validateBrief(b) with no folder, so shot() can throw ENOENT on a brief the helper passed.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:28-29",
+                "note": "no baseDir"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:154",
+                "note": "unguarded read"
+              }
+            ],
+            "pull_quote": "One failure policy for pictures, and a test for it."
+          },
+          {
+            "finding": "F16",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same as F21 and F4.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:45",
+                "note": "regex"
+              }
+            ]
+          },
+          {
+            "finding": "F17",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Splitting the heuristic out lets the F24 tests target it on its own.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:348-357",
+                "note": "inline heuristic"
+              }
+            ]
+          },
+          {
+            "finding": "F19",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same as F23.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:909",
+                "note": "third positional"
+              }
+            ],
+            "pull_quote": "Fails open when the folder is forgotten."
+          }
+        ],
+        "derived": [
+          {
+            "id": "R2-1",
+            "lens": "TDD and simple design",
+            "locator": "bin/extract-brief.mjs:45-55",
+            "claim": "F1 and F8 change what the cornering test for extract has to be. Escape paths alone (my F15) miss both real attacks. The test needs a hand-built page carrying data-brief-file=\".claude/settings.json\" (inside the folder, not a picture) and one that names a file already in the target folder. Assert that neither is written and that extract says so. Write the test red first, in the same commit as F1's fix. The type check should import IMAGE_TYPES so the rule keeps one author.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:50-55",
+                "note": "only folder check"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:254",
+                "note": "IMAGE_TYPES"
+              }
+            ],
+            "proposed_severity": "🔴",
+            "pull_quote": "The test that corners extract must plant a settings file inside the folder, not only ../; otherwise F1's fix ships unpinned.",
+            "confidence_on_hand": "high",
+            "need_info": false,
+            "derived_from": "F1",
+            "graded": false
+          },
+          {
+            "id": "R2-2",
+            "lens": "TDD and simple design",
+            "locator": "bin/render-brief.mjs:152-161",
+            "claim": "render-brief exports nothing and reads the disk inside shot(). The only way to test the picture paths is a subprocess plus a temp folder, and the click toggle has no test. The ruled phone fix (F6) and F14's single failure policy each change behaviour that is hard to test today. Tidy first: export a pure page(brief, readFile) or pass the bytes in, then test the zoom markup and the degrade note. In a separate commit from the fix.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:154",
+                "note": "disk read inside markup"
+              },
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1171",
+                "note": "subprocess render"
+              }
+            ],
+            "proposed_severity": "🟢",
+            "pull_quote": "Before fixing the phone tap and the failure policy, make shot() testable without a subprocess.",
+            "confidence_on_hand": "high",
+            "need_info": false,
+            "derived_from": "F14",
+            "graded": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "vote",
+      "persona": "mark-richards-architect",
+      "data": {
+        "kind": "vote-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "mark-richards-architect",
+        "lens": "architecture",
+        "tool_uses": 5,
+        "own_findings": [
+          "F1",
+          "F2",
+          "F3",
+          "F4"
+        ],
+        "votes": [
+          {
+            "finding": "F5",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same as my F3: a fresh error blocks the whole raise.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:276-279",
+                "note": "An error, not a warning."
+              }
+            ],
+            "pull_quote": "The 1 MB stop costs the operator the question, not just the picture."
+          },
+          {
+            "finding": "F6",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Zoom scrolls sideways at true size, which contradicts the ruling.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:772-773",
+                "note": "Zoom removes max-width."
+              }
+            ]
+          },
+          {
+            "finding": "F7",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Any svg counts as shown, so the #46 case slips through.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:349-350",
+                "note": "shown includes svg."
+              }
+            ]
+          },
+          {
+            "finding": "F8",
+            "confidence_on_hand": "high",
+            "vote": "PRIORITIZE",
+            "reason": "Silent overwrite turns F1 from planting a file into hijacking one: writeFileSync keeps the existing mode, so an executable hook stays executable.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:55",
+                "note": "Unconditional overwrite."
+              }
+            ],
+            "pull_quote": "Overwriting without asking is the half of the extract hole that keeps an executable file executable."
+          },
+          {
+            "finding": "F9",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Fair trade for zero dependencies; write down who pays for it.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "reference/diagrams.md:49",
+                "note": "Deferral unpriced."
+              }
+            ]
+          },
+          {
+            "finding": "F11",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Converges with F7 and adds the false positives.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:353",
+                "note": "Any .html path matches."
+              }
+            ]
+          },
+          {
+            "finding": "F12",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The hint names a recovery the session cannot perform.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:278",
+                "note": "Says resize or re-encode."
+              }
+            ]
+          },
+          {
+            "finding": "F13",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Extract's skip and render's refusal are coupled in time, and neither message names the other.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:51",
+                "note": "Warns and continues."
+              }
+            ]
+          },
+          {
+            "finding": "F14",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Drawings degrade to a note; pictures refuse. One concept, two failure policies. Under quality (a), degrade-and-say wins.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:208-213",
+                "note": "A read failure becomes missingDiagram."
+              }
+            ],
+            "pull_quote": "Pictures and drawings fail by different rules; pick degrade-with-a-note for both."
+          },
+          {
+            "finding": "F15",
+            "confidence_on_hand": "high",
+            "vote": "PRIORITIZE",
+            "reason": "The PR's only trust-boundary check, untested, with F1 reproduced: 🔴.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:50",
+                "note": "No test fails without it."
+              }
+            ],
+            "pull_quote": "The one guard between a stranger's page and your disk needs a test that fails without it."
+          },
+          {
+            "finding": "F16",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same as my F4: sanctioned divergence plus a stronger parity test.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:45",
+                "note": "Regex parse of the renderer's markup."
+              }
+            ],
+            "pull_quote": "An unnamed contract between render and extract; keep both copies, but let a test catch drift."
+          },
+          {
+            "finding": "F17",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The heuristic deserves its own named function and a noisy-case test.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:353",
+                "note": "Inline regex."
+              }
+            ]
+          },
+          {
+            "finding": "F18",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "raise spreads, set pushes: two shapes of one rule.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/brief.mjs:150",
+                "note": "raise's append."
+              }
+            ]
+          },
+          {
+            "finding": "F19",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Fails open; brief-withdraw already omits baseDir.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/brief-withdraw.mjs:83",
+                "note": "No baseDir."
+              }
+            ]
+          },
+          {
+            "finding": "F20",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Light and dark test files hold identical bytes.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1159-1160",
+                "note": "Same PNG twice."
+              }
+            ]
+          },
+          {
+            "finding": "F21",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Converges with F4 and F16.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:45-46",
+                "note": "Hand-written decoder."
+              }
+            ]
+          },
+          {
+            "finding": "F22",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Never exercised. It is half of the split budget in my F2.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:382",
+                "note": "No test reaches it."
+              }
+            ]
+          },
+          {
+            "finding": "F23",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same root as F19.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:269-271",
+                "note": "Skips without baseDir."
+              }
+            ]
+          },
+          {
+            "finding": "F24",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The warning's edge is unspecified.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1196-1202",
+                "note": "No .html template case."
+              }
+            ]
+          }
+        ],
+        "derived": [
+          {
+            "id": "R2-1",
+            "lens": "architecture",
+            "locator": "schema/problem-brief.schema.json:521-545",
+            "claim": "The schema defines the picture shape (file, alt, fileDark) twice: under evidence.image and as properties on diagram. The descriptions already differ, while the validator treats both as one thing. That is duplicate authority inside the contract. Ruling: CONSOLIDATE into $defs.image, referenced by evidence and by diagram kind=image through allOf. Fitness function: a test that both paths resolve to the same $ref.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "schema/problem-brief.schema.json:521-545",
+                "note": "evidence.image shape."
+              },
+              {
+                "kind": "file_line",
+                "ref": "schema/problem-brief.schema.json:648-656",
+                "note": "diagram repeats alt and fileDark."
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:259",
+                "note": "One checkImage serves both."
+              }
+            ],
+            "proposed_severity": "🟢",
+            "pull_quote": "The schema spells the picture twice; give it one $def and let both places point at it.",
+            "confidence_on_hand": "high",
+            "need_info": false,
+            "derived_from": "F14",
+            "graded": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "answer",
+      "phase": "need-info",
+      "topic": "provision",
+      "data": {
+        "finding": "F2",
+        "route": "peer",
+        "supplied": true,
+        "by": "kent-beck-persona",
+        "note": "Yes, a page can get past 16 MB, and neither script refuses it. Worked out from the code, not measured. The only hard caps are per file: 1 MB per picture (bin/validate-brief.mjs:255, :276) and 4 MB per drawing (bin/render-brief.mjs:22, :215). Both totals only warn: pictures over 6 MB (validate-brief.mjs:382) and a page over 6 MB (render-brief.mjs:1176). 13 pictures just under 1 MB come to about 13 MB raw, about 17.3 MB once embedded as base64, and pass both checks with only warnings. Inlined drawings are not in the validator's total."
+      }
+    },
+    {
+      "type": "answer",
+      "phase": "need-info",
+      "topic": "provision",
+      "data": {
+        "finding": "F3",
+        "route": "peer",
+        "supplied": true,
+        "by": "alan-cooper-advisor",
+        "note": "The facts cut against F3's premise. This machine has ffmpeg and python3 with Pillow 12.1, both of which can resize; ImageMagick, sips and cwebp are missing. Chrome's tools include resize_window for capturing at a set width. The local desktop screenshots run from 7 to 516 KB, and the largest, 2493×1408, is 516 KB, so none passes 1 MB. No phone-width or tall full-page shots were found. Public users' machines may differ, so 'no resizer' holds for them but not for this machine."
+      }
+    },
+    {
+      "type": "answer",
+      "phase": "need-info",
+      "topic": "provision",
+      "data": {
+        "finding": "F10",
+        "route": "peer",
+        "supplied": true,
+        "by": "uncle-bob-architect",
+        "note": "Supplied in part, from reading the code only; no phone or browser, so behaviour inside the artifact frame stays unverified. render-brief.mjs:1131: a tap fires click, which toggles .zoom on the image. render-brief.mjs:768-771: the only cues are cursor:zoom-in, which shows nothing on touch, and title=, a tooltip that never appears on a tap (shot(), :159). So F10's claim holds from the code alone."
+      }
+    },
+    {
+      "type": "answer",
+      "phase": "need-info",
+      "topic": "provision",
+      "data": {
+        "finding": "F11",
+        "route": "peer",
+        "supplied": false,
+        "by": "kent-beck-persona",
+        "note": "Not settled. All 7 briefs on this machine were checked with the branch's validator, loaded in-process: 13 live entries, none flagged, so no false positives and no example. That does not settle the rate: all 7 briefs are about this tooling and none come from a web project, so .html/.svg citations from public users go untested. A regex pass over entries of every status was blocked by the brief-guard hook and was not run."
+      }
+    },
+    {
+      "type": "answer",
+      "phase": "need-info",
+      "topic": "provision",
+      "data": {
+        "finding": "F11",
+        "route": "operator",
+        "supplied": true,
+        "note": "Operator, verbatim: \"wrong guard: not wording but intent to show is more valuable. To show must contain the representation\""
+      }
+    },
+    {
+      "type": "answer",
+      "phase": "need-info",
+      "topic": "provision",
+      "data": {
+        "finding": "F13",
+        "route": "peer",
+        "supplied": false,
+        "by": "uncle-bob-architect",
+        "note": "Supplied in part, not settled. The only stated degrade policy is a code comment that predates this PR: render-brief.mjs:231-233 ('A drawing that cannot be carried becomes a visible, honest note'), for svg and archify only. For images the PR states refusal: reference/diagrams.md:48 refuses pictures over 1 MB; it says nothing about a missing file. No doc names one policy for all picture kinds, so the conflict is real."
+      }
+    },
+    {
+      "type": "answer",
+      "phase": "need-info",
+      "topic": "provision",
+      "data": {
+        "finding": "F13",
+        "route": "operator",
+        "supplied": true,
+        "note": "Operator chose: Refuse at raise only — refuse when an author adds the picture with brief raise/set; on render of an existing brief, degrade to a visible note."
+      }
+    },
+    {
+      "type": "answer",
+      "phase": "need-info",
+      "topic": "provision",
+      "data": {
+        "finding": "F16",
+        "route": "peer",
+        "supplied": true,
+        "by": "mark-richards-architect",
+        "note": "Partly: one contract is treated as stable, the other only by convention. extract-brief.mjs:8-12 says every page carries its own data, and :29-30 handles pages from before that. The data block (render-brief.mjs:1105) is read by extract-brief.mjs:27 and brief-delta.mjs:142. data-brief-file has no such note. Its only reader is extract-brief.mjs:45, and only the round-trip test checks it."
+      }
+    },
+    {
+      "type": "answer",
+      "phase": "need-info",
+      "topic": "provision",
+      "data": {
+        "finding": "F17",
+        "route": "peer",
+        "supplied": false,
+        "by": "kent-beck-persona",
+        "note": "Partly. On this author's 7 tooling briefs it flagged none of 13 live entries, so the rate there is zero. That says nothing about the noisy case F17 names: web projects citing .html or .svg. F17's ask still stands: test that case."
+      }
+    },
+    {
+      "type": "answer",
+      "phase": "need-info",
+      "topic": "provision",
+      "data": {
+        "finding": "F17",
+        "route": "operator",
+        "supplied": true,
+        "note": "Same heuristic the operator ruled on under F11 this round, verbatim: \"wrong guard: not wording but intent to show is more valuable. To show must contain the representation\" — not asked a second time."
+      }
+    },
+    {
+      "type": "answer",
+      "phase": "need-info",
+      "topic": "provision",
+      "data": {
+        "finding": "F24",
+        "route": "peer",
+        "supplied": false,
+        "by": "don-norman-advisor",
+        "note": "Partly. Issue #46 asks for a warning on any .html reference, SKILL.md:212-213 says it warns on 'such a file', and validate-brief.mjs:353 matches every .html. So a non-visual .html citation is meant to warn. Nobody has measured how often that misfires."
+      }
+    },
+    {
+      "type": "answer",
+      "phase": "need-info",
+      "topic": "provision",
+      "data": {
+        "finding": "F24",
+        "route": "operator",
+        "supplied": true,
+        "note": "Same heuristic the operator ruled on under F11 this round, verbatim: \"wrong guard: not wording but intent to show is more valuable. To show must contain the representation\" — not asked a second time."
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "need-info",
+      "finding": "F24",
+      "persona": "kent-beck-persona",
+      "data": {
+        "kind": "finding-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "kent-beck-persona",
+        "lens": "TDD and simple design",
+        "tool_uses": 2,
+        "findings": [
+          {
+            "id": "F24",
+            "lens": "TDD and simple design",
+            "locator": "test/brief.test.mjs:1196-1202",
+            "claim": "The operator ruled the guard is wrong: it should check intent to show, not wording. An entry meant to show something has to carry the picture. That makes the current test the spec for the rule being replaced, since its three cases pin the regex. Rewrite it red first, in the same commit as the new guard. Cases: an entry marked as showing something with no image fails. The same entry with an image passes. An entry with only an unrelated svg still fails, as F7 and F11 say. An unmarked entry citing templates/base.html:12 stays quiet. The boundary question I held for is settled: wording no longer decides.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1196-1202",
+                "note": "pins the wording regex"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:348-357",
+                "note": "wording guard to be replaced"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "The guard's only test pins the wording rule the operator just rejected; rewrite it red first so intent-to-show becomes the spec.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "need-info",
+      "finding": "F2",
+      "persona": "mark-richards-architect",
+      "data": {
+        "kind": "finding-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "mark-richards-architect",
+        "lens": "architecture",
+        "tool_uses": 2,
+        "findings": [
+          {
+            "id": "F2",
+            "lens": "architecture",
+            "locator": "bin/render-brief.mjs:21-24",
+            "claim": "The page-weight budget has two authors, and neither one enforces the only limit that matters. The hard caps apply per file: 1 MB per picture in the validator and 4 MB per drawing in the renderer. Both totals only warn: picture bytes over 6 MB in the validator, the whole page over 6 MB in the renderer, and the validator's total leaves out inlined drawings. Thirteen pictures just under 1 MB embed to about 17 MB and pass both checks with warnings. The page then fails at publish, which defeats quality (a). Ruling: CONSOLIDATE the budget in validate-brief.mjs, which the renderer already imports, so this adds no new coupling. Count pictures and inlined drawings together, and refuse the estimated embedded size near 16 MB. Fitness function: a test where many sub-1 MB pictures over the ceiling are refused, and a check that the renderer holds no byte-limit constants of its own.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:382-384",
+                "note": "The total only warns, and counts pictures only."
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:1176",
+                "note": "The page-size check only warns."
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:21-24",
+                "note": "The renderer's own copies of the limits."
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "Two scripts each guard a slice of the page budget, and neither guards the 16 MB that publishing enforces; put one total in the validator and refuse there.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "need-info",
+      "finding": "F3",
+      "persona": "mark-richards-architect",
+      "data": {
+        "kind": "finding-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "mark-richards-architect",
+        "lens": "architecture",
+        "tool_uses": 2,
+        "findings": [
+          {
+            "id": "F3",
+            "lens": "architecture",
+            "locator": "bin/validate-brief.mjs:276",
+            "claim": "Mostly withdrawn. The answer cuts against my premise. The local screenshots are 516 KB at most, and resizing tools such as ffmpeg, Pillow and Chrome's resize_window often exist. So the 1 MB per-picture refusal rarely bites, and the operator ruled that refusing at raise/set is right. What remains is a small point: the per-picture cap is a proxy, and the real limit is the total (see F2). Once F2 lands, the 1 MB cap could become a warning without losing protection. That is optional.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:276-279",
+                "note": "A per-picture error that stands in for the page total."
+              }
+            ],
+            "proposed_severity": "🟢",
+            "pull_quote": "I withdraw most of this: real screenshots fit under 1 MB and tools to shrink them exist; the cap is just a proxy for the page total in F2.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "need-info",
+      "finding": "F16",
+      "persona": "uncle-bob-architect",
+      "data": {
+        "kind": "finding-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "uncle-bob-architect",
+        "lens": "clean code",
+        "tool_uses": 3,
+        "findings": [
+          {
+            "id": "F16",
+            "lens": "clean code",
+            "locator": "bin/extract-brief.mjs:45",
+            "claim": "The page has two recovery contracts with different standing. The data block is declared stable: extract-brief.mjs:8-12 promises every page carries its data, and :29-30 keeps older pages readable. It has two readers. data-brief-file has no such declaration. Its one reader is an attribute-order regex with a hand-written unescape that copies shot()'s output, and only one test pins it. Recovery from the page ranks second in quality, so pictures need the same standing: carry them in the data block, or declare data-brief-file stable next to shot() and parse it with a function exported from there.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:8-12",
+                "note": "data block declared stable"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:45-46",
+                "note": "undeclared, order-bound parse"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:156-157",
+                "note": "emitter"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "The JSON comes back through a declared contract; the pictures come back through a regex nobody promised to keep. Quality (b) needs both at the same standing.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "need-info",
+      "finding": "F17",
+      "persona": "uncle-bob-architect",
+      "data": {
+        "kind": "finding-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "uncle-bob-architect",
+        "lens": "clean code",
+        "tool_uses": 3,
+        "findings": [
+          {
+            "id": "F17",
+            "lens": "clean code",
+            "locator": "bin/validate-brief.mjs:353",
+            "claim": "The operator ruled this the wrong guard: what matters is intent to show, and a show must carry the representation. So the finding is no longer 'extract and tune the keyword heuristic'. Delete the regex over prose (validate-brief.mjs:348-357) and replace it with a structural rule keyed on a declared intent. When an entry or evidence item says the reader must see something, the validator requires an image (or svg) on it, as an error at raise/set. A rule over the data is testable at the edges and has no false-positive rate. A rule over wording has both problems, and the 'any svg counts' shortcut too.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:348-357",
+                "note": "keyword heuristic to remove"
+              },
+              {
+                "kind": "principle",
+                "ref": "operator ruling on F11, this round",
+                "note": "intent to show must contain the representation"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "Stop guessing intent from words. Let the author declare 'the reader must see this', and refuse the entry when the picture is not there.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "need-info",
+      "finding": "F10",
+      "persona": "don-norman-advisor",
+      "data": {
+        "kind": "finding-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "don-norman-advisor",
+        "lens": "human-centred design",
+        "tool_uses": 3,
+        "findings": [
+          {
+            "id": "F10",
+            "lens": "human-centred design",
+            "locator": "bin/render-brief.mjs:159",
+            "claim": "Confirmed from the code; I could not watch it run in the artifact frame. On a phone nothing tells the reader that a screenshot can be tapped. The only cues are cursor:zoom-in and a title tooltip, and touch shows neither. A tap toggles true-size sideways scroll, and nothing shows that the state changed or how to leave it. reference/diagrams.md:43 promises full size. The ruled fix, a fitted full-screen view with pinch-zoom, should also carry a visible enlarge cue and a visible close control.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:159",
+                "note": "tooltip is the only label"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:768-773",
+                "note": "cursors are the only state cue"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:1131",
+                "note": "toggle, no visible state"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "On a phone the screenshot looks like a plain picture: its only zoom cues are a hover cursor and a tooltip, so the reader can neither find the action nor see how to undo it.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "need-info",
+      "finding": "F11",
+      "persona": "don-norman-advisor",
+      "data": {
+        "kind": "finding-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "don-norman-advisor",
+        "lens": "human-centred design",
+        "tool_uses": 3,
+        "findings": [
+          {
+            "id": "F11",
+            "lens": "human-centred design",
+            "locator": "bin/validate-brief.mjs:349-356",
+            "claim": "The operator ruled that the guard should check intent to show, not wording, and that showing must contain the representation. The PR's guard guesses intent from words and paths (line 353), then accepts any svg as the representation (line 349). Both halves are wrong for the reader: it misses the #46 case whenever an unrelated svg is present, and it fires on ordinary code citations. The fix is to let the entry declare that the reader must see something, then require an image (or an svg of that very thing) on the entry or its evidence. Drop the keyword regex. With intent declared, the warning can become a refusal at raise and set, and the author always knows why it fired.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:349",
+                "note": "any svg counts as shown"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:353",
+                "note": "wording heuristic stands in for intent"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "Ask the entry whether the reader must see something, then require the picture; guessing from words both misses the #46 case and nags ordinary briefs.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "need-info",
+      "finding": "F13",
+      "persona": "don-norman-advisor",
+      "data": {
+        "kind": "finding-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "don-norman-advisor",
+        "lens": "human-centred design",
+        "tool_uses": 3,
+        "findings": [
+          {
+            "id": "F13",
+            "lens": "human-centred design",
+            "locator": "bin/render-brief.mjs:1155-1158",
+            "claim": "The operator ruled that a bad picture is refused at raise and set only, and that rendering an existing brief degrades to a visible note. The PR does the opposite at render: checkImage errors make the render exit 1 with no page (render-brief.mjs:1155-1158). brief.mjs already refuses only fresh errors, which fits the ruling (bin/brief.mjs:311-313). The fix moves picture errors out of render's refusal: render a missing or bad picture as the same visible note archify gets (render-brief.mjs:212-213), naming the file. Extract's skip message (extract-brief.mjs:51) should then say the page will show a note in place of that picture, so cause and consequence appear together.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:1155-1158",
+                "note": "render refuses on picture errors"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:212-213",
+                "note": "archify degrades to a note"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/brief.mjs:311-313",
+                "note": "CLI refuses fresh errors only"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:51",
+                "note": "skip message silent on consequence"
+              }
+            ],
+            "proposed_severity": "🟡",
+            "pull_quote": "Render refuses the page over one picture, where the ruling wants a visible note; refuse at raise and set, degrade on render, and let extract say what the page will show.",
+            "confidence_on_hand": "high",
+            "need_info": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "need-info",
+      "round": 2,
+      "persona": "alan-cooper-advisor",
+      "data": {
+        "kind": "vote-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "alan-cooper-advisor",
+        "lens": "adversarial product",
+        "tool_uses": 3,
+        "own_findings": [
+          "F5",
+          "F6",
+          "F7",
+          "F8",
+          "F9"
+        ],
+        "votes": [
+          {
+            "finding": "F2",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "A page that passes with warnings and then fails at publish leaves the operator with nothing, the worst outcome for quality (a).",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:21-24",
+                "note": "per-file caps only"
+              }
+            ],
+            "pull_quote": "The limit that matters is the total, and right now nothing enforces it until publish fails."
+          },
+          {
+            "finding": "F3",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Revised to fit the facts I supplied: local shots are 516 KB at most, and resizers exist here.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:276",
+                "note": "per-picture cap"
+              }
+            ]
+          },
+          {
+            "finding": "F10",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Touch shows no cue, and the fix needs a visible close as well as the ruled fitted view.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:159",
+                "note": "title and cursor only"
+              }
+            ]
+          },
+          {
+            "finding": "F11",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Declared intent replaces guessing and closes my F7 both ways.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:349-353",
+                "note": "svg shortcut, keyword regex"
+              }
+            ],
+            "pull_quote": "Let the author say the reader must see it, then require the picture; no more guessing from words."
+          },
+          {
+            "finding": "F13",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same remedy as my R2-1: degrade at render, so one missing picture cannot block the whole page.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:1155-1158",
+                "note": "exit 1, no page"
+              }
+            ],
+            "pull_quote": "A missing picture should cost one figure, not the operator's whole page."
+          },
+          {
+            "finding": "F16",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Recovery ranks second, and the picture half of it rests on an undeclared format.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:45",
+                "note": "regex copy of shot() output"
+              }
+            ]
+          },
+          {
+            "finding": "F17",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Converges with F11; a structural rule has no false-positive rate to tune.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:353",
+                "note": "regex to delete"
+              }
+            ]
+          },
+          {
+            "finding": "F24",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The 'unrelated svg still fails' case is the one my F7 named.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1196-1202",
+                "note": "pins the old regex"
+              }
+            ]
+          }
+        ],
+        "derived": []
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "need-info",
+      "round": 2,
+      "persona": "kent-beck-persona",
+      "data": {
+        "kind": "vote-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "kent-beck-persona",
+        "lens": "TDD and simple design",
+        "tool_uses": 4,
+        "own_findings": [
+          "F15",
+          "F18",
+          "F20",
+          "F21",
+          "F22",
+          "F23",
+          "F24"
+        ],
+        "votes": [
+          {
+            "finding": "F2",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "My arithmetic: 13 pictures just under 1 MB pass both checks and embed to about 17 MB. Neither total is tested (F22).",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:382-384",
+                "note": "warn only"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:1176",
+                "note": "warn only"
+              }
+            ],
+            "pull_quote": "One budget with a test that goes red past 16 MB, not two warnings."
+          },
+          {
+            "finding": "F3",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Downgrading to 🟢 fits the new facts and the raise/set ruling.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:276-279",
+                "note": "cap"
+              }
+            ]
+          },
+          {
+            "finding": "F10",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The cues come from the code: hover cursor and title only. The ruled fix needs a markup test (R2-2).",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:159",
+                "note": "title only"
+              }
+            ]
+          },
+          {
+            "finding": "F11",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Matches the operator ruling and my revised F24.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:349-353",
+                "note": "svg counts as shown; wording guard"
+              }
+            ],
+            "pull_quote": "Intent declared in the data is a rule a test can corner; wording never was."
+          },
+          {
+            "finding": "F13",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Render exits 1 where the ruling asks for a note. brief.mjs already refuses only fresh errors.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:1155-1158",
+                "note": "exit 1"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/brief.mjs:311-313",
+                "note": "fresh errors only"
+              }
+            ]
+          },
+          {
+            "finding": "F16",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Carrying pictures in the data block removes the second author entirely, which is better than my F21 tidying.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:45-46",
+                "note": "regex reader"
+              }
+            ],
+            "pull_quote": "Put the pictures in the data block and the regex has nothing left to drift from."
+          },
+          {
+            "finding": "F17",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "A structural rule over declared intent can be tested at its edges. Replace the guard and its test together, red first.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:348-357",
+                "note": "regex to delete"
+              }
+            ]
+          }
+        ],
+        "derived": []
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "need-info",
+      "round": 2,
+      "persona": "don-norman-advisor",
+      "data": {
+        "kind": "vote-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "don-norman-advisor",
+        "lens": "human-centred design",
+        "tool_uses": 2,
+        "own_findings": [
+          "F10",
+          "F11",
+          "F12",
+          "F13"
+        ],
+        "votes": [
+          {
+            "finding": "F2",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Under the current checks the page passes with warnings and fails only at publish, far from its cause. One budget gives one honest error at raise.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:382-384",
+                "note": "total only warns"
+              }
+            ],
+            "pull_quote": "A limit the author first meets at publish is feedback that arrives too late to act on."
+          },
+          {
+            "finding": "F3",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "A 🟢 fits once resize tools are known to exist. My F12 still asks that the hint name the recovery the author can actually perform.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:276-279",
+                "note": "hint text"
+              }
+            ]
+          },
+          {
+            "finding": "F16",
+            "confidence_on_hand": "low",
+            "vote": "NEED_INFO",
+            "reason": "Choosing which recovery contract counts as stable is architecture. My lens sees only the consequence, pictures silently lost on recovery, and that is covered by R2-1."
+          },
+          {
+            "finding": "F17",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same remedy as my revised F11. A declared intent tells the author why the rule fired.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:349-353",
+                "note": "wording guard"
+              }
+            ],
+            "pull_quote": "Converges with F11: let the entry say the reader must see something, then require the picture."
+          },
+          {
+            "finding": "F24",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The unrelated-svg case is the right test: it pins the reader's sense of 'shown', not the author's.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1196-1202",
+                "note": "current cases pin the regex"
+              }
+            ]
+          }
+        ],
+        "derived": []
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "need-info",
+      "round": 2,
+      "persona": "mark-richards-architect",
+      "data": {
+        "kind": "vote-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "mark-richards-architect",
+        "lens": "architecture",
+        "tool_uses": 2,
+        "own_findings": [
+          "F1",
+          "F2",
+          "F3",
+          "F4"
+        ],
+        "votes": [
+          {
+            "finding": "F10",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Touch has no hover, so the only cues never reach a phone.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:768-773",
+                "note": "cursor:zoom-in is the only cue."
+              }
+            ]
+          },
+          {
+            "finding": "F11",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Declared intent turns a guess over wording into a structural rule. That is testable and has no false-positive rate.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:349-353",
+                "note": "Wording guess, plus any svg counts."
+              }
+            ],
+            "pull_quote": "Check the data the author declared, not the words they happened to use."
+          },
+          {
+            "finding": "F13",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "This matches my F14 vote: one failure policy, degrade-with-a-note at render, the same as archify.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:212-213",
+                "note": "The existing degrade path to reuse."
+              }
+            ]
+          },
+          {
+            "finding": "F16",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Agreed that the contract needs standing. Of the two options, though, carrying the bytes in the data block would double picture weight and worsen F2. Declare data-brief-file stable beside shot() and pin it with a parity test.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/extract-brief.mjs:8-12",
+                "note": "The data block is the declared contract."
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:156-157",
+                "note": "The writer to declare it beside."
+              }
+            ],
+            "pull_quote": "Give the picture markup the standing the data block has, but don't pay for it by embedding every picture twice."
+          },
+          {
+            "finding": "F17",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Same rule as F11, seen from the validator's structure.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:348-357",
+                "note": "Regex to delete."
+              }
+            ]
+          },
+          {
+            "finding": "F24",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The test pins the rule being replaced, so rewrite it red first.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1196-1202",
+                "note": "Three cases that pin the regex."
+              }
+            ]
+          }
+        ],
+        "derived": []
+      }
+    },
+    {
+      "type": "reply",
+      "phase": "need-info",
+      "round": 2,
+      "persona": "uncle-bob-architect",
+      "data": {
+        "kind": "vote-report",
+        "schema_version": "1",
+        "mode": "review",
+        "round": "2026-11-10",
+        "persona": "uncle-bob-architect",
+        "lens": "clean code",
+        "tool_uses": 3,
+        "own_findings": [
+          "F14",
+          "F15",
+          "F16",
+          "F17",
+          "F18",
+          "F19"
+        ],
+        "votes": [
+          {
+            "finding": "F2",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "One budget, one owner. That matches my F14, and the 13-picture case shows the per-file caps never protect the total.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:22",
+                "note": "renderer's own cap"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:255-256",
+                "note": "validator caps"
+              }
+            ],
+            "pull_quote": "Consolidating the budget in the validator is the same one-home fix I asked for, and it adds no coupling."
+          },
+          {
+            "finding": "F3",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Withdrawn to 🟢 by its author, and that is correct: the residual point is folded into F2."
+          },
+          {
+            "finding": "F10",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "I supplied this from code: touch shows neither of the two cues.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:768-771",
+                "note": "cursor only"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:1131",
+                "note": "toggle"
+              }
+            ]
+          },
+          {
+            "finding": "F11",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "Converges with my revised F17: declared intent replaces the regex.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/validate-brief.mjs:349-353",
+                "note": "heuristic to drop"
+              }
+            ],
+            "pull_quote": "Norman and I reached the same rule: declare intent, and require the picture."
+          },
+          {
+            "finding": "F13",
+            "confidence_on_hand": "high",
+            "vote": "PRIORITIZE",
+            "reason": "With the operator's ruling this is the concrete fix for my F14 split. Render must degrade the way archify already does, and today a public user's existing brief becomes unrenderable when one file goes missing. That fails quality (a).",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:1155-1158",
+                "note": "exit 1"
+              },
+              {
+                "kind": "file_line",
+                "ref": "bin/render-brief.mjs:212-213",
+                "note": "existing degrade path"
+              }
+            ],
+            "pull_quote": "One missing file should cost one picture, not the whole page. The degrade path already exists, so reuse it."
+          },
+          {
+            "finding": "F24",
+            "confidence_on_hand": "high",
+            "vote": "CONFIRM",
+            "reason": "The test cases fit the ruled rule, and they are written red first.",
+            "evidence": [
+              {
+                "kind": "file_line",
+                "ref": "test/brief.test.mjs:1197-1203",
+                "note": "current spec of the old rule"
+              }
+            ]
+          }
+        ],
+        "derived": []
+      }
+    },
+    {
+      "type": "answer",
+      "phase": "conflicts",
+      "topic": "conflicts",
+      "data": [
+        {
+          "id": "C1",
+          "advisors": [
+            "mark-richards-architect",
+            "alan-cooper-advisor"
+          ],
+          "disputed": "Is the 1 MB per-picture cap a real obstacle? Richards (F3, now 🟢): this machine can resize, so the cap is reachable. Cooper (F5, 🟡): the author meets a hard stop whose hint names no tool, and the operator's question is never raised. Outcome differs: a refusal the author can act on, or a stop with no way forward.",
+          "outcome": "unresolved",
+          "findings": [
+            "F3",
+            "F5"
+          ]
+        },
+        {
+          "id": "C2",
+          "advisors": [
+            "mark-richards-architect",
+            "don-norman-advisor"
+          ],
+          "disputed": "Same cap, Norman's side. Richards (F3, now 🟢): resizing tools exist here. Norman (F12, 🟡): the refusal hint tells the author to resize, which public users may not be able to do, and leaves out retaking the shot narrower or cropped. Outcome differs: whether the message leads the author to a fix.",
+          "outcome": "unresolved",
+          "findings": [
+            "F3",
+            "F12"
+          ]
+        },
+        {
+          "id": "C3",
+          "advisors": [
+            "mark-richards-architect",
+            "uncle-bob-architect"
+          ],
+          "disputed": "Where should the picture rule live? Richards (F4): keep render and extract copies of the img markup, pinned by the round-trip test. Uncle Bob (R2-4, F16): one function that validate, render and extract all call. No direct user-visible change; it sets how likely a later edit silently breaks recovering pictures.",
+          "outcome": "unresolved",
+          "findings": [
+            "F4",
+            "F16",
+            "R2-4"
+          ]
+        },
+        {
+          "id": "C4",
+          "advisors": [
+            "mark-richards-architect",
+            "kent-beck-persona"
+          ],
+          "disputed": "Same question, Beck's side. Richards (F4): two copies are a sanctioned divergence, since extract importing the renderer would run its CLI. Beck (F21): the picture tag is one rule written twice; move it in a structure-only commit first. No direct user-visible change.",
+          "outcome": "unresolved",
+          "findings": [
+            "F4",
+            "F21"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "answer",
+      "phase": "rank",
+      "topic": "ranking",
+      "data": [
+        {
+          "finding": "F1",
+          "cost": "low",
+          "value": "Closes the only attacker-reachable write: a page someone else published can no longer name a non-picture file (e.g. .claude/settings.json) for extract to write. Unblocks merge (🔴)."
+        },
+        {
+          "finding": "F15",
+          "cost": "low",
+          "value": "Pins the F1 fix with a test that goes red if the path and type refusals are removed, so the guard cannot silently regress. Unblocks merge (🔴)."
+        },
+        {
+          "finding": "F8",
+          "cost": "low",
+          "value": "Stops recovery from silently overwriting screenshots already beside the JSON; the operator's own files are never lost to a page. Unblocks merge (🔴)."
+        },
+        {
+          "finding": "F6",
+          "cost": "medium",
+          "value": "Delivers the operator's ruling on the top-ranked quality: on a phone a tapped screenshot opens fitted in a full-screen view with pinch-zoom, instead of a true-size strip scrolled sideways."
+        },
+        {
+          "finding": "F11",
+          "cost": "medium",
+          "value": "Replaces the wording heuristic with the operator's rule (intent to show must carry the representation): fewer false warnings for public users, and the #46 case is caught per evidence item, not silenced by an unrelated svg."
+        }
+      ]
+    },
+    {
+      "type": "answer",
+      "phase": "signoff",
+      "topic": "signoff",
+      "data": {
+        "tldr": [
+          "Five lenses found PR #48 delivers screenshots inside the page, but the recovery step that writes pictures back from a published page trusts that page too far, the phone tap does the opposite of the operator's ruling, and the visual-pointer warning guards wording instead of intent.",
+          "The top five fix extract first (refuse non-picture and dot-segment names, never overwrite, with a hostile-page test), then fit-to-screen tap with full-screen pinch-zoom, then replace the keyword warning with a per-evidence rule that intent to show must carry the picture.",
+          "Three 🔴 findings block merge: F1 (extract writes any file a page names), F8 (extract silently overwrites existing pictures) and F15 (no test fails if the folder-escape refusal is removed)."
+        ],
+        "baseline": {
+          "assume_closed": [],
+          "in_progress": [
+            "F1, F8, F15: extract hardening and its hostile-page test",
+            "F6, F10: fitted phone view with visible enlarge and close cues",
+            "F11, F17, F24, F7: intent-to-show rule replaces the keyword warning",
+            "F13, F14: refuse a bad picture at brief raise/set, degrade to a note on render"
+          ],
+          "re_evaluate": [
+            "C1: whether the 1 MB per-picture cap stays once the page total is enforced (F2, F3, F5, F12)",
+            "C2: one owner for the picture rule versus two copies pinned by the round-trip test (F4, F16, F21, R2-4)",
+            "Security-and-Trust was not seated this round although extract now writes files from a published page; seat it next round"
+          ]
+        }
+      }
+    }
+  ]
+}
