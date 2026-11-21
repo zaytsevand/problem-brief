@@ -194,6 +194,27 @@ work with `brief work <file> update|done W-n`, and anything else with `brief set
 | `unwound` | How it works today (`now`, diagrams, file:line refs), then `whyWrong`. Diagram or `noDiagram` (below). | as needed |
 | `solutions` | Recommended option first, labelled; each priced and marked `reversible`. | 2+ options |
 
+**One problem per entry: the SBAR test.** Before you raise an entry, put its problem
+through SBAR. It must come out as one Situation (`problem`), one Background (`brief`,
+`unwound.now`), one Assessment (`evidence`, `whyWrong`) and one Recommendation
+(`solutions`). If any of the four needs a separate part for a separate defect, the entry
+holds several problems. Split it, then treat each problem on its own by the table in
+"Before raising anything": one with an easy fix that can be undone is still handled
+without asking (`mechanical`), and each one left gets its own entry, with its own problem,
+explanation, evidence, current behaviour and at least two priced options. Two findings
+with the same fix are one problem: the second is evidence on the first. Problems with
+separate fixes that share a deadline or a context cite each other and stay separate
+entries. When a note on an entry turns up a problem with a fix of its own, raise it as
+its own entry instead of adding it to the note.
+
+*Anti-example:* "Approve once: five review findings left after three rounds", offered
+as a choice between "waive all" and "stop". It bundled three separate problems: a button
+press that gets replayed later, a 512-character cap on a stored value, and a yes/no
+question where a wrong "no" sends twice. Each had its own fix and alternatives. The
+operator could not rule on one without ruling on all, and the ruling could not be traced
+back to any one of them. The validator warns when `problem` or `brief` counts several
+findings or problems, and when every option label is all or nothing.
+
 Raise it with `brief raise <file> --title … --short … --problem … --brief … --evidence
 '{…}' --solution '{…}' --unwound '{…}' --bearing … --bearing-reason …`; it takes the next
 free number and writes the `raised` note.
@@ -279,6 +300,7 @@ falling back to mermaid.
 - "Q-3 noted" with the "stop asking me about…" part dropped instead of made a ruling.
 - An id or coinage you cannot explain in plain words in the same sentence.
 - An entry the conversation ruled on still reading *awaiting your ruling*.
+- One question covering several findings, with options like "waive all" or "stop".
 - Reaching for the HTML instead of the JSON; publishing without sending the link.
 - Opening a brief's JSON in an editor, or writing it from python, `jq` or `sed`, instead of `brief`.
 - Rendering, then humanizing: a render after a prose change is a render thrown away.

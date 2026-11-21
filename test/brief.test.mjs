@@ -182,6 +182,22 @@ test("with a goal and no blocker, the page says nothing blocks it", () => {
   assert.match(html, /var DEFAULT_FILTER = 'escalated'/);
 });
 
+test("done work items leave the outstanding list, so the list agrees with the counter", () => {
+  const b = brief([entry("Q-1", { bearing: "escalated", bearingReason: "Export only." })], { outstanding: [
+    { summary: "Write the retry test.", state: "not-started", created: T, updated: T },
+    { summary: "Rename the column.", state: "done", created: T, updated: T },
+  ] });
+  const html = render(b);
+  const open = html.match(/<h2>Outstanding work<\/h2>[\s\S]*?<\/section>/)[0];
+  assert.match(open, /Write the retry test\./);
+  assert.doesNotMatch(open, /Rename the column\./);
+  assert.match(html, /<h2>Work done <span class="fold-n">1<\/span><\/h2>[\s\S]*?Rename the column\./);
+  const allDone = render(brief([entry("Q-1", { bearing: "escalated", bearingReason: "Export only." })],
+    { outstanding: [{ summary: "Rename the column.", state: "done", created: T, updated: T }] }));
+  assert.doesNotMatch(allDone, /<h2>Outstanding work<\/h2>/);
+  assert.match(allDone, /<h2>Work done <span class="fold-n">1<\/span><\/h2>/);
+});
+
 test("ruled-but-not-carried-out entries are outstanding work, under one filter", () => {
   const b = brief([
     entry("Q-1", { bearing: "escalated", bearingReason: "Export only." }),
@@ -630,6 +646,21 @@ test("an option that cannot be undone is tagged, and a live entry that marks non
   assert.match(html, /tag-warn">Cannot be undone/);
   const r = messages(brief([entry("Q-1", { ...live, solutions: [{ ...option, reversible: undefined }] })]));
   assert.ok(r.warnings.some((m) => m.includes("whether it can be undone")));
+});
+
+test("an entry bundling several problems under one all-or-nothing question is warned about", () => {
+  const bundled = (b) => validateBrief(b).warnings.filter((w) => w.message.includes("SBAR") || w.message.includes("all-or-nothing"));
+  assert.equal(bundled(brief([entry("Q-1")])).length, 0);
+  const q63 = entry("Q-1", {
+    problem: "Five review findings are left after three rounds.",
+    solutions: [{ ...option, label: "Waive all" }, { ...option, id: "b", recommended: false, label: "Stop" }],
+  });
+  const w = bundled(brief([q63]));
+  assert.equal(w.length, 2);
+  assert.ok(w[0].path.endsWith("→ problem"));
+  assert.ok(w[1].path.endsWith("→ solutions"));
+  // A closed entry is history, not rewritten.
+  assert.equal(bundled(brief([{ ...q63, status: "superseded", resolution: { date: T, note: "Gone." } }])).length, 0);
 });
 
 test("an open goal blocker whose recommended option can be undone is flagged to be handled without asking", () => {
