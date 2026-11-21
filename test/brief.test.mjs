@@ -632,6 +632,21 @@ test("an option that cannot be undone is tagged, and a live entry that marks non
   assert.ok(r.warnings.some((m) => m.includes("whether it can be undone")));
 });
 
+test("an entry bundling several problems under one all-or-nothing question is warned about", () => {
+  const bundled = (b) => validateBrief(b).warnings.filter((w) => w.message.includes("SBAR") || w.message.includes("all-or-nothing"));
+  assert.equal(bundled(brief([entry("Q-1")])).length, 0);
+  const q63 = entry("Q-1", {
+    problem: "Five review findings are left after three rounds.",
+    solutions: [{ ...option, label: "Waive all" }, { ...option, id: "b", recommended: false, label: "Stop" }],
+  });
+  const w = bundled(brief([q63]));
+  assert.equal(w.length, 2);
+  assert.ok(w[0].path.endsWith("→ problem"));
+  assert.ok(w[1].path.endsWith("→ solutions"));
+  // A closed entry is history, not rewritten.
+  assert.equal(bundled(brief([{ ...q63, status: "superseded", resolution: { date: T, note: "Gone." } }])).length, 0);
+});
+
 test("an open goal blocker whose recommended option can be undone is flagged to be handled without asking", () => {
   const flag = (b) => validateBrief(b).warnings.filter((w) => w.message.includes("waiting on an option that can be undone"));
   const hit = flag(brief([entry("Q-1", live)]));

@@ -18,7 +18,8 @@
  *      price, a closed entry must carry proof, a status must agree with what
  *      the entry records, and every timestamp must agree with the others.
  *      It also warns when an entry reads like an earlier one, or like a
- *      question a standing ruling has already answered.
+ *      question a standing ruling has already answered, or holds several
+ *      problems under one question.
  *
  * Errors are written for whoever has to fix them — a readable path, what is
  * wrong, and what to do about it. An unknown field is matched against the
@@ -468,7 +469,7 @@ function semanticErrors(brief, baseDir, pictures) {
   });
 
   out.push(...stateErrors(brief), ...bearingErrors(brief), ...referenceErrors(brief), ...enumerationWarnings(brief), ...timestampErrors(brief),
-    ...rulingErrors(brief), ...repeatWarnings(brief), ...dependencyErrors(brief), ...reversibleErrors(brief),
+    ...rulingErrors(brief), ...repeatWarnings(brief), ...dependencyErrors(brief), ...reversibleErrors(brief), ...bundleWarnings(brief),
     ...estimateWarnings(brief), ...retiredErrors(brief));
   return out;
 }
@@ -571,6 +572,40 @@ function reversibleErrors(brief) {
         message: "blocks the goal while waiting on an option that can be undone",
         hint: "a reversible fix should not block the goal: carry it out and list it under handled without asking (mechanical), " +
           "saying what was done, why it was safe unasked and how to undo it. Leave it waiting only if it is costly or reverses a ruling" });
+    }
+  });
+  return out;
+}
+
+/* ── several problems in one entry ─────────────────────────────────────────
+   An entry is one SBAR: one situation (problem), its background (brief,
+   unwound), one assessment (evidence, whyWrong), one recommendation
+   (solutions). Several problems under one question leave the operator a
+   take-it-or-leave-it choice and a ruling nobody can trace. Heuristic, so it
+   warns. */
+
+const COUNT = "(?:\\d+|two|three|four|five|six|seven|eight|nine|ten|several|multiple)";
+const BUNDLED = new RegExp(`\\b${COUNT}\\s+(?:\\w+\\s+)?(?:findings|problems|issues|bugs|defects)\\b`, "i");
+const WHOLESALE = /\b(?:all|every|both|everything)\b/i;
+const HALT = /\b(?:stop|halt|abort)\b/i;
+
+function bundleWarnings(brief) {
+  const out = [];
+  (brief.decisions ?? []).forEach((e, i) => {
+    if (!e || !["open", "decided"].includes(e.status ?? "open")) return;
+    const where = `decisions[${i}] (${e.id})`;
+    const field = ["problem", "brief"].find((k) => typeof e[k] === "string" && BUNDLED.test(e[k]));
+    if (field) {
+      out.push({ path: `${where} → ${field}`, severity: "warning",
+        message: `counts several problems ("${e[field].match(BUNDLED)[0]}") in one entry — it fails the SBAR test`,
+        hint: "raise one entry per problem, each with its own problem, brief, evidence, unwound and two or more priced options; " +
+          "cross-reference entries that share a cause or a deadline instead of merging them" });
+    }
+    const labels = (e.solutions ?? []).map((s) => s?.label ?? "");
+    if (labels.length >= 2 && labels.some((l) => WHOLESALE.test(l)) && labels.every((l) => WHOLESALE.test(l) || HALT.test(l))) {
+      out.push({ path: `${where} → solutions`, severity: "warning",
+        message: "offers only all-or-nothing options, which suggests several problems under one question",
+        hint: "if the options stand for several problems, split the entry so each problem gets its own ways out" });
     }
   });
   return out;
