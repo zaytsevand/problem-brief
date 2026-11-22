@@ -66,10 +66,13 @@ if (snaps.length) done.push("removed the snapshot of its last publish");
 const threadsFile = join(stateHome(), "threads.json");
 const threads = read(threadsFile, {});
 let cleared = 0;
+let told = 0;
 for (const u of pages) if (threads[u]) { delete threads[u]; cleared++; }
-if (cleared) {
+for (const u of pages) if (threads.orphansTold?.[u]) { delete threads.orphansTold[u]; told++; }
+if (threads.orphansTold && !Object.keys(threads.orphansTold).length) delete threads.orphansTold;
+if (cleared || told) {
   if (Object.keys(threads).length) writeFileSync(threadsFile, JSON.stringify(threads, null, 2), "utf8"); else unlinkSync(threadsFile);
-  done.push(`cleared the comment-thread records of ${cleared} page${cleared === 1 ? "" : "s"}`);
+  if (cleared) done.push(`cleared the comment-thread records of ${cleared} page${cleared === 1 ? "" : "s"}`);
 }
 
 /* the brief itself: stamped, and kept */

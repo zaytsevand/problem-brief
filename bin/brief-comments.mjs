@@ -37,7 +37,7 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { behindLine, briefsFor, currentBranch, memoryDirOf, pageBehind, stateHome } from "./brief-context.mjs";
+import { behindLine, briefsFor, currentBranch, memoryDirOf, orphanLine, pageBehind, sharedOwner, stateHome } from "./brief-context.mjs";
 
 const PAGE = /https:\/\/claude\.ai\/(?:code\/)?artifact\/[A-Za-z0-9_-]+/g;
 const CITED = /(?:\b([A-Za-z0-9][A-Za-z0-9._#-]*)\/)?\b([QR]-\d+)\b/g;
@@ -118,13 +118,24 @@ function onPrompt(input, briefs) {
         `Work out which one the operator means before recording anything, and cite it with its prefix from now on.`);
     }
   }
-  /* Another session may have written a brief whose page this one holds; tell the owner, not every session. */
+  /* A page behind its JSON: its owner is told every turn; a brief with no one owner, once per change. */
   const branch = input.cwd ? currentBranch(input.cwd) : null;
+  const told = loadThreads();
+  let tell = false;
   for (const b of briefs) {
-    if (b.brief.owner && branch && b.brief.owner !== branch) continue;
     const behind = pageBehind(b.brief, b.url);
-    if (behind) notes.push(behindLine(b.brief.title, b.path, b.url, behind));
+    if (!behind) continue;
+    if (!sharedOwner(b.brief.owner)) {
+      if (b.brief.owner === branch) notes.push(behindLine(b.brief.title, b.path, b.url, behind));
+      continue;
+    }
+    const seen = (told.orphansTold ??= {});
+    if (seen[b.url] === behind.key) continue;
+    seen[b.url] = behind.key;
+    tell = true;
+    notes.push(orphanLine(b.brief.title, b.path, b.url, b.brief.owner));
   }
+  if (tell) saveThreads(told);
   return notes;
 }
 
