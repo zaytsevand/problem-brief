@@ -35,6 +35,7 @@ import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSyn
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { formatReport, validateBrief } from "./validate-brief.mjs";
+import { behindLine, pageBehind } from "./brief-context.mjs";
 
 class Refusal extends Error {}
 const fail = (msg) => { throw new Refusal(msg); };
@@ -337,6 +338,8 @@ function run(command, file, pos, flags) {
       remember(path);
     }
     console.log(`${flags.dryRun ? "would have " : ""}${said} — ${file}, updated ${after.updated}`);
+    const behind = flags.dryRun ? null : pageBehind(after, after.url);
+    if (behind) console.log(`  ${behindLine(after.title, file, after.url, behind)}`);
     const warned = result.warnings.filter((e) => !known.has(key(e)));
     for (const w of warned) console.log(`  worth fixing: ${w.path || "the brief"} ${w.message}`);
     const left = result.errors.length - fresh.length;

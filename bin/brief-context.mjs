@@ -41,6 +41,20 @@ export const stateHome = () => process.env.PROBLEM_BRIEF_HOME || join(homedir(),
 export const snapshotFile = (url) =>
   join(stateHome(), "published", `${createHash("sha1").update(String(url)).digest("hex").slice(0, 16)}.json`);
 
+/* The page is behind when the JSON was written after its last publish here (issue #52).
+   Never published from this machine: nothing to compare, so null. */
+export function pageBehind(brief, url) {
+  if (!url || !brief?.updated) return null;
+  try {
+    const page = JSON.parse(readFileSync(snapshotFile(url), "utf8")).updated;
+    return page && brief.updated > page ? { json: brief.updated, page } : null;
+  } catch { return null; }
+}
+
+export const behindLine = (title, path, url, b) =>
+  `problem brief "${title}": its page ${url} is behind the JSON (JSON ${b.json}, page ${b.page}). ` +
+  `Render ${path} and republish it to that url before anything else.`;
+
 /* Where the briefs a SessionEnd hook retired (brief-end.mjs) wait, per project,
    for that project's next SessionStart to say so. */
 export const endedFile = (memoryDir) =>
