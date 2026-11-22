@@ -852,13 +852,13 @@ function commentRig() {
   const cli = (...args) => execFileSync("node", [bin("brief-comments.mjs"), ...args], { encoding: "utf8", env });
   return { path, hook, cli, home: env.PROBLEM_BRIEF_HOME };
 }
-const publishedAs = (home, url, updated) => {
+const publishedAs = (home, url, published) => {
   const before = process.env.PROBLEM_BRIEF_HOME;
   process.env.PROBLEM_BRIEF_HOME = home;
   const f = snapshotFile(url);
   if (before === undefined) delete process.env.PROBLEM_BRIEF_HOME; else process.env.PROBLEM_BRIEF_HOME = before;
   mkdirSync(dirname(f), { recursive: true });
-  writeFileSync(f, JSON.stringify({ updated }));
+  writeFileSync(f, JSON.stringify(published));
 };
 const THREAD = "98e311d9-6e21-4730-88a3-f46e73610dd4";
 const resolveCall = { hook_event_name: "PreToolUse", tool_name: "ArtifactComments", tool_input: { action: "resolve", url: "https://claude.ai/artifact/PAGE1", thread_id: THREAD } };
@@ -882,19 +882,25 @@ test("a message citing a brief's ids gets their state and the instruction to rec
   assert.equal(hook({ hook_event_name: "UserPromptSubmit", prompt: "Q-9 is not on any brief" }), null);
 });
 
-test("a page published before the JSON's last write tells the owner to republish (issue #52)", () => {
+test("a page that differs from the JSON tells the owner to republish (issue #52)", () => {
   const { path, hook, home } = commentRig();
   const url = "https://claude.ai/artifact/PAGE1";
   const json = JSON.parse(readFileSync(path, "utf8"));
-  assert.equal(hook({ hook_event_name: "UserPromptSubmit", prompt: "hello" }), null, "never published here: nothing to say");
-  publishedAs(home, url, json.updated);
-  assert.equal(hook({ hook_event_name: "UserPromptSubmit", prompt: "hello" }), null, "in step: nothing to say");
-  publishedAs(home, url, "2000-01-01T00:00Z");
-  const out = hook({ hook_event_name: "UserPromptSubmit", prompt: "hello" });
-  assert.match(out.additionalContext, /is behind the JSON \(JSON .+, page 2000-01-01T00:00Z\)/);
+  const say = (cwd) => hook({ hook_event_name: "UserPromptSubmit", prompt: "hello", ...(cwd ? { cwd } : {}) });
+  assert.equal(say(), null, "never published here: nothing to say");
+  publishedAs(home, url, json);
+  assert.equal(say(), null, "in step: nothing to say");
+  publishedAs(home, url, { ...json, title: "an older title" });
+  const out = say();
+  assert.match(out.additionalContext, /is behind the JSON \(JSON (.+), page \1\)/, "same minute, other content: still behind");
   assert.ok(out.additionalContext.includes(path) && out.additionalContext.includes(url));
+  const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
+  writeFileSync(path, JSON.stringify({ ...json, owner: branch }));
+  assert.match(say(ROOT).additionalContext, /is behind the JSON/, "the owner is told");
   writeFileSync(path, JSON.stringify({ ...json, owner: "some-other-branch" }));
-  assert.equal(hook({ hook_event_name: "UserPromptSubmit", prompt: "hello", cwd: ROOT }), null, "not the owner: silent");
+  assert.equal(say(ROOT), null, "not the owner: silent");
+  writeFileSync(path, JSON.stringify({ ...json, retired: "2026-11-22" }));
+  assert.equal(say(), null, "retired: silent");
 });
 
 test("a brief's thread cannot be resolved unread, or before the brief is saved", async () => {

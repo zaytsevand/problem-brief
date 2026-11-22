@@ -121,7 +121,7 @@ function onPrompt(input, briefs) {
   /* Another session may have written a brief whose page this one holds; tell the owner, not every session. */
   const branch = input.cwd ? currentBranch(input.cwd) : null;
   for (const b of briefs) {
-    if (b.brief.retired || (b.brief.owner && branch && b.brief.owner !== branch)) continue;
+    if (b.brief.owner && branch && b.brief.owner !== branch) continue;
     const behind = pageBehind(b.brief, b.url);
     if (behind) notes.push(behindLine(b.brief.title, b.path, b.url, behind));
   }
