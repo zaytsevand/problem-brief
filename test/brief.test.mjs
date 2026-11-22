@@ -882,24 +882,28 @@ test("a message citing a brief's ids gets their state and the instruction to rec
   assert.equal(hook({ hook_event_name: "UserPromptSubmit", prompt: "Q-9 is not on any brief" }), null);
 });
 
-test("a page that differs from the JSON tells the owner to republish (issue #52)", () => {
+test("a page behind its JSON is said to its owner every turn, and once for a brief nobody owns (issue #52)", () => {
   const { path, hook, home } = commentRig();
   const url = "https://claude.ai/artifact/PAGE1";
-  const json = JSON.parse(readFileSync(path, "utf8"));
-  const say = (cwd) => hook({ hook_event_name: "UserPromptSubmit", prompt: "hello", ...(cwd ? { cwd } : {}) });
-  assert.equal(say(), null, "never published here: nothing to say");
-  publishedAs(home, url, json);
-  assert.equal(say(), null, "in step: nothing to say");
-  publishedAs(home, url, { ...json, title: "an older title" });
-  const out = say();
-  assert.match(out.additionalContext, /is behind the JSON \(JSON (.+), page \1\)/, "same minute, other content: still behind");
-  assert.ok(out.additionalContext.includes(path) && out.additionalContext.includes(url));
   const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
-  writeFileSync(path, JSON.stringify({ ...json, owner: branch }));
-  assert.match(say(ROOT).additionalContext, /is behind the JSON/, "the owner is told");
-  writeFileSync(path, JSON.stringify({ ...json, owner: "some-other-branch" }));
-  assert.equal(say(ROOT), null, "not the owner: silent");
-  writeFileSync(path, JSON.stringify({ ...json, retired: "2026-11-22" }));
+  const json = { ...JSON.parse(readFileSync(path, "utf8")), owner: branch };
+  const as = (b) => writeFileSync(path, JSON.stringify(b));
+  const say = () => hook({ hook_event_name: "UserPromptSubmit", prompt: "hello", cwd: ROOT });
+  as(json);
+  assert.equal(say(), null, "never published here: nothing to say");
+  const { url: _u, owner: _o, ...shown } = json;
+  publishedAs(home, url, shown);
+  assert.equal(say(), null, "only the fields registration adds differ: in step");
+  publishedAs(home, url, { ...json, title: "an older title" });
+  for (let i = 0; i < 2; i++) assert.match(say().additionalContext, /is behind the JSON \(JSON (.+), page \1\)/, "owner: every turn");
+  as({ ...json, owner: "some-other-branch" });
+  assert.equal(say(), null, "another branch owns it: silent here");
+  as({ ...json, owner: "main" });
+  assert.match(say().additionalContext, /no one session owns it \(owner is main/, "shared owner: said once");
+  assert.equal(say(), null, "and not again");
+  as({ ...json, owner: "main", updated: "2099-01-01T00:00Z" });
+  assert.match(say().additionalContext, /no one session owns it/, "said again after the next change");
+  as({ ...json, retired: "2026-11-22" });
   assert.equal(say(), null, "retired: silent");
 });
 

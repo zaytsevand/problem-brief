@@ -47,9 +47,18 @@ export function pageBehind(brief, url) {
   if (!url || !brief || brief.retired) return null;
   try {
     const page = JSON.parse(readFileSync(snapshotFile(url), "utf8"));
-    return JSON.stringify(page) === JSON.stringify(brief) ? null : { json: brief.updated, page: page.updated };
+    const shown = ({ url: _u, owner: _o, ...rest }) => JSON.stringify(rest); // set at registration, not on the page
+    return shown(page) === shown(brief) ? null : { json: brief.updated, page: page.updated };
   } catch { return null; }
 }
+
+/* A branch every checkout session shares names no one session: such a brief has no owner to tell. */
+export const sharedOwner = (owner) => !owner || owner === "main" || owner === "master";
+
+export const orphanLine = (title, path, url, owner) =>
+  `problem brief "${title}": its page ${url} is behind the JSON, and no one session owns it ` +
+  `(${owner ? `owner is ${owner}, shared by every session there` : "no owner"}). The session working on its subject, ` +
+  `or the operator, republishes it; to take it, run brief.mjs set ${path} --owner <your branch>. Said once.`;
 
 export const behindLine = (title, path, url, b) =>
   `problem brief "${title}": its page ${url} is behind the JSON (JSON ${b.json}, page ${b.page}). ` +
