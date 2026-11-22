@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -194,4 +194,22 @@ test("a write records the brief's path once, so the sidebar can find a brief kep
   ok(brief("stamp", f));
   const lines = readFileSync(pathsList, "utf8").split("\n").filter(Boolean);
   assert.equal(lines.filter((l) => l === f).length, 1);
+});
+
+test("a write to a brief whose page is older says to republish it (issue #52)", async () => {
+  const f = copy();
+  const url = "https://claude.ai/artifact/PAGE52";
+  writeFileSync(f, JSON.stringify({ ...read(f), url }, null, 2));
+  process.env.PROBLEM_BRIEF_HOME = join(HOME, ".claude", "problem-brief");
+  const { snapshotFile } = await import("../bin/brief-context.mjs");
+  const snap = snapshotFile(url);
+  delete process.env.PROBLEM_BRIEF_HOME;
+  let r = brief("set", f, "Q-1", "--short", "first change here");
+  ok(r);
+  assert.doesNotMatch(r.stdout, /behind the JSON/, "never published here: nothing to say");
+  mkdirSync(dirname(snap), { recursive: true });
+  writeFileSync(snap, JSON.stringify({ updated: "2000-01-01T00:00Z" }));
+  r = brief("set", f, "Q-1", "--short", "second change here");
+  ok(r);
+  assert.match(r.stdout, new RegExp(`page ${url} is behind the JSON`));
 });

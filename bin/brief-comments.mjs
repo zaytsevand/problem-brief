@@ -37,7 +37,7 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { briefsFor, memoryDirOf, stateHome } from "./brief-context.mjs";
+import { behindLine, briefsFor, currentBranch, memoryDirOf, pageBehind, stateHome } from "./brief-context.mjs";
 
 const PAGE = /https:\/\/claude\.ai\/(?:code\/)?artifact\/[A-Za-z0-9_-]+/g;
 const CITED = /(?:\b([A-Za-z0-9][A-Za-z0-9._#-]*)\/)?\b([QR]-\d+)\b/g;
@@ -117,6 +117,13 @@ function onPrompt(input, briefs) {
       notes.push(`${id} is on more than one brief: ${on.map((b) => `"${b.brief.title}"${b.brief.binding ? ` (${fid(b.brief, id)})` : ""}`).join(", ")}. ` +
         `Work out which one the operator means before recording anything, and cite it with its prefix from now on.`);
     }
+  }
+  /* Another session may have written a brief whose page this one holds; tell the owner, not every session. */
+  const branch = input.cwd ? currentBranch(input.cwd) : null;
+  for (const b of briefs) {
+    if (b.brief.owner && branch && b.brief.owner !== branch) continue;
+    const behind = pageBehind(b.brief, b.url);
+    if (behind) notes.push(behindLine(b.brief.title, b.path, b.url, behind));
   }
   return notes;
 }
