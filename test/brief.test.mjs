@@ -901,8 +901,11 @@ test("a page behind its JSON is said to its owner every turn, and once for a bri
   as({ ...json, owner: "main" });
   assert.match(say().additionalContext, /no one session owns it \(owner is main/, "shared owner: said once");
   assert.equal(say(), null, "and not again");
-  as({ ...json, owner: "main", updated: "2099-01-01T00:00Z" });
-  assert.match(say().additionalContext, /no one session owns it/, "said again after the next change");
+  as({ ...json, owner: "main", title: "a newer title, same minute" });
+  assert.match(say().additionalContext, /no one session owns it/, "said again after the next change, even in the same minute");
+  as({ ...json, owner: undefined });
+  assert.match(say().additionalContext, /no one session owns it \(no owner\)/, "no owner: said once");
+  assert.equal(say(), null, "and not again");
   as({ ...json, retired: "2026-11-22" });
   assert.equal(say(), null, "retired: silent");
 });

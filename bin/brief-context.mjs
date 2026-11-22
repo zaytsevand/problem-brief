@@ -43,12 +43,13 @@ export const snapshotFile = (url) =>
 
 /* The page is behind when the JSON differs from what was last published here (issue #52).
    Content, not stamps: stamps go to the minute. Never published from this machine: null. */
+const shown = ({ url: _u, owner: _o, ...rest }) => JSON.stringify(rest); // set at registration, not on the page
 export function pageBehind(brief, url) {
   if (!url || !brief || brief.retired) return null;
   try {
     const page = JSON.parse(readFileSync(snapshotFile(url), "utf8"));
-    const shown = ({ url: _u, owner: _o, ...rest }) => JSON.stringify(rest); // set at registration, not on the page
-    return shown(page) === shown(brief) ? null : { json: brief.updated, page: page.updated };
+    const now = shown(brief);
+    return shown(page) === now ? null : { json: brief.updated, page: page.updated, key: createHash("sha1").update(now).digest("hex") };
   } catch { return null; }
 }
 

@@ -130,8 +130,8 @@ function onPrompt(input, briefs) {
       continue;
     }
     const seen = (told.orphansTold ??= {});
-    if (seen[b.url] === behind.json) continue;
-    seen[b.url] = behind.json;
+    if (seen[b.url] === behind.key) continue;
+    seen[b.url] = behind.key;
     tell = true;
     notes.push(orphanLine(b.brief.title, b.path, b.url, b.brief.owner));
   }
